@@ -1,0 +1,14 @@
+# Dovecot PostgreSQL Authentication Configuration
+# Reads from jir_mail_prod database
+
+driver = postgres
+connect = host=${DB_HOST:-82.153.241.171} port=${DB_PORT:-5432} dbname=${DB_NAME:-jir_mail_prod} user=${DB_USER:-postgres} password=${DB_PASS:-YwzYYQkUjO29REPbignRwVVyJnM3r8cBg5h7NE7kyvc0wMYg99Ccf5mGPMnpuig1}
+
+# Password scheme - matches Django's bcrypt
+default_pass_scheme = bcrypt
+
+# User lookup query
+password_query = SELECT email as user, password_hash AS password, '/var/mail/vhosts/%d/%n' AS userdb_home, '/var/mail/vhosts/%d/%n' AS mail, 5000 AS uid, 5000 AS gid FROM core_mailaccount WHERE email = '%u' AND is_active = true
+
+# Userdb query
+user_query = SELECT '/var/mail/vhosts/%d/%n' AS home, 5000 AS uid, 5000 AS gid, '/var/mail/vhosts/%d/%n' AS mail FROM core_mailaccount WHERE email = '%u' AND is_active = true

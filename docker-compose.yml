@@ -1,0 +1,100 @@
+version: '3.8'
+
+services:
+  django:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: jir_django
+    restart: unless-stopped
+    entrypoint: ["./docker-entrypoint.sh"]
+    command: ["python", "manage.py", "runserver", "0.0.0.0:8000"]
+    environment:
+      - DATABASE_URL=${DATABASE_URL}
+      - JIR_LOCAL_KEY=${JIR_LOCAL_KEY}
+      - POSTFIX_VMAIL_PATH=/etc/postfix/vmail_accounts
+      - DOVECOT_PASSDB_PATH=/etc/dovecot/userdb
+    volumes:
+      - static_data:/app/static
+      - config_data:/app/config
+      - postfix_data:/etc/postfix
+      - dovecot_data:/etc/dovecot
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - jir_network
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  postgres:
+    image: postgres:17
+    container_name: jir_postgres
+    restart: unless-stopped
+    environment:
+      - POSTGRES_DB=${POSTGRES_DB:-jir_mail_prod}
+      - POSTGRES_USER=${POSTGRES_USER:-postgres}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - jir_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  postfix:
+    image: bmoon/postfix:v1
+    container_name: jir_postfix
+    restart: unless-stopped
+    hostname: ${MAIL_HOSTNAME:-mail.jircode.com}
+    environment:
+      - DOMAIN=${MAIL_DOMAIN:-jircode.com}
+    volumes:
+      - postfix_data:/etc/postfix
+      - mail_data:/var/mail
+    ports:
+      - "${POSTFIX_PORT_25:-25}:587"
+      - "${POSTFIX_PORT_465:-465}:465"
+    networks:
+      - jir_network
+
+  dovecot:
+    build:
+      context: .
+      dockerfile: dovecot/Dockerfile
+    container_name: jir_dovecot
+    restart: unless-stopped
+    environment:
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=${POSTGRES_DB:-jir_mail_prod}
+      - DB_USER=${POSTGRES_USER:-postgres}
+      - DB_PASS=${POSTGRES_PASSWORD}
+    volumes:
+      - dovecot_data:/etc/dovecot
+      - mail_data:/var/mail
+    ports:
+      - "${DOVECOT_PORT_IMAP:-993}:993"
+      - "${DOVECOT_PORT_POP3:-143}:143"
+    depends_on:
+      - postgres
+    networks:
+      - jir_network
+
+volumes:
+  postgres_data:
+  postfix_data:
+  dovecot_data:
+  mail_data:
+  static_data:
+  config_data:
+
+networks:
+  jir_network:
+    driver: bridge

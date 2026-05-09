@@ -1,0 +1,724 @@
+<!DOCTYPE html>
+<html lang="tr" x-data="{ sidebarOpen: true, activeTab: 'dashboard' }" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Jîr-Mail Command Center</title>
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        meso: {
+                            50: '#f0fdf4',
+                            100: '#dcfce7',
+                            200: '#bbf7d0',
+                            300: '#86efac',
+                            400: '#4ade80',
+                            500: '#22c55e',
+                            600: '#16a34a',
+                            700: '#15803d',
+                            800: '#166534',
+                            900: '#14532d',
+                            950: '#052e16',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        [x-cloak] { display: none !important; }
+    </style>
+</head>
+<body class="bg-gray-950 text-gray-100 min-h-screen">
+
+    <div class="flex min-h-screen">
+
+        <aside :class="sidebarOpen ? 'w-64' : 'w-20'" class="bg-gray-900 border-r border-gray-800 transition-all duration-300 flex flex-col">
+            <div class="p-4 border-b border-gray-800 flex items-center justify-between">
+                <h1 x-show="sidebarOpen" x-transition class="text-xl font-bold text-emerald-400">Jîr-Mail</h1>
+                <button @click="sidebarOpen = !sidebarOpen" class="p-2 rounded-lg hover:bg-gray-800 text-gray-400">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
+                    </svg>
+                </button>
+            </div>
+
+            <nav class="flex-1 p-4 space-y-2">
+                <button @click="activeTab = 'dashboard'"
+                        :class="activeTab === 'dashboard' ? 'bg-emerald-900/30 text-emerald-400 border border-emerald-800/50' : 'hover:bg-gray-800 text-gray-400 hover:text-gray-200'"
+                        class="w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
+                    </svg>
+                    <span x-show="sidebarOpen">Dashboard</span>
+                </button>
+                <button @click="activeTab = 'accounts'"
+                        :class="activeTab === 'accounts' ? 'bg-emerald-900/30 text-emerald-400 border border-emerald-800/50' : 'hover:bg-gray-800 text-gray-400 hover:text-gray-200'"
+                        class="w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                    </svg>
+                    <span x-show="sidebarOpen">Mail Accounts</span>
+                </button>
+                <button @click="activeTab = 'specs'"
+                        :class="activeTab === 'specs' ? 'bg-emerald-900/30 text-emerald-400 border border-emerald-800/50' : 'hover:bg-gray-800 text-gray-400 hover:text-gray-200'"
+                        class="w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z" />
+                    </svg>
+                    <span x-show="sidebarOpen">System Specs</span>
+                </button>
+                <button @click="activeTab = 'logs'"
+                        :class="activeTab === 'logs' ? 'bg-emerald-900/30 text-emerald-400 border border-emerald-800/50' : 'hover:bg-gray-800 text-gray-400 hover:text-gray-200'"
+                        class="w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                    <span x-show="sidebarOpen">Logs</span>
+                </button>
+            </nav>
+        </aside>
+
+        <div class="flex-1 flex flex-col">
+            <header class="bg-gray-900 border-b border-gray-800 px-6 py-4">
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center gap-6">
+                        <div class="flex items-center gap-2">
+                            <span class="text-xs text-gray-500">INSTANCE</span>
+                            <code class="text-sm bg-gray-800 px-2 py-1 rounded text-emerald-400" x-text="systemInfo.instance_id || 'Loading...'">---</code>
+                        </div>
+                        <div class="h-4 w-px bg-gray-700"></div>
+                        <div class="flex items-center gap-2">
+                            <span class="text-xs text-gray-500">TIER</span>
+                            <span class="px-2 py-1 rounded text-xs font-medium bg-emerald-900/50 text-emerald-400 border border-emerald-800/50" x-text="systemInfo.tier || 'FREE'">FREE</span>
+                        </div>
+                        <div class="h-4 w-px bg-gray-700"></div>
+                        <div class="flex items-center gap-2">
+                            <span class="text-xs text-gray-500">ACCOUNTS</span>
+                            <span class="text-sm text-gray-300">
+                                <span x-text="accountInfo.total || 0">0</span> / <span x-text="accountInfo.limit || 3">3</span>
+                            </span>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-3">
+                        <div class="w-32 h-2 bg-gray-800 rounded-full overflow-hidden">
+                            <div class="h-full bg-emerald-600 rounded-full transition-all duration-500"
+                                 :style="'width: ' + Math.round(((accountInfo.total || 0) / (accountInfo.limit || 3)) * 100) + '%'"></div>
+                        </div>
+                        <span class="text-xs text-gray-500" x-text="Math.round(((accountInfo.total || 0) / (accountInfo.limit || 3)) * 100) + '%'">0%</span>
+                    </div>
+                </div>
+            </header>
+
+            <main class="flex-1 p-6 overflow-auto">
+
+                <!-- Dashboard Tab -->
+                <div x-show="activeTab === 'dashboard'" x-transition>
+                    <div class="mb-6">
+                        <h2 class="text-2xl font-bold text-white mb-1">Command Center</h2>
+                        <p class="text-gray-500 text-sm">Sistem durumu ve hesap yönetimi</p>
+                    </div>
+
+                    <div x-data="dashboardWidget()" x-init="fetchSystemSpecs()">
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+                            <div class="bg-gray-900 border border-gray-800 rounded-xl p-5">
+                                <div class="flex items-center justify-between mb-3">
+                                    <span class="text-gray-400 text-sm">CPU Kullanımı</span>
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z" />
+                                    </svg>
+                                </div>
+                                <div class="text-3xl font-bold text-white mb-2" x-text="specs.cpu_percent ? specs.cpu_percent.toFixed(1) + '%' : '--'">--</div>
+                                <div class="w-full h-2 bg-gray-800 rounded-full overflow-hidden">
+                                    <div class="h-full bg-blue-600 rounded-full transition-all duration-700"
+                                         :style="'width: ' + (specs.cpu_percent || 0) + '%'"></div>
+                                </div>
+                            </div>
+
+                            <div class="bg-gray-900 border border-gray-800 rounded-xl p-5">
+                                <div class="flex items-center justify-between mb-3">
+                                    <span class="text-gray-400 text-sm">RAM Kullanımı</span>
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-purple-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                                    </svg>
+                                </div>
+                                <div class="text-3xl font-bold text-white mb-2" x-text="specs.ram_percent ? specs.ram_percent.toFixed(1) + '%' : '--'">--</div>
+                                <div class="text-xs text-gray-500 mb-2" x-text="specs.ram_used_gb ? specs.ram_used_gb + ' GB / ' + specs.ram_total_gb + ' GB' : ''"></div>
+                                <div class="w-full h-2 bg-gray-800 rounded-full overflow-hidden">
+                                    <div class="h-full bg-purple-600 rounded-full transition-all duration-700"
+                                         :style="'width: ' + (specs.ram_percent || 0) + '%'"></div>
+                                </div>
+                            </div>
+
+                            <div class="bg-gray-900 border border-gray-800 rounded-xl p-5">
+                                <div class="flex items-center justify-between mb-3">
+                                    <span class="text-gray-400 text-sm">Disk Kullanımı</span>
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4" />
+                                    </svg>
+                                </div>
+                                <div class="text-3xl font-bold text-white mb-2" x-text="specs.disk_percent ? specs.disk_percent.toFixed(1) + '%' : '--'">--</div>
+                                <div class="text-xs text-gray-500 mb-2" x-text="specs.disk_used_gb ? specs.disk_used_gb + ' GB / ' + specs.disk_total_gb + ' GB' : ''"></div>
+                                <div class="w-full h-2 bg-gray-800 rounded-full overflow-hidden">
+                                    <div class="h-full bg-amber-600 rounded-full transition-all duration-700"
+                                         :style="'width: ' + (specs.disk_percent || 0) + '%'"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div x-data="accountTable()" x-init="fetchAccounts()">
+                        <div class="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
+                            <div class="px-5 py-4 border-b border-gray-800 flex items-center justify-between">
+                                <div>
+                                    <h3 class="text-lg font-semibold text-white">Son Hesaplar</h3>
+                                    <p class="text-xs text-gray-500 mt-0.5">
+                                        <span x-text="accountInfo.total || 0">0</span> toplam ·
+                                        <span x-text="accountInfo.active_count || 0">0</span> aktif
+                                    </p>
+                                </div>
+                                <button @click="activeTab = 'accounts'" class="px-4 py-2 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-300 text-sm font-medium transition-colors">
+                                    Tümünü Gör
+                                </button>
+                            </div>
+                            <div class="overflow-x-auto">
+                                <table class="w-full">
+                                    <thead class="bg-gray-950">
+                                        <tr>
+                                            <th class="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase">E-posta</th>
+                                            <th class="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase">Durum</th>
+                                            <th class="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase">İşlem</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody class="divide-y divide-gray-800">
+                                        <template x-for="account in accounts.slice(0, 5)" :key="account.email">
+                                            <tr class="hover:bg-gray-800/50 transition-colors">
+                                                <td class="px-5 py-4">
+                                                    <span class="text-sm text-white font-mono" x-text="account.email"></span>
+                                                </td>
+                                                <td class="px-5 py-4">
+                                                    <span :class="account.is_active ? 'bg-emerald-900/50 text-emerald-400' : 'bg-gray-800 text-gray-400'"
+                                                          class="px-2.5 py-1 rounded-full text-xs font-medium" x-text="account.is_active ? 'Aktif' : 'Pasif'"></span>
+                                                </td>
+                                                <td class="px-5 py-4">
+                                                    <button @click="toggleAccount(account.email)"
+                                                            :class="account.is_active ? 'bg-amber-600 hover:bg-amber-500' : 'bg-emerald-600 hover:bg-emerald-500'"
+                                                            class="px-3 py-1.5 rounded-lg text-xs font-medium text-white transition-colors">
+                                                        <span x-text="account.is_active ? 'Dondur' : 'Aktifleştir'"></span>
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                        </template>
+                                        <template x-if="accounts.length === 0">
+                                            <tr><td colspan="3" class="px-5 py-8 text-center text-gray-500">Henüz hesap yok</td></tr>
+                                        </template>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Accounts Tab -->
+                <div x-show="activeTab === 'accounts'" x-transition x-data="accountTable()" x-init="fetchAccounts()">
+                    <div class="mb-6 flex items-center justify-between">
+                        <div>
+                            <h2 class="text-2xl font-bold text-white mb-1">Mail Hesapları</h2>
+                            <p class="text-gray-500 text-sm">Tüm mail hesaplarını yönet</p>
+                        </div>
+                        <div class="flex items-center gap-3">
+                            <template x-if="accountInfo.total >= accountInfo.limit">
+                                <div class="flex items-center gap-2 px-3 py-1.5 bg-red-900/30 border border-red-800/50 rounded-lg">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                                    </svg>
+                                    <span class="text-xs text-red-400">Limit aşıldı</span>
+                                </div>
+                            </template>
+                            <button @click="showAddModal = true"
+                                    :disabled="accountInfo.total >= accountInfo.limit"
+                                    :class="accountInfo.total >= accountInfo.limit ? 'bg-gray-700 text-gray-500 cursor-not-allowed' : 'bg-emerald-600 hover:bg-emerald-500 text-white'"
+                                    class="px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+                                </svg>
+                                Yeni Hesap Ekle
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
+                        <table class="w-full">
+                            <thead class="bg-gray-950">
+                                <tr>
+                                    <th class="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase">E-posta</th>
+                                    <th class="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase">Kullanıcı</th>
+                                    <th class="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase">Kota</th>
+                                    <th class="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase">Rol</th>
+                                    <th class="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase">Durum</th>
+                                    <th class="px-5 py-3 text-right text-xs font-medium text-gray-500 uppercase">İşlem</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-gray-800">
+                                <template x-for="account in accounts" :key="account.email">
+                                    <tr class="hover:bg-gray-800/50 transition-colors">
+                                        <td class="px-5 py-4"><span class="text-sm text-white font-mono" x-text="account.email"></span></td>
+                                        <td class="px-5 py-4"><span class="text-sm text-gray-300" x-text="account.username"></span></td>
+                                        <td class="px-5 py-4">
+                                            <span :class="account.quota_mb === 'Sınırsız' ? 'bg-blue-900/50 text-blue-400' : 'bg-gray-800 text-gray-400'"
+                                                  class="px-2 py-1 rounded text-xs" x-text="account.quota_mb + ' MB'"></span>
+                                        </td>
+                                        <td class="px-5 py-4">
+                                            <select @change="updateRole(account.email, $event.target.value)"
+                                                    :value="account.role"
+                                                    :class="{
+                                                        'bg-emerald-900/50 text-emerald-400': account.role === 'FULL',
+                                                        'bg-blue-900/50 text-blue-400': account.role === 'SEND',
+                                                        'bg-purple-900/50 text-purple-400': account.role === 'RECV',
+                                                        'bg-red-900/50 text-red-400': account.role === 'BLOCK'
+                                                    }"
+                                                    class="px-2 py-1 rounded text-xs border-0 cursor-pointer">
+                                                <option value="FULL">Tam Erişim</option>
+                                                <option value="SEND">Sadece Gönder</option>
+                                                <option value="RECV">Sadece Al</option>
+                                                <option value="BLOCK">Şirket İçi</option>
+                                            </select>
+                                        </td>
+                                        <td class="px-5 py-4">
+                                            <span :class="account.is_active ? 'bg-emerald-900/50 text-emerald-400 border border-emerald-800/50' : 'bg-gray-800 text-gray-400 border border-gray-700'"
+                                                  class="px-2.5 py-1 rounded-full text-xs font-medium" x-text="account.is_active ? 'Aktif' : 'Pasif'"></span>
+                                        </td>
+                                        <td class="px-5 py-4 text-right">
+                                            <div class="flex items-center gap-2 justify-end">
+                                                <button @click="toggleAccount(account.email)"
+                                                        :class="account.is_active ? 'bg-amber-600 hover:bg-amber-500' : 'bg-emerald-600 hover:bg-emerald-500'"
+                                                        class="px-3 py-1.5 rounded-lg text-xs font-medium text-white transition-colors">
+                                                    <span x-text="account.is_active ? 'Dondur' : 'Aktifleştir'"></span>
+                                                </button>
+                                                <button @click="showQuotaModal(account)" class="p-1.5 rounded-lg bg-gray-700 hover:bg-gray-600 text-gray-300">
+                                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
+                                                    </svg>
+                                                </button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                </template>
+                                <template x-if="accounts.length === 0">
+                                    <tr><td colspan="6" class="px-5 py-12 text-center text-gray-500">Henüz mail hesabı oluşturulmadı</td></tr>
+                                </template>
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <div x-show="showAddModal" x-cloak class="fixed inset-0 bg-black/70 flex items-center justify-center z-50" @click.self="showAddModal = false">
+                        <div class="bg-gray-900 border border-gray-800 rounded-xl w-full max-w-md p-6">
+                            <h3 class="text-lg font-semibold text-white mb-4">Yeni Mail Hesabı</h3>
+                            <form @submit.prevent="createAccount()">
+                                <div class="space-y-4">
+                                    <div>
+                                        <label class="block text-sm text-gray-400 mb-1">Kullanıcı Adı</label>
+                                        <input type="text" x-model="newAccount.username" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-emerald-600" placeholder="murat" required>
+                                    </div>
+                                    <div>
+                                        <label class="block text-sm text-gray-400 mb-1">Domain</label>
+                                        <input type="text" x-model="newAccount.domain" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-emerald-600" placeholder="jircode.com" required>
+                                    </div>
+                                    <div>
+                                        <label class="block text-sm text-gray-400 mb-1">Şifre</label>
+                                        <input type="password" x-model="newAccount.password" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-emerald-600" placeholder="••••••••" required>
+                                    </div>
+                                </div>
+                                <div class="flex justify-end gap-3 mt-6">
+                                    <button type="button" @click="showAddModal = false" class="px-4 py-2 rounded-lg text-gray-400 hover:text-white hover:bg-gray-800">İptal</button>
+                                    <button type="submit" class="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-medium">Oluştur</button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+
+                    <div x-show="showQuotaModal" x-cloak class="fixed inset-0 bg-black/70 flex items-center justify-center z-50" @click.self="showQuotaModal = false">
+                        <div class="bg-gray-900 border border-gray-800 rounded-xl w-full max-w-sm p-6">
+                            <h3 class="text-lg font-semibold text-white mb-4">Kota Güncelle</h3>
+                            <p class="text-sm text-gray-400 mb-4" x-text="selectedAccount?.email"></p>
+                            <div class="space-y-4">
+                                <div>
+                                    <label class="block text-sm text-gray-400 mb-1">Kota (MB)</label>
+                                    <input type="number" x-model="quotaInput" min="0" step="1"
+                                           class="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-emerald-600"
+                                           placeholder="0 = Sınırsız">
+                                    <p class="text-xs text-gray-500 mt-1">0 = Sınırsız</p>
+                                </div>
+                            </div>
+                            <div class="flex justify-end gap-3 mt-6">
+                                <button type="button" @click="showQuotaModal = false" class="px-4 py-2 rounded-lg text-gray-400 hover:text-white hover:bg-gray-800">İptal</button>
+                                <button type="button" @click="saveQuota()" class="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-medium">Kaydet</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+<!-- Specs Tab -->
+                <div x-show="activeTab === 'specs'" x-transition x-data="resetSystem()">
+                    <div class="mb-6">
+                        <h2 class="text-2xl font-bold text-white mb-1">System Specs</h2>
+                        <p class="text-gray-500 text-sm">Sunucu donanım ve kaynak durumu</p>
+                    </div>
+                    <div x-data="dashboardWidget()" x-init="fetchSystemSpecs()">
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                            <div class="bg-gray-900 border border-gray-800 rounded-xl p-5">
+                                <div class="flex items-center justify-between mb-3">
+                                    <span class="text-gray-400 text-sm">CPU Kullanımı</span>
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z" />
+                                    </svg>
+                                </div>
+                                <div class="text-3xl font-bold text-white mb-2" x-text="specs.cpu_percent ? specs.cpu_percent.toFixed(1) + '%' : '--'">--</div>
+                                <div class="w-full h-2 bg-gray-800 rounded-full overflow-hidden">
+                                    <div class="h-full bg-blue-600 rounded-full" :style="'width: ' + (specs.cpu_percent || 0) + '%'"></div>
+                                </div>
+                            </div>
+                            <div class="bg-gray-900 border border-gray-800 rounded-xl p-5">
+                                <div class="flex items-center justify-between mb-3">
+                                    <span class="text-gray-400 text-sm">RAM Kullanımı</span>
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-purple-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                                    </svg>
+                                </div>
+                                <div class="text-3xl font-bold text-white mb-2" x-text="specs.ram_percent ? specs.ram_percent.toFixed(1) + '%' : '--'">--</div>
+                                <div class="text-xs text-gray-500 mb-2" x-text="specs.ram_used_gb ? specs.ram_used_gb + ' GB / ' + specs.ram_total_gb + ' GB' : ''"></div>
+                                <div class="w-full h-2 bg-gray-800 rounded-full overflow-hidden">
+                                    <div class="h-full bg-purple-600 rounded-full" :style="'width: ' + (specs.ram_percent || 0) + '%'"></div>
+                                </div>
+                            </div>
+                            <div class="bg-gray-900 border border-gray-800 rounded-xl p-5">
+                                <div class="flex items-center justify-between mb-3">
+                                    <span class="text-gray-400 text-sm">Disk Kullanımı</span>
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79 8-4" />
+                                    </svg>
+                                </div>
+                                <div class="text-3xl font-bold text-white mb-2" x-text="specs.disk_percent ? specs.disk_percent.toFixed(1) + '%' : '--'">--</div>
+                                <div class="text-xs text-gray-500 mb-2" x-text="specs.disk_used_gb ? specs.disk_used_gb + ' GB / ' + specs.disk_total_gb + ' GB' : ''"></div>
+                                <div class="w-full h-2 bg-gray-800 rounded-full overflow-hidden">
+                                    <div class="h-full bg-amber-600 rounded-full" :style="'width: ' + (specs.disk_percent || 0) + '%'"></div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="bg-red-900/20 border border-red-800/50 rounded-xl p-6">
+                            <div class="flex items-center justify-between">
+                                <div>
+                                    <h3 class="text-white font-semibold mb-1">Sistemi Sıfırla</h3>
+                                    <p class="text-gray-400 text-sm">Tüm verileri sil ve kurulum ekranına dön</p>
+                                </div>
+                                <button @click="showConfirmModal = true"
+                                        class="px-4 py-2 rounded-lg bg-red-600 hover:bg-red-500 text-white font-medium transition-colors flex items-center gap-2">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                    </svg>
+                                    Tüm Verileri Sil
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Confirm Modal -->
+                    <div x-show="showConfirmModal" x-cloak class="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
+                        <div class="bg-gray-900 border border-red-800/50 rounded-xl w-full max-w-md p-6">
+                            <div class="flex items-center gap-3 mb-4">
+                                <div class="w-12 h-12 rounded-full bg-red-900/50 flex items-center justify-center">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                                    </svg>
+                                </div>
+                                <div>
+                                    <h3 class="text-lg font-semibold text-white">Emin misin?</h3>
+                                    <p class="text-red-400 text-sm">Bu işlem geri alınamaz</p>
+                                </div>
+                            </div>
+                            <p class="text-gray-400 text-sm mb-6">
+                                Tüm mail hesapları, domainler ve sistem ayarları silinecektir. 
+                                <strong class="text-white">Dikkat: Tüm mailler silinecek!</strong>
+                            </p>
+                            <div class="flex justify-end gap-3">
+                                <button @click="showConfirmModal = false" class="px-4 py-2 rounded-lg text-gray-400 hover:text-white hover:bg-gray-800">İptal</button>
+                                <button @click="resetSystem()" :disabled="isResetting"
+                                        class="px-4 py-2 rounded-lg bg-red-600 hover:bg-red-500 text-white font-medium flex items-center gap-2 disabled:opacity-50">
+                                    <template x-if="isResetting">
+                                        <svg class="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                        </svg>
+                                    </template>
+                                    <span x-text="isResetting ? 'Siliniyor...' : 'Onayla ve Sil'"></span>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                    <div x-data="dashboardWidget()" x-init="fetchSystemSpecs()">
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <div class="bg-gray-900 border border-gray-800 rounded-xl p-5">
+                                <div class="flex items-center justify-between mb-3">
+                                    <span class="text-gray-400 text-sm">CPU Kullanımı</span>
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z" />
+                                    </svg>
+                                </div>
+                                <div class="text-3xl font-bold text-white mb-2" x-text="specs.cpu_percent ? specs.cpu_percent.toFixed(1) + '%' : '--'">--</div>
+                                <div class="w-full h-2 bg-gray-800 rounded-full overflow-hidden">
+                                    <div class="h-full bg-blue-600 rounded-full" :style="'width: ' + (specs.cpu_percent || 0) + '%'"></div>
+                                </div>
+                            </div>
+                            <div class="bg-gray-900 border border-gray-800 rounded-xl p-5">
+                                <div class="flex items-center justify-between mb-3">
+                                    <span class="text-gray-400 text-sm">RAM Kullanımı</span>
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-purple-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                                    </svg>
+                                </div>
+                                <div class="text-3xl font-bold text-white mb-2" x-text="specs.ram_percent ? specs.ram_percent.toFixed(1) + '%' : '--'">--</div>
+                                <div class="text-xs text-gray-500 mb-2" x-text="specs.ram_used_gb ? specs.ram_used_gb + ' GB / ' + specs.ram_total_gb + ' GB' : ''"></div>
+                                <div class="w-full h-2 bg-gray-800 rounded-full overflow-hidden">
+                                    <div class="h-full bg-purple-600 rounded-full" :style="'width: ' + (specs.ram_percent || 0) + '%'"></div>
+                                </div>
+                            </div>
+                            <div class="bg-gray-900 border border-gray-800 rounded-xl p-5">
+                                <div class="flex items-center justify-between mb-3">
+                                    <span class="text-gray-400 text-sm">Disk Kullanımı</span>
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4" />
+                                    </svg>
+                                </div>
+                                <div class="text-3xl font-bold text-white mb-2" x-text="specs.disk_percent ? specs.disk_percent.toFixed(1) + '%' : '--'">--</div>
+                                <div class="text-xs text-gray-500 mb-2" x-text="specs.disk_used_gb ? specs.disk_used_gb + ' GB / ' + specs.disk_total_gb + ' GB' : ''"></div>
+                                <div class="w-full h-2 bg-gray-800 rounded-full overflow-hidden">
+                                    <div class="h-full bg-amber-600 rounded-full" :style="'width: ' + (specs.disk_percent || 0) + '%'"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Logs Tab -->
+                <div x-show="activeTab === 'logs'" x-transition x-data="logViewer()" x-init="fetchLogs()">
+                    <div class="mb-6 flex items-center justify-between">
+                        <div>
+                            <h2 class="text-2xl font-bold text-white mb-1">Sistem Logları</h2>
+                            <p class="text-gray-500 text-sm">Postfix, Dovecot ve sistem olayları</p>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <select x-model="filterType" @change="fetchLogs()" class="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-300">
+                                <option value="">Tümü</option>
+                                <option value="error">Hatalar</option>
+                                <option value="auth">Auth</option>
+                                <option value="smtp">SMTP</option>
+                                <option value="success">Başarılı</option>
+                            </select>
+                            <button @click="fetchLogs()" class="px-3 py-2 bg-gray-800 hover:bg-gray-700 rounded-lg text-gray-300 text-sm">Yenile</button>
+                        </div>
+                    </div>
+
+                    <div class="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
+                        <div class="overflow-x-auto max-h-96">
+                            <table class="w-full">
+                                <thead class="bg-gray-950 sticky top-0">
+                                    <tr>
+                                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase w-40">Zaman</th>
+                                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase w-20">Kaynak</th>
+                                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase w-24">Tip</th>
+                                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Mesaj</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y divide-gray-800 overflow-y-auto">
+                                    <template x-for="log in logs" :key="log.timestamp + log.message">
+                                        <tr class="hover:bg-gray-800/50 transition-colors">
+                                            <td class="px-4 py-3 text-xs text-gray-400 font-mono" x-text="new Date(log.timestamp).toLocaleString('tr-TR')"></td>
+                                            <td class="px-4 py-3">
+                                                <span :class="{
+                                                    'bg-blue-900/50 text-blue-400': log.source === 'postfix',
+                                                    'bg-purple-900/50 text-purple-400': log.source === 'dovecot',
+                                                    'bg-gray-700 text-gray-400': log.source === 'system'
+                                                }" class="px-2 py-0.5 rounded text-xs" x-text="log.source"></span>
+                                            </td>
+                                            <td class="px-4 py-3">
+                                                <span :class="{
+                                                    'bg-red-900/50 text-red-400': log.type === 'error',
+                                                    'bg-amber-900/50 text-amber-400': log.type === 'warning',
+                                                    'bg-blue-900/50 text-blue-400': log.type === 'auth',
+                                                    'bg-emerald-900/50 text-emerald-400': log.type === 'success',
+                                                    'bg-gray-700 text-gray-400': log.type === 'info'
+                                                }" class="px-2 py-0.5 rounded text-xs" x-text="log.type"></span>
+                                            </td>
+                                            <td class="px-4 py-3 text-sm text-gray-300 font-mono truncate max-w-lg" x-text="log.message"></td>
+                                        </tr>
+                                    </template>
+                                    <template x-if="logs.length === 0">
+                                        <tr><td colspan="4" class="px-4 py-12 text-center text-gray-500">
+                                            <div class="flex flex-col items-center gap-2">
+                                                <svg xmlns="http://www.w3.org/2000/svg" class="h-10 w-10 text-gray-700" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                                </svg>
+                                                <p>Log kaydı bulunamadı</p>
+                                            </div>
+                                        </td></tr>
+                                    </template>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+            </main>
+        </div>
+    </div>
+
+    <script>
+        const JIR_KEY = '{{ JIR_LOCAL_KEY }}';
+
+        function dashboardWidget() {
+            return {
+                specs: {},
+                async fetchSystemSpecs() {
+                    try {
+                        const res = await fetch('/api/management/system-specs');
+                        this.specs = await res.json();
+                    } catch (e) { console.error('System specs fetch failed:', e); }
+                }
+            };
+        }
+
+        function accountTable() {
+            return {
+                accounts: [],
+                accountInfo: { total: 0, active_count: 0, limit: 3, tier: 'FREE' },
+                showAddModal: false,
+                showQuotaModal: false,
+                selectedAccount: null,
+                quotaInput: 0,
+                newAccount: { username: '', domain: '', password: '' },
+                systemInfo: { instance_id: '', tier: 'FREE' },
+                async fetchAccounts() {
+                    try {
+                        const res = await fetch('/api/core/list-accounts?key=' + JIR_KEY);
+                        const data = await res.json();
+                        if (data.status === 'success') {
+                            this.accounts = data.accounts;
+                            this.accountInfo = { total: data.total, active_count: data.active_count, limit: data.limit, tier: data.tier };
+                            this.systemInfo = { instance_id: data.instance_id || 'demo-instance', tier: data.tier };
+                        }
+                    } catch (e) { console.error('Account fetch failed:', e); }
+                },
+                async toggleAccount(email) {
+                    try {
+                        const res = await fetch(`/api/core/toggle-account/${encodeURIComponent(email)}?key=${JIR_KEY}`, { method: 'PATCH' });
+                        const data = await res.json();
+                        if (data.status === 'success') {
+                            const account = this.accounts.find(a => a.email === email);
+                            if (account) account.is_active = data.is_active;
+                        }
+                    } catch (e) { console.error('Toggle failed:', e); }
+                },
+                async updateRole(email, role) {
+                    try {
+                        const res = await fetch(`/api/core/update-role/${encodeURIComponent(email)}?key=${JIR_KEY}`, {
+                            method: 'PATCH',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ role: role })
+                        });
+                        const data = await res.json();
+                        if (data.status === 'success') {
+                            const account = this.accounts.find(a => a.email === email);
+                            if (account) account.role = data.role;
+                        }
+                    } catch (e) { console.error('Update role failed:', e); }
+                },
+                showQuotaModal(account) {
+                    this.selectedAccount = account;
+                    this.quotaInput = account.quota_mb === 'Sınırsız' ? 0 : account.quota_mb;
+                    this.showQuotaModal = true;
+                },
+                async saveQuota() {
+                    try {
+                        const res = await fetch(`/api/core/update-quota/${encodeURIComponent(this.selectedAccount.email)}?key=${JIR_KEY}`, {
+                            method: 'PATCH',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ quota_mb: this.quotaInput })
+                        });
+                        const data = await res.json();
+                        if (data.status === 'success') {
+                            const account = this.accounts.find(a => a.email === this.selectedAccount.email);
+                            if (account) {
+                                account.quota_bytes = data.quota_bytes;
+                                account.quota_mb = this.quotaInput === 0 ? 'Sınırsız' : this.quotaInput;
+                            }
+                            this.showQuotaModal = false;
+                        }
+                    } catch (e) { console.error('Update quota failed:', e); }
+                },
+                async createAccount() {
+                    try {
+                        const res = await fetch('/api/management/create-account', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ username: this.newAccount.username, domain: this.newAccount.domain, password: this.newAccount.password })
+                        });
+                        const data = await res.json();
+                        if (data.status === 'success') {
+                            this.showAddModal = false;
+                            this.newAccount = { username: '', domain: '', password: '' };
+                            this.fetchAccounts();
+                        } else { alert(data.message); }
+                    } catch (e) { console.error('Create failed:', e); }
+                }
+            };
+        }
+
+        function logViewer() {
+            return {
+                logs: [],
+                filterType: '',
+                async fetchLogs() {
+                    try {
+                        let url = '/api/management/logs?key=' + JIR_KEY + '&lines=100';
+                        if (this.filterType) url += '&filter_type=' + this.filterType;
+                        const res = await fetch(url);
+                        this.logs = await res.json();
+                    } catch (e) { console.error('Log fetch failed:', e); }
+                }
+            };
+        }
+
+        function resetSystem() {
+            return {
+                showConfirmModal: false,
+                isResetting: false,
+                async resetSystem() {
+                    this.isResetting = true;
+                    try {
+                        const res = await fetch('/api/management/reset-system', { method: 'POST' });
+                        const data = await res.json();
+                        if (data.status === 'success') {
+                            window.location.href = '/setup/';
+                        } else {
+                            alert('Hata: ' + data.message);
+                            this.showConfirmModal = false;
+                        }
+                    } catch (e) {
+                        alert('Bağlantı hatası: ' + e.message);
+                        this.showConfirmModal = false;
+                    } finally {
+                        this.isResetting = false;
+                    }
+                }
+            };
+        }
+    </script>
+</body>
+</html>
