@@ -2,6 +2,7 @@
 set -e
 
 CONFIG_FILE="/app/config/db_config.json"
+INSTALLED_FLAG="/app/config/.installed"
 
 if [ -f "$CONFIG_FILE" ]; then
     echo "=== Loading persisted database config ==="
@@ -21,8 +22,11 @@ fi
 echo "=== Running migrations ==="
 python manage.py migrate --noinput
 
-echo "=== Verifying installation status ==="
-python manage.py shell << 'EOF'
+if [ -f "$INSTALLED_FLAG" ]; then
+    echo "✓ System already installed (cached flag found)"
+else
+    echo "=== Checking database installation status ==="
+    python manage.py shell << 'EOF'
 import django
 django.setup()
 from saas.models import SystemConfig
@@ -30,8 +34,11 @@ from saas.models import SystemConfig
 config = SystemConfig.objects.first()
 if config and config.is_installed:
     print(f"✓ System already installed (Instance: {config.instance_id})")
+    with open('/app/config/.installed', 'w') as f:
+        f.write(str(config.instance_id))
 else:
     print("⚠ System not yet installed - Setup wizard will appear")
 EOF
+fi
 
 exec "$@"

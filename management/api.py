@@ -224,6 +224,21 @@ def setup_complete(request, data: SetupCompleteSchema):
             config.save()
             config.refresh_from_db()
 
+        with open('/app/config/.installed', 'w') as f:
+            f.write(str(config.instance_id))
+
+        env_file = '/app/.env'
+        if os.path.exists(env_file):
+            with open(env_file, 'r') as f:
+                env_lines = f.readlines()
+            with open(env_file, 'w') as f:
+                for line in env_lines:
+                    if line.startswith('INSTALLED='):
+                        continue
+                    f.write(line)
+            with open(env_file, 'a') as f:
+                f.write('INSTALLED=True\n')
+
         from django.db import connection
         connection.close()
         from django.conf import settings

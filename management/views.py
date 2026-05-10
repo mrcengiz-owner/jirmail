@@ -1,21 +1,38 @@
 from django.shortcuts import render, redirect
 from django.conf import settings
 from django.http import JsonResponse
+import os
+
+INSTALLED_FLAG = '/app/config/.installed'
 
 def is_installed():
     """
-    Check installation status directly from database.
-    Uses fresh query to avoid cached/stale data after redeploy.
+    Check installation status from multiple sources:
+    1. /app/config/.installed flag file (persists across redeploys)
+    2. SystemConfig database (primary source)
+    3. DATABASE_URL env variable (means PostgreSQL is configured)
+    4. .env INSTALLED variable (fallback/backup)
+    This ensures the system doesn't loop to setup after redeploy.
     """
+    if os.path.exists(INSTALLED_FLAG):
+        return True
+
     try:
         from saas.models import SystemConfig
         config = SystemConfig.objects.first()
-        if config:
-            config.refresh_from_db()
-            return config.is_installed
-        return False
+        if config and config.is_installed:
+            return True
     except Exception:
-        return False
+        pass
+
+    if os.getenv('DATABASE_URL'):
+        return True
+
+    env_installed = os.getenv('INSTALLED', '').lower()
+    if env_installed in ('true', '1', 'yes'):
+        return True
+
+    return False
 
 def get_jir_key():
     try:
