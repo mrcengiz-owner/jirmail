@@ -70,6 +70,11 @@ class SystemConfig(models.Model):
                 'OPTIONS': {},
             }
 
+    def verify_installation(self):
+        """Verify and return installation status from database."""
+        self.refresh_from_db()
+        return self.is_installed
+
     def __str__(self):
         return f"{self.tier} - {self.instance_id}"
 

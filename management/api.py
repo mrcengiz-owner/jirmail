@@ -165,6 +165,7 @@ def test_db(request, data: TestDbSchema):
 
 @router.post("/setup-complete", summary="Kurulum Tamamla")
 def setup_complete(request, data: SetupCompleteSchema):
+    from django.db import transaction
     try:
         existing_config = None
         try:
@@ -206,25 +207,30 @@ def setup_complete(request, data: SetupCompleteSchema):
             role='FULL'
         )
 
-        config = existing_config if existing_config else SystemConfig()
-        config.instance_id = data.instance_id
-        config.is_installed = True
-        config.jir_local_key = data.jir_local_key
+        with transaction.atomic():
+            config = existing_config if existing_config else SystemConfig()
+            config.instance_id = data.instance_id
+            config.is_installed = True
+            config.jir_local_key = data.jir_local_key
 
-        config.db_engine = db_engine
-        if data.db_type == 'postgresql':
-            config.db_host = data.db_host
-            config.db_port = data.db_port or 5432
-            config.db_name = data.db_name
-            config.db_user = data.db_user
-            config.db_password = data.db_pass
+            config.db_engine = db_engine
+            if data.db_type == 'postgresql':
+                config.db_host = data.db_host
+                config.db_port = data.db_port or 5432
+                config.db_name = data.db_name
+                config.db_user = data.db_user
+                config.db_password = data.db_pass
 
-        config.save()
+            config.save()
+            config.refresh_from_db()
 
         from django.db import connection
         connection.close()
         from django.conf import settings
         settings.DATABASES['default'] = config.get_database_config()
+
+        final_check = SystemConfig.objects.first()
+        print(f"[JIR-MAIL] Setup complete: is_installed={final_check.is_installed}, instance_id={final_check.instance_id}")
 
         return {
             "status": "success",

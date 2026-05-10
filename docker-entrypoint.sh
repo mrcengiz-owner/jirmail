@@ -21,4 +21,17 @@ fi
 echo "=== Running migrations ==="
 python manage.py migrate --noinput
 
+echo "=== Verifying installation status ==="
+python manage.py shell << 'EOF'
+import django
+django.setup()
+from saas.models import SystemConfig
+
+config = SystemConfig.objects.first()
+if config and config.is_installed:
+    print(f"✓ System already installed (Instance: {config.instance_id})")
+else:
+    print("⚠ System not yet installed - Setup wizard will appear")
+EOF
+
 exec "$@"

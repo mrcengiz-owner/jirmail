@@ -15,8 +15,51 @@ DEBUG = os.getenv('DEBUG', 'False').lower() in ('true', '1', 'yes')
 
 ALLOWED_HOSTS = ['*']
 
+#Timezone
+TIME_ZONE = 'Europe/Istanbul' # Veya 'UTC'
+USE_I18N = True
+USE_TZ = True
+
 import dotenv
 dotenv.load_dotenv(BASE_DIR / '.env')
+
+def _get_installation_status():
+    """
+    SystemConfig tablosundan is_installed durumunu al.
+    Database bağlantısı kurulabilirse sorgula, yoksa False döndür.
+    """
+    try:
+        from django.db import connection
+        connection.ensure_connection()
+        from saas.models import SystemConfig
+        config = SystemConfig.objects.first()
+        return config and config.is_installed
+    except Exception:
+        return False
+
+class _InstallStatus:
+    """
+    Lazy loading installation status from database.
+    Avoids database calls at import time.
+    """
+    _installed = None
+
+    @property
+    def INSTALLED(self):
+        if self._installed is None:
+            self._installed = _get_installation_status()
+        return self._installed
+
+    def refresh(self):
+        """Force refresh of installation status from database."""
+        self._installed = _get_installation_status()
+        return self._installed
+
+_install_status = _InstallStatus()
+
+def get_installed_status():
+    """Public function to check installation status."""
+    return _install_status.INSTALLED
 
 INSTALLED_APPS = [
     'django.contrib.admin',

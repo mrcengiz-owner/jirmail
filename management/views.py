@@ -3,10 +3,17 @@ from django.conf import settings
 from django.http import JsonResponse
 
 def is_installed():
+    """
+    Check installation status directly from database.
+    Uses fresh query to avoid cached/stale data after redeploy.
+    """
     try:
         from saas.models import SystemConfig
         config = SystemConfig.objects.first()
-        return config and config.is_installed
+        if config:
+            config.refresh_from_db()
+            return config.is_installed
+        return False
     except Exception:
         return False
 
