@@ -442,10 +442,13 @@
     </div>
 
     <div x-show="showDNSModalFlag" x-cloak class="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50" @click.self="showDNSModalFlag = false">
-        <div class="bg-slate-800 border border-slate-700 rounded-xl w-full max-w-lg p-6 shadow-2xl">
-            <div class="flex items-center justify-between mb-4">
-                <h3 class="text-lg font-semibold text-white">DNS Records for <span x-text="selectedDomain?.name"></span></h3>
-                <button @click="showDNSModalFlag = false" class="p-1 hover:bg-slate-700 rounded-lg text-slate-400">
+        <div class="bg-slate-800 border border-slate-700 rounded-xl w-full max-w-2xl p-6 shadow-2xl">
+            <div class="flex items-center justify-between mb-6">
+                <div>
+                    <h3 class="text-lg font-semibold text-white">DNS Records</h3>
+                    <p class="text-sm text-slate-400" x-text="selectedDomain?.name"></p>
+                </div>
+                <button @click="showDNSModalFlag = false" class="p-1.5 hover:bg-slate-700 rounded-lg text-slate-400">
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
                     </svg>
@@ -453,41 +456,104 @@
             </div>
             <div class="space-y-4">
                 <template x-if="selectedDomain">
-                    <div>
-                        <div class="flex items-center justify-between mb-2">
-                            <label class="text-sm font-medium text-slate-400">SPF Record</label>
-                            <button @click="copyToClipboard(selectedDomain.spf_record)" class="text-xs text-blue-400 hover:text-blue-300">Copy</button>
+                    <div class="bg-slate-900/80 rounded-xl p-4 border border-slate-700">
+                        <div class="flex items-center justify-between mb-3">
+                            <div class="flex items-center gap-2">
+                                <div class="w-8 h-8 bg-emerald-500/20 rounded-lg flex items-center justify-center">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                    </svg>
+                                </div>
+                                <div>
+                                    <label class="text-sm font-medium text-white">SPF Record</label>
+                                    <p class="text-xs text-slate-500">Sender Policy Framework</p>
+                                </div>
+                            </div>
+                            <button @click="copyToClipboard(selectedDomain.spf_record)" class="flex items-center gap-2 px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-sm font-medium transition-colors">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                                </svg>
+                                Copy
+                            </button>
                         </div>
-                        <div class="bg-slate-900 rounded-lg p-3 font-mono text-sm text-emerald-400 break-all" x-text="selectedDomain.spf_record || 'Not generated'"></div>
+                        <div class="bg-slate-800 rounded-lg p-3 font-mono text-sm text-emerald-400 break-all" x-text="selectedDomain.spf_record || 'Not generated'"></div>
                     </div>
                 </template>
                 <template x-if="selectedDomain">
-                    <div>
-                        <div class="flex items-center justify-between mb-2">
-                            <label class="text-sm font-medium text-slate-400">DKIM Record</label>
-                            <button @click="copyToClipboard(selectedDomain.dkim_record)" class="text-xs text-blue-400 hover:text-blue-300">Copy</button>
+                    <div class="bg-slate-900/80 rounded-xl p-4 border border-slate-700">
+                        <div class="flex items-center justify-between mb-3">
+                            <div class="flex items-center gap-2">
+                                <div class="w-8 h-8 bg-purple-500/20 rounded-lg flex items-center justify-center">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-purple-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
+                                    </svg>
+                                </div>
+                                <div>
+                                    <label class="text-sm font-medium text-white">DKIM Record</label>
+                                    <p class="text-xs text-slate-500">DomainKeys Identified Mail</p>
+                                </div>
+                            </div>
+                            <button @click="copyToClipboard(selectedDomain.dkim_record)" class="flex items-center gap-2 px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-sm font-medium transition-colors">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                                </svg>
+                                Copy
+                            </button>
                         </div>
-                        <div class="bg-slate-900 rounded-lg p-3 font-mono text-sm text-emerald-400 break-all max-h-32 overflow-y-auto" x-text="selectedDomain.dkim_record || 'Not generated'"></div>
+                        <div class="bg-slate-800 rounded-lg p-3 font-mono text-sm text-emerald-400 break-all max-h-40 overflow-y-auto" x-text="selectedDomain.dkim_record || 'Not generated'"></div>
                     </div>
                 </template>
                 <template x-if="selectedDomain">
-                    <div>
-                        <div class="flex items-center justify-between mb-2">
-                            <label class="text-sm font-medium text-slate-400">DMARC Record</label>
-                            <button @click="copyToClipboard(selectedDomain.dmarc_record)" class="text-xs text-blue-400 hover:text-blue-300">Copy</button>
+                    <div class="bg-slate-900/80 rounded-xl p-4 border border-slate-700">
+                        <div class="flex items-center justify-between mb-3">
+                            <div class="flex items-center gap-2">
+                                <div class="w-8 h-8 bg-amber-500/20 rounded-lg flex items-center justify-center">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                    </svg>
+                                </div>
+                                <div>
+                                    <label class="text-sm font-medium text-white">DMARC Record</label>
+                                    <p class="text-xs text-slate-500">Domain-based Message Authentication</p>
+                                </div>
+                            </div>
+                            <button @click="copyToClipboard(selectedDomain.dmarc_record)" class="flex items-center gap-2 px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-sm font-medium transition-colors">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                                </svg>
+                                Copy
+                            </button>
                         </div>
-                        <div class="bg-slate-900 rounded-lg p-3 font-mono text-sm text-emerald-400 break-all" x-text="selectedDomain.dmarc_record || 'Not generated'"></div>
+                        <div class="bg-slate-800 rounded-lg p-3 font-mono text-sm text-emerald-400 break-all" x-text="selectedDomain.dmarc_record || 'Not generated'"></div>
                     </div>
                 </template>
                 <template x-if="selectedDomain?.mx_record">
-                    <div>
-                        <div class="flex items-center justify-between mb-2">
-                            <label class="text-sm font-medium text-slate-400">MX Record</label>
-                            <button @click="copyToClipboard(selectedDomain.mx_record)" class="text-xs text-blue-400 hover:text-blue-300">Copy</button>
+                    <div class="bg-slate-900/80 rounded-xl p-4 border border-slate-700">
+                        <div class="flex items-center justify-between mb-3">
+                            <div class="flex items-center gap-2">
+                                <div class="w-8 h-8 bg-blue-500/20 rounded-lg flex items-center justify-center">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                                    </svg>
+                                </div>
+                                <div>
+                                    <label class="text-sm font-medium text-white">MX Record</label>
+                                    <p class="text-xs text-slate-500">Mail Exchanger</p>
+                                </div>
+                            </div>
+                            <button @click="copyToClipboard(selectedDomain.mx_record)" class="flex items-center gap-2 px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-sm font-medium transition-colors">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                                </svg>
+                                Copy
+                            </button>
                         </div>
-                        <div class="bg-slate-900 rounded-lg p-3 font-mono text-sm text-emerald-400 break-all" x-text="selectedDomain.mx_record"></div>
+                        <div class="bg-slate-800 rounded-lg p-3 font-mono text-sm text-emerald-400 break-all" x-text="selectedDomain.mx_record"></div>
                     </div>
                 </template>
+            </div>
+            <div class="mt-6 pt-4 border-t border-slate-700 flex justify-end">
+                <button @click="showDNSModalFlag = false" class="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg text-sm font-medium">Close</button>
             </div>
         </div>
     </div>

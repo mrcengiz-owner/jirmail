@@ -69,6 +69,32 @@
     <main class="flex-1 overflow-auto">
         {% include "master_panel_content.html" %}
     </main>
+
+    <div x-show="showToast" x-cloak
+         class="fixed top-4 right-4 z-[9999] flex items-center gap-3 px-4 py-3 rounded-lg shadow-xl transition-all duration-300"
+         :class="{
+             'bg-emerald-600 text-white': toastType === 'success',
+             'bg-red-600 text-white': toastType === 'error',
+             'bg-amber-600 text-white': toastType === 'warning',
+             'bg-blue-600 text-white': toastType === 'info'
+         }">
+        <template x-if="toastType === 'success'">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+            </svg>
+        </template>
+        <template x-if="toastType === 'error'">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+        </template>
+        <template x-if="toastType === 'warning'">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            </svg>
+        </template>
+        <span class="text-sm font-medium" x-text="toastMessage">Message</span>
+    </div>
 </div>
 
 <script>
@@ -76,6 +102,10 @@ function masterPanel() {
     return {
         activeTab: 'dashboard',
         JIR_KEY: '{{ JIR_LOCAL_KEY }}',
+
+        toastMessage: '',
+        toastType: 'success',
+        showToast: false,
 
         specs: {
             cpu_percent: 0,
@@ -114,6 +144,15 @@ function masterPanel() {
             this.fetchLogs();
 
             setInterval(() => this.fetchSpecs(), 30000);
+        },
+
+        showToast(message, type = 'success') {
+            this.toastMessage = message;
+            this.toastType = type;
+            this.showToast = true;
+            setTimeout(() => {
+                this.showToast = false;
+            }, 3000);
         },
 
         refreshAll() {
@@ -224,7 +263,7 @@ function masterPanel() {
             try {
                 if (window.clipboardData && window.clipboardData.setData) {
                     window.clipboardData.setData('Text', text);
-                    this.showCopiedFeedback();
+                    this.showToast('Copied to clipboard!', 'success');
                     return;
                 }
                 const textArea = document.createElement('textarea');
@@ -235,9 +274,10 @@ function masterPanel() {
                 textArea.select();
                 document.execCommand('copy');
                 document.body.removeChild(textArea);
-                this.showCopiedFeedback();
+                this.showToast('Copied to clipboard!', 'success');
             } catch (err) {
                 console.warn('Copy failed:', err);
+                this.showToast('Failed to copy', 'error');
             }
         },
 

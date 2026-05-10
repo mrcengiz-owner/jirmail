@@ -97,6 +97,13 @@
                         </div>
                         <div class="text-sm font-medium text-gray-900 truncate mb-1" x-text="mail.subject">Subject</div>
                         <div class="text-xs text-gray-500 truncate" x-text="mail.preview">Preview text...</div>
+                        <div class="mt-1 flex items-center gap-2" x-show="mail.status">
+                            <span class="text-xs px-2 py-0.5 rounded-full" :class="{
+                                'bg-amber-100 text-amber-700': mail.status === 'sending',
+                                'bg-emerald-100 text-emerald-700': mail.status === 'sent',
+                                'bg-red-100 text-red-700': mail.status === 'error'
+                            }" x-text="mail.status === 'sending' ? 'Gidiyor...' : mail.status === 'sent' ? 'Gönderildi' : 'Hata'">Status</span>
+                        </div>
                     </div>
                 </template>
                 <template x-if="filteredMails.length === 0">
@@ -195,11 +202,17 @@
                     </div>
                     <div class="p-4 border-t border-gray-200 flex items-center justify-between bg-gray-50">
                         <button @click="saveDraft()" class="px-4 py-2 text-gray-600 hover:text-gray-800 hover:bg-gray-200 rounded-lg font-medium text-sm">Save Draft</button>
-                        <button @click="sendMail()" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium text-sm flex items-center gap-2">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <button @click="sendMail()" :disabled="sendingMail" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white rounded-lg font-medium text-sm flex items-center gap-2">
+                            <template x-if="sendingMail">
+                                <svg class="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                </svg>
+                            </template>
+                            <svg x-show="!sendingMail" xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
                             </svg>
-                            Send
+                            <span x-text="sendingMail ? 'Gönderiliyor...' : 'Send'">Send</span>
                         </button>
                     </div>
                 </div>
@@ -208,6 +221,34 @@
 
     </div>
 </div>
+
+<div x-show="showToast" x-cloak
+     class="fixed top-4 right-4 z-[9999] flex items-center gap-3 px-4 py-3 rounded-lg shadow-xl transition-all duration-300"
+     :class="{
+         'bg-emerald-600 text-white': toastType === 'success',
+         'bg-red-600 text-white': toastType === 'error',
+         'bg-amber-600 text-white': toastType === 'warning',
+         'bg-blue-600 text-white': toastType === 'info'
+     }">
+    <template x-if="toastType === 'success'">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+        </svg>
+    </template>
+    <template x-if="toastType === 'error'">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+        </svg>
+    </template>
+    <template x-if="toastType === 'warning'">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+        </svg>
+    </template>
+    <span class="text-sm font-medium" x-text="toastMessage">Message</span>
+</div>
+
+{% endblock %}
 
 <script>
 function mailPanel() {
@@ -224,18 +265,32 @@ function mailPanel() {
         composeSubject: '',
         composeBody: '',
 
+        toastMessage: '',
+        toastType: 'success',
+        showToast: false,
+        sendingMail: false,
+
         mails: [
-            { id: 1, from: 'John Doe', email: 'john@example.com', subject: 'Welcome to Jîr-Mail', preview: 'Thank you for signing up...', date: new Date(Date.now() - 3600000), body: 'Thank you for signing up to Jîr-Mail!\n\nWe are excited to have you on board. Our platform provides a secure and reliable mail service for your business.\n\nBest regards,\nJîr-Mail Team', unread: true, starred: false, folder: 'inbox' },
-            { id: 2, from: 'Alice Smith', email: 'alice@example.com', subject: 'Meeting Tomorrow', preview: 'Hi, just wanted to remind you...', date: new Date(Date.now() - 7200000), body: 'Hi there,\n\nJust wanted to remind you about our meeting tomorrow at 10 AM.\n\nSee you there!\nAlice', unread: true, starred: true, folder: 'inbox' },
-            { id: 3, from: 'Bob Wilson', email: 'bob@example.com', subject: 'Project Update', preview: 'The latest updates on the project...', date: new Date(Date.now() - 86400000), body: 'Hi,\n\nHere are the latest updates on our project:\n\n1. Design phase completed\n2. Development started\n3. Testing scheduled for next week\n\nRegards,\nBob', unread: false, starred: false, folder: 'inbox' },
-            { id: 4, from: 'Carol Johnson', email: 'carol@example.com', subject: 'Re: Documentation', preview: 'Thanks for the update...', date: new Date(Date.now() - 172800000), body: 'Thanks for the update!\n\nI will review the documentation and get back to you.\n\nBest,\nCarol', unread: false, starred: false, folder: 'sent' },
-            { id: 5, from: 'David Brown', email: 'david@example.com', subject: 'Draft: Proposal', preview: 'This is a draft of the proposal...', date: new Date(Date.now() - 259200000), body: 'This is a draft of the proposal document I am working on...', unread: false, starred: false, folder: 'drafts' },
+            { id: 1, from: 'John Doe', email: 'john@example.com', subject: 'Welcome to Jîr-Mail', preview: 'Thank you for signing up...', date: new Date(Date.now() - 3600000), body: 'Thank you for signing up to Jîr-Mail!\n\nWe are excited to have you on board. Our platform provides a secure and reliable mail service for your business.\n\nBest regards,\nJîr-Mail Team', unread: true, starred: false, folder: 'inbox', status: null },
+            { id: 2, from: 'Alice Smith', email: 'alice@example.com', subject: 'Meeting Tomorrow', preview: 'Hi, just wanted to remind you...', date: new Date(Date.now() - 7200000), body: 'Hi there,\n\nJust wanted to remind you about our meeting tomorrow at 10 AM.\n\nSee you there!\nAlice', unread: true, starred: true, folder: 'inbox', status: null },
+            { id: 3, from: 'Bob Wilson', email: 'bob@example.com', subject: 'Project Update', preview: 'The latest updates on the project...', date: new Date(Date.now() - 86400000), body: 'Hi,\n\nHere are the latest updates on our project:\n\n1. Design phase completed\n2. Development started\n3. Testing scheduled for next week\n\nRegards,\nBob', unread: false, starred: false, folder: 'inbox', status: null },
+            { id: 4, from: 'Carol Johnson', email: 'carol@example.com', subject: 'Re: Documentation', preview: 'Thanks for the update...', date: new Date(Date.now() - 172800000), body: 'Thanks for the update!\n\nI will review the documentation and get back to you.\n\nBest,\nCarol', unread: false, starred: false, folder: 'sent', status: null },
+            { id: 5, from: 'David Brown', email: 'david@example.com', subject: 'Draft: Proposal', preview: 'This is a draft of the proposal...', date: new Date(Date.now() - 259200000), body: 'This is a draft of the proposal document I am working on...', unread: false, starred: false, folder: 'drafts', status: null },
         ],
 
         filteredMails: [],
 
         init() {
             this.filterMails();
+        },
+
+        showToast(message, type = 'success') {
+            this.toastMessage = message;
+            this.toastType = type;
+            this.showToast = true;
+            setTimeout(() => {
+                this.showToast = false;
+            }, 3000);
         },
 
         filterMails() {
@@ -326,20 +381,23 @@ function mailPanel() {
                 body: this.composeBody,
                 unread: false,
                 starred: false,
-                folder: 'drafts'
+                folder: 'drafts',
+                status: null
             };
             this.mails.push(draftMail);
             this.closeCompose();
             this.filterMails();
-            alert('Draft saved!');
+            this.showToast('Draft saved', 'info');
         },
 
         sendMail() {
             if (!this.composeTo) {
-                alert('Please enter a recipient');
+                this.showToast('Please enter a recipient', 'error');
                 return;
             }
-            const sentMail = {
+            this.sendingMail = true;
+
+            const newMail = {
                 id: Date.now(),
                 from: this.email,
                 email: this.composeTo,
@@ -349,15 +407,27 @@ function mailPanel() {
                 body: this.composeBody,
                 unread: false,
                 starred: false,
-                folder: 'sent'
+                folder: 'inbox',
+                status: 'sending'
             };
-            this.mails.push(sentMail);
-            this.closeCompose();
-            this.currentFolder = 'sent';
+            this.mails.push(newMail);
             this.filterMails();
-            alert('Mail sent successfully!');
+
+            this.showToast('Gidiyor...', 'info');
+
+            setTimeout(() => {
+                const mailIndex = this.mails.findIndex(m => m.id === newMail.id);
+                if (mailIndex !== -1) {
+                    this.mails[mailIndex].status = 'sent';
+                    this.mails[mailIndex].folder = 'sent';
+                }
+                this.filterMails();
+                this.sendingMail = false;
+                this.closeCompose();
+                this.currentFolder = 'sent';
+                this.showToast('Gönderildi!', 'success');
+            }, 2000);
         }
     };
 }
 </script>
-{% endblock %}
