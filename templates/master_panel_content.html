@@ -404,6 +404,7 @@
                 <div>
                     <label class="block text-sm text-slate-400 mb-1">Domain</label>
                     <select x-model="newAccount.domain" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-blue-500">
+                        <option value="">Select a domain...</option>
                         <template x-for="d in domains" :key="d.id">
                             <option :value="d.name" x-text="d.name">domain.com</option>
                         </template>

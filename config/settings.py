@@ -15,6 +15,9 @@ DEBUG = os.getenv('DEBUG', 'False').lower() in ('true', '1', 'yes')
 
 ALLOWED_HOSTS = ['*']
 
+import dotenv
+dotenv.load_dotenv(BASE_DIR / '.env')
+
 INSTALLED_APPS = [
     'django.contrib.admin',
     'django.contrib.auth',
@@ -37,6 +40,7 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'jir_core.middleware.JirInstallMiddleware',
 ]
 
 ROOT_URLCONF = 'config.urls'
@@ -69,10 +73,22 @@ def _get_db_path():
     db_path = os.path.join(temp_dir, 'jirmail.db')
     return db_path
 
-DATABASES = {
-    'default': {
+def _get_database_config():
+    """
+    Get database configuration from environment or SystemConfig.
+    Supports both SQLite and PostgreSQL via DATABASE_URL.
+    """
+    database_url = os.getenv('DATABASE_URL')
+
+    if database_url:
+        import dj_database_url
+        db_config = dj_database_url.parse(database_url, conn_max_age=600)
+        return db_config
+
+    db_path = os.path.join(tempfile.gettempdir(), 'jirmail.db')
+    return {
         'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': _get_db_path(),
+        'NAME': db_path,
         'ATOMIC_REQUESTS': False,
         'AUTOCOMMIT': True,
         'CONN_MAX_AGE': 0,
@@ -80,6 +96,9 @@ DATABASES = {
             'timeout': 30,
         },
     }
+
+DATABASES = {
+    'default': _get_database_config()
 }
 
 def _load_db_config_from_system_config():

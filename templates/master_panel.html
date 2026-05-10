@@ -221,11 +221,24 @@ function masterPanel() {
 
         copyToClipboard(text) {
             if (!text) return;
-            navigator.clipboard.writeText(text).then(() => {
-                alert('Copied to clipboard!');
-            }).catch(() => {
-                console.error('Failed to copy');
-            });
+            try {
+                if (window.clipboardData && window.clipboardData.setData) {
+                    window.clipboardData.setData('Text', text);
+                    this.showCopiedFeedback();
+                    return;
+                }
+                const textArea = document.createElement('textarea');
+                textArea.value = text;
+                textArea.style.cssText = 'position:fixed;top:-9999px;left:-9999px;';
+                document.body.appendChild(textArea);
+                textArea.focus();
+                textArea.select();
+                document.execCommand('copy');
+                document.body.removeChild(textArea);
+                this.showCopiedFeedback();
+            } catch (err) {
+                console.warn('Copy failed:', err);
+            }
         },
 
         deleteAccount(account) {
