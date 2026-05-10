@@ -84,9 +84,20 @@ def update_postfix_vmail(email, action="add"):
         return False
 
 
+def get_api_key():
+    try:
+        config = SystemConfig.objects.first()
+        if config and config.jir_local_key:
+            return config.jir_local_key
+    except Exception:
+        pass
+    return getattr(settings, 'JIR_LOCAL_KEY', None)
+
+
 @router.get("/list-accounts", summary="Tüm Mail Hesaplarını Listele")
 def list_mail_accounts(request, key: str):
-    if key != getattr(settings, 'JIR_LOCAL_KEY', None):
+    expected_key = get_api_key()
+    if key != expected_key:
         return {"status": "error", "message": "Yetkisiz erişim!"}
 
     accounts = MailAccount.objects.select_related('domain').all()
@@ -118,7 +129,8 @@ def list_mail_accounts(request, key: str):
 
 @router.patch("/toggle-account/{email}", summary="Hesabı Aktif/Pasif Yap")
 def toggle_account(request, email: str, key: str):
-    if key != getattr(settings, 'JIR_LOCAL_KEY', None):
+    expected_key = get_api_key()
+    if key != expected_key:
         return {"status": "error", "message": "Yetkisiz erişim!"}
 
     try:
@@ -134,7 +146,8 @@ def toggle_account(request, email: str, key: str):
 
 @router.patch("/update-quota/{email}", summary="Hesap Kota Güncelle")
 def update_quota(request, email: str, key: str, data: QuotaUpdateSchema):
-    if key != getattr(settings, 'JIR_LOCAL_KEY', None):
+    expected_key = get_api_key()
+    if key != expected_key:
         return {"status": "error", "message": "Yetkisiz erişim!"}
 
     try:
@@ -151,7 +164,8 @@ def update_quota(request, email: str, key: str, data: QuotaUpdateSchema):
 
 @router.patch("/update-role/{email}", summary="Hesap Rol Güncelle")
 def update_role(request, email: str, key: str, data: RoleUpdateSchema):
-    if key != getattr(settings, 'JIR_LOCAL_KEY', None):
+    expected_key = get_api_key()
+    if key != expected_key:
         return {"status": "error", "message": "Yetkisiz erişim!"}
 
     valid_roles = [choice[0] for choice in MailRole.choices]
@@ -170,7 +184,8 @@ def update_role(request, email: str, key: str, data: RoleUpdateSchema):
 
 @router.patch("/update-settings/{email}", summary="Hesap Email Ayarlarını Güncelle")
 def update_email_settings(request, email: str, key: str, data: EmailSettingsSchema):
-    if key != getattr(settings, 'JIR_LOCAL_KEY', None):
+    expected_key = get_api_key()
+    if key != expected_key:
         return {"status": "error", "message": "Yetkisiz erişim!"}
 
     try:
@@ -204,7 +219,8 @@ def update_email_settings(request, email: str, key: str, data: EmailSettingsSche
 
 @router.get("/account-settings/{email}", summary="Hesap Email Ayarlarını Getir")
 def get_email_settings(request, email: str, key: str):
-    if key != getattr(settings, 'JIR_LOCAL_KEY', None):
+    expected_key = get_api_key()
+    if key != expected_key:
         return {"status": "error", "message": "Yetkisiz erişim!"}
 
     try:
@@ -229,7 +245,8 @@ def get_email_settings(request, email: str, key: str):
 
 @router.patch("/update-account/{email}", summary="Hesap Güncelle")
 def update_account(request, email: str, key: str, data: AccountUpdateSchema):
-    if key != getattr(settings, 'JIR_LOCAL_KEY', None):
+    expected_key = get_api_key()
+    if key != expected_key:
         return {"status": "error", "message": "Yetkisiz erişim!"}
 
     try:
@@ -264,7 +281,8 @@ def update_account(request, email: str, key: str, data: AccountUpdateSchema):
 
 @router.delete("/delete-account/{email}", summary="Hesap Sil")
 def delete_account(request, email: str, key: str):
-    if key != getattr(settings, 'JIR_LOCAL_KEY', None):
+    expected_key = get_api_key()
+    if key != expected_key:
         return {"status": "error", "message": "Yetkisiz erişim!"}
 
     try:
@@ -279,7 +297,8 @@ def delete_account(request, email: str, key: str):
 
 @router.get("/account-details/{email}", summary="Hesap Detayları")
 def get_account_details(request, email: str, key: str):
-    if key != getattr(settings, 'JIR_LOCAL_KEY', None):
+    expected_key = get_api_key()
+    if key != expected_key:
         return {"status": "error", "message": "Yetkisiz erişim!"}
 
     try:
@@ -342,7 +361,8 @@ def create_mail_account(request, data: MailAccountSchema):
 
 @router.post("/generate-dns-records/{domain}", summary="DNS Kayıtları Oluştur")
 def generate_dns_records(request, domain: str, key: str):
-    if key != getattr(settings, 'JIR_LOCAL_KEY', None):
+    expected_key = get_api_key()
+    if key != expected_key:
         return {"status": "error", "message": "Yetkisiz erişim!"}
 
     try:
@@ -378,7 +398,8 @@ def generate_dns_records(request, domain: str, key: str):
 
 @router.get("/list-domains", summary="Domain Listesi")
 def list_domains(request, key: str):
-    if key != getattr(settings, 'JIR_LOCAL_KEY', None):
+    expected_key = get_api_key()
+    if key != expected_key:
         return {"status": "error", "message": "Yetkisiz erişim!"}
 
     domains = MailDomain.objects.all()
@@ -404,7 +425,8 @@ def list_domains(request, key: str):
 
 @router.post("/verify-domain/{domain}", summary="Domain Doğrulama")
 def verify_domain(request, domain: str, key: str):
-    if key != getattr(settings, 'JIR_LOCAL_KEY', None):
+    expected_key = get_api_key()
+    if key != expected_key:
         return {"status": "error", "message": "Yetkisiz erişim!"}
 
     try:
@@ -425,3 +447,133 @@ def verify_domain(request, domain: str, key: str):
         return {"status": "error", "message": "Domain bulunamadı."}
     except Exception as e:
         return {"status": "error", "message": f"Error: {str(e)}"}
+
+
+class AddDomainSchema(Schema):
+    name: str
+    is_active: bool = True
+
+
+class DomainDetailsSchema(Schema):
+    id: int
+    name: str
+    is_active: bool
+    dkim_enabled: bool
+    verification_status: str
+    verified_at: str = None
+    spf_record: str
+    dkim_record: str
+    dmarc_record: str
+    created_at: str
+    account_count: int
+    total_storage_mb: float
+
+
+@router.post("/add-domain", summary="Yeni Domain Ekle")
+def add_domain(request, data: AddDomainSchema, key: str):
+    expected_key = get_api_key()
+    if key != expected_key:
+        return {"status": "error", "message": "Yetkisiz erişim!"}
+
+    try:
+        domain_name = data.name.lower().strip()
+
+        existing = MailDomain.objects.filter(name=domain_name).first()
+        if existing:
+            return {"status": "error", "message": "Bu domain zaten mevcut"}
+
+        domain = MailDomain.objects.create(
+            name=domain_name,
+            is_active=data.is_active
+        )
+
+        return {
+            "status": "success",
+            "message": "Domain eklendi",
+            "domain": {
+                "id": domain.id,
+                "name": domain.name,
+                "is_active": domain.is_active
+            }
+        }
+    except Exception as e:
+        return {"status": "error", "message": f"Hata: {str(e)}"}
+
+
+@router.get("/domain-details/{domain}", summary="Domain Detayları")
+def get_domain_details(request, domain: str, key: str):
+    expected_key = get_api_key()
+    if key != expected_key:
+        return {"status": "error", "message": "Yetkisiz erişim!"}
+
+    try:
+        domain_obj = MailDomain.objects.get(name=domain)
+        accounts = MailAccount.objects.filter(domain=domain_obj)
+
+        total_storage = 0
+        for acc in accounts:
+            total_storage += acc.current_storage_bytes
+
+        return {
+            "status": "success",
+            "domain": {
+                "id": domain_obj.id,
+                "name": domain_obj.name,
+                "is_active": domain_obj.is_active,
+                "dkim_enabled": domain_obj.dkim_enabled,
+                "verification_status": domain_obj.verification_status,
+                "verified_at": domain_obj.verified_at.isoformat() if domain_obj.verified_at else None,
+                "spf_record": domain_obj.spf_record,
+                "dkim_record": domain_obj.dkim_record,
+                "dmarc_record": domain_obj.dmarc_record,
+                "created_at": domain_obj.created_at.isoformat(),
+                "account_count": accounts.count(),
+                "total_storage_mb": round(total_storage / (1024 * 1024), 2)
+            }
+        }
+    except MailDomain.DoesNotExist:
+        return {"status": "error", "message": "Domain bulunamadı."}
+
+
+@router.delete("/delete-domain/{domain}", summary="Domain Sil")
+def delete_domain(request, domain: str, key: str):
+    expected_key = get_api_key()
+    if key != expected_key:
+        return {"status": "error", "message": "Yetkisiz erişim!"}
+
+    try:
+        domain_obj = MailDomain.objects.get(name=domain)
+        account_count = MailAccount.objects.filter(domain=domain_obj).count()
+
+        if account_count > 0:
+            return {
+                "status": "error",
+                "message": f"Domain silinemez. {account_count} aktif hesap var. Önce hesapları silin."
+            }
+
+        domain_obj.delete()
+        return {"status": "success", "message": "Domain silindi"}
+
+    except MailDomain.DoesNotExist:
+        return {"status": "error", "message": "Domain bulunamadı."}
+
+
+@router.patch("/toggle-domain/{domain}", summary="Domain Aktif/Pasif")
+def toggle_domain(request, domain: str, key: str):
+    expected_key = get_api_key()
+    if key != expected_key:
+        return {"status": "error", "message": "Yetkisiz erişim!"}
+
+    try:
+        domain_obj = MailDomain.objects.get(name=domain)
+        domain_obj.is_active = not domain_obj.is_active
+        domain_obj.save()
+
+        status_text = "Aktif" if domain_obj.is_active else "Pasif"
+        return {
+            "status": "success",
+            "message": f"Domain {status_text} olarak güncellendi",
+            "is_active": domain_obj.is_active
+        }
+    except MailDomain.DoesNotExist:
+        return {"status": "error", "message": "Domain bulunamadı."}

@@ -1,0 +1,775 @@
+<div x-data="dashboardApp()" x-init="init()">
+
+    <div x-show="activeTab === 'dashboard'" x-transition class="p-6 space-y-6">
+
+        <div class="flex items-center justify-between">
+            <h2 class="text-2xl font-bold text-white">System Overview</h2>
+            <button @click="refreshAll()" class="px-4 py-2 bg-amber-500/20 hover:bg-amber-500/30 text-amber-400 rounded-lg text-sm font-medium flex items-center gap-2">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+                Refresh All
+            </button>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div class="bg-slate-800/50 border border-slate-700 rounded-xl p-5">
+                <div class="flex items-center justify-between mb-3">
+                    <span class="text-sm font-medium text-slate-400">CPU Usage</span>
+                    <div class="w-8 h-8 bg-amber-500/20 rounded-lg flex items-center justify-center">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z" />
+                        </svg>
+                    </div>
+                </div>
+                <div class="text-3xl font-bold text-white mb-2" x-text="specs.cpu_percent.toFixed(1) + '%'">0%</div>
+                <div class="w-full bg-slate-700 rounded-full h-2">
+                    <div class="bg-amber-500 h-2 rounded-full transition-all" :style="'width: ' + specs.cpu_percent + '%'"></div>
+                </div>
+            </div>
+
+            <div class="bg-slate-800/50 border border-slate-700 rounded-xl p-5">
+                <div class="flex items-center justify-between mb-3">
+                    <span class="text-sm font-medium text-slate-400">Memory Usage</span>
+                    <div class="w-8 h-8 bg-blue-500/20 rounded-lg flex items-center justify-center">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                    </div>
+                </div>
+                <div class="text-3xl font-bold text-white mb-1" x-text="specs.ram_used_gb.toFixed(1) + ' GB'">0 GB</div>
+                <div class="text-xs text-slate-500" x-text="specs.ram_percent.toFixed(0) + '% of ' + specs.ram_total_gb.toFixed(1) + ' GB'">0% of 0 GB</div>
+            </div>
+
+            <div class="bg-slate-800/50 border border-slate-700 rounded-xl p-5">
+                <div class="flex items-center justify-between mb-3">
+                    <span class="text-sm font-medium text-slate-400">Disk Usage</span>
+                    <div class="w-8 h-8 bg-emerald-500/20 rounded-lg flex items-center justify-center">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4" />
+                        </svg>
+                    </div>
+                </div>
+                <div class="text-3xl font-bold text-white mb-1" x-text="specs.disk_used_gb.toFixed(1) + ' GB'">0 GB</div>
+                <div class="text-xs text-slate-500" x-text="specs.disk_percent.toFixed(0) + '% of ' + specs.disk_total_gb.toFixed(1) + ' GB'">0% of 0 GB</div>
+            </div>
+
+            <div class="bg-slate-800/50 border border-slate-700 rounded-xl p-5">
+                <div class="flex items-center justify-between mb-3">
+                    <span class="text-sm font-medium text-slate-400">Container CPU</span>
+                    <div class="w-8 h-8 bg-purple-500/20 rounded-lg flex items-center justify-center">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-purple-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2" />
+                        </svg>
+                    </div>
+                </div>
+                <div class="text-3xl font-bold text-white mb-1" x-text="specs.total_container_cpu.toFixed(1) + '%'">0%</div>
+                <div class="text-xs text-slate-500" x-text="specs.total_container_ram_mb.toFixed(0) + ' MB RAM'">0 MB RAM</div>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div class="bg-slate-800/50 border border-slate-700 rounded-xl p-5">
+                <h3 class="text-lg font-semibold text-white mb-4">Container Status</h3>
+                <div class="space-y-3">
+                    <template x-for="container in specs.docker_containers" :key="container.container_id">
+                        <div class="flex items-center justify-between p-3 bg-slate-900/50 rounded-lg">
+                            <div class="flex items-center gap-3">
+                                <div class="w-3 h-3 bg-emerald-500 rounded-full animate-pulse"></div>
+                                <span class="text-white font-medium" x-text="container.container_name">Container</span>
+                            </div>
+                            <div class="text-right">
+                                <div class="text-amber-400 text-sm" x-text="container.cpu_percent + '% CPU'">0% CPU</div>
+                                <div class="text-blue-400 text-xs" x-text="container.ram_usage_mb + ' MB'">0 MB</div>
+                            </div>
+                        </div>
+                    </template>
+                    <template x-if="specs.docker_containers.length === 0">
+                        <div class="text-slate-500 text-center py-4">No containers running</div>
+                    </template>
+                </div>
+            </div>
+
+            <div class="bg-slate-800/50 border border-slate-700 rounded-xl p-5">
+                <h3 class="text-lg font-semibold text-white mb-4">Quick Actions</h3>
+                <div class="grid grid-cols-2 gap-3">
+                    <button @click="activeTab = 'accounts'" class="flex items-center gap-3 p-4 bg-slate-900/50 hover:bg-slate-900 rounded-lg transition-colors text-left">
+                        <div class="w-10 h-10 bg-emerald-500/20 rounded-lg flex items-center justify-center">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+                            </svg>
+                        </div>
+                        <div>
+                            <div class="text-white font-medium">New Account</div>
+                            <div class="text-slate-500 text-xs">Create mail account</div>
+                        </div>
+                    </button>
+                    <button @click="activeTab = 'domains'" class="flex items-center gap-3 p-4 bg-slate-900/50 hover:bg-slate-900 rounded-lg transition-colors text-left">
+                        <div class="w-10 h-10 bg-blue-500/20 rounded-lg flex items-center justify-center">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0 3-4.03 3-9s-1.343-9-3-9m-9 9a9 9 0 019-9" />
+                            </svg>
+                        </div>
+                        <div>
+                            <div class="text-white font-medium">Domain Settings</div>
+                            <div class="text-slate-500 text-xs">DNS + DKIM</div>
+                        </div>
+                    </button>
+                    <button @click="activeTab = 'backup'" class="flex items-center gap-3 p-4 bg-slate-900/50 hover:bg-slate-900 rounded-lg transition-colors text-left">
+                        <div class="w-10 h-10 bg-amber-500/20 rounded-lg flex items-center justify-center">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+                            </svg>
+                        </div>
+                        <div>
+                            <div class="text-white font-medium">Create Backup</div>
+                            <div class="text-slate-500 text-xs">Database + Configs</div>
+                        </div>
+                    </button>
+                    <button @click="activeTab = 'logs'" class="flex items-center gap-3 p-4 bg-slate-900/50 hover:bg-slate-900 rounded-lg transition-colors text-left">
+                        <div class="w-10 h-10 bg-purple-500/20 rounded-lg flex items-center justify-center">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-purple-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                            </svg>
+                        </div>
+                        <div>
+                            <div class="text-white font-medium">View Logs</div>
+                            <div class="text-slate-500 text-xs">Mail + System</div>
+                        </div>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div x-show="activeTab === 'accounts'" x-transition class="p-6">
+        <div class="mb-6 flex items-center justify-between">
+            <div>
+                <h2 class="text-2xl font-bold text-white">Mail Accounts</h2>
+                <p class="text-sm text-slate-500 mt-1">
+                    <span x-text="accounts.length">0</span> total ·
+                    <span x-text="accounts.filter(a => a.is_active).length">0</span> active
+                </p>
+            </div>
+            <button @click="showAddModal = true" class="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-sm font-medium flex items-center gap-2">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+                </svg>
+                New Account
+            </button>
+        </div>
+
+        <div class="bg-slate-800 border border-slate-700 rounded-xl overflow-hidden">
+            <table class="w-full">
+                <thead class="bg-slate-900/50">
+                    <tr>
+                        <th class="px-5 py-3 text-left text-xs font-semibold text-slate-400 uppercase">Email</th>
+                        <th class="px-5 py-3 text-left text-xs font-semibold text-slate-400 uppercase">Role</th>
+                        <th class="px-5 py-3 text-left text-xs font-semibold text-slate-400 uppercase">Quota</th>
+                        <th class="px-5 py-3 text-left text-xs font-semibold text-slate-400 uppercase">Status</th>
+                        <th class="px-5 py-3 text-right text-xs font-semibold text-slate-400 uppercase">Actions</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-700">
+                    <template x-for="account in accounts" :key="account.email">
+                        <tr class="hover:bg-slate-700/30 transition-colors">
+                            <td class="px-5 py-4">
+                                <div class="flex items-center gap-3">
+                                    <div class="w-8 h-8 bg-slate-700 rounded-lg flex items-center justify-center text-slate-400 font-medium text-sm" x-text="account.email.charAt(0).toUpperCase()">A</div>
+                                    <span class="text-sm text-white font-medium" x-text="account.email">email</span>
+                                </div>
+                            </td>
+                            <td class="px-5 py-4">
+                                <span class="px-2.5 py-1 rounded text-xs font-medium"
+                                      :class="{
+                                          'bg-blue-500/20 text-blue-400': account.role === 'FULL',
+                                          'bg-emerald-500/20 text-emerald-400': account.role === 'SEND',
+                                          'bg-amber-500/20 text-amber-400': account.role === 'RECV',
+                                          'bg-red-500/20 text-red-400': account.role === 'BLOCK'
+                                      }" x-text="getRoleLabel(account.role)">Full Access</span>
+                            </td>
+                            <td class="px-5 py-4">
+                                <span class="text-sm text-slate-300" x-text="account.quota_mb + ' MB'">0 MB</span>
+                            </td>
+                            <td class="px-5 py-4">
+                                <span class="flex items-center gap-2">
+                                    <span class="w-2 h-2 rounded-full" :class="account.is_active ? 'bg-emerald-500' : 'bg-slate-500'"></span>
+                                    <span class="text-sm" :class="account.is_active ? 'text-emerald-400' : 'text-slate-400'" x-text="account.is_active ? 'Active' : 'Inactive'">Active</span>
+                                </span>
+                            </td>
+                            <td class="px-5 py-4 text-right">
+                                <div class="flex items-center gap-2 justify-end">
+                                    <button @click="toggleAccount(account.email)" class="px-3 py-1.5 rounded-lg text-xs font-medium transition-colors"
+                                            :class="account.is_active ? 'bg-amber-500/20 hover:bg-amber-500/30 text-amber-400' : 'bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-400'">
+                                        <span x-text="account.is_active ? 'Deactivate' : 'Activate'">Toggle</span>
+                                    </button>
+                                    <button @click="deleteAccount(account)" class="p-1.5 rounded-lg bg-red-700 hover:bg-red-600 text-slate-300" title="Delete">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                        </svg>
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>
+                    </template>
+                    <template x-if="accounts.length === 0">
+                        <tr><td colspan="5" class="px-5 py-12 text-center text-slate-500">No mail accounts yet</td></tr>
+                    </template>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div x-show="activeTab === 'domains'" x-transition class="p-6">
+        <div class="mb-6 flex items-center justify-between">
+            <div>
+                <h2 class="text-2xl font-bold text-white">Domain Management</h2>
+                <p class="text-sm text-slate-500 mt-1">
+                    <span x-text="domains.length">0</span> domains configured
+                </p>
+            </div>
+            <button @click="showAddDomainModal = true" class="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-sm font-medium flex items-center gap-2">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+                </svg>
+                Add Domain
+            </button>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <template x-for="domain in domains" :key="domain.id">
+                <div class="bg-slate-800 border border-slate-700 rounded-xl p-5">
+                    <div class="flex items-center justify-between mb-4">
+                        <div class="flex items-center gap-3">
+                            <div class="w-10 h-10 bg-blue-500/20 rounded-lg flex items-center justify-center">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0 3-4.03 3-9s-1.343-9-3-9m-9 9a9 9 0 019-9" />
+                                </svg>
+                            </div>
+                            <div>
+                                <h3 class="text-white font-semibold" x-text="domain.name">domain.com</h3>
+                                <span class="text-xs" :class="domain.is_active ? 'text-emerald-400' : 'text-slate-500'" x-text="domain.is_active ? 'Active' : 'Inactive'">Active</span>
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <button @click="toggleDomain(domain)" class="p-2 rounded-lg transition-colors" :class="domain.is_active ? 'bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-400' : 'bg-slate-700 hover:bg-slate-600 text-slate-400'" title="Toggle Status">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                                </svg>
+                            </button>
+                            <button @click="showDNSModal(domain)" class="px-3 py-1.5 bg-amber-500/20 hover:bg-amber-500/30 text-amber-400 rounded-lg text-xs font-medium">
+                                DNS Records
+                            </button>
+                            <button @click="generateDNS(domain)" class="px-3 py-1.5 bg-purple-500/20 hover:bg-purple-500/30 text-purple-400 rounded-lg text-xs font-medium">
+                                Generate DNS
+                            </button>
+                        </div>
+                    </div>
+
+                    <template x-if="domain.spf_record || domain.dkim_record">
+                        <div class="space-y-2">
+                            <div class="text-xs">
+                                <span class="text-slate-500">SPF:</span>
+                                <span class="text-slate-300 ml-2 font-mono text-xs" x-text="domain.spf_record || '-'">-</span>
+                            </div>
+                            <div class="text-xs">
+                                <span class="text-slate-500">DKIM:</span>
+                                <span class="text-slate-300 ml-2 font-mono text-xs truncate block" x-text="domain.dkim_record ? domain.dkim_record.substring(0, 60) + '...' : '-'">-</span>
+                            </div>
+                            <div class="text-xs">
+                                <span class="text-slate-500">DMARC:</span>
+                                <span class="text-slate-300 ml-2 font-mono text-xs" x-text="domain.dmarc_record || '-'">-</span>
+                            </div>
+                        </div>
+                    </template>
+                </div>
+            </template>
+            <template x-if="domains.length === 0">
+                <div class="col-span-2 text-center py-12 text-slate-500">No domains configured. Click "Add Domain" to get started.</div>
+            </template>
+        </div>
+    </div>
+
+    <div x-show="activeTab === 'backup'" x-transition class="p-6">
+        <div class="mb-6 flex items-center justify-between">
+            <div>
+                <h2 class="text-2xl font-bold text-white">Backup & Restore</h2>
+                <p class="text-sm text-slate-500 mt-1">Create and manage system backups</p>
+            </div>
+            <button @click="createBackup()" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-sm font-medium flex items-center gap-2">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+                </svg>
+                Create Backup
+            </button>
+        </div>
+
+        <div class="bg-slate-800 border border-slate-700 rounded-xl overflow-hidden">
+            <table class="w-full">
+                <thead class="bg-slate-900/50">
+                    <tr>
+                        <th class="px-5 py-3 text-left text-xs font-semibold text-slate-400 uppercase">Name</th>
+                        <th class="px-5 py-3 text-left text-xs font-semibold text-slate-400 uppercase">Type</th>
+                        <th class="px-5 py-3 text-left text-xs font-semibold text-slate-400 uppercase">Size</th>
+                        <th class="px-5 py-3 text-left text-xs font-semibold text-slate-400 uppercase">Status</th>
+                        <th class="px-5 py-3 text-left text-xs font-semibold text-slate-400 uppercase">Created</th>
+                        <th class="px-5 py-3 text-right text-xs font-semibold text-slate-400 uppercase">Actions</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-700">
+                    <template x-for="backup in backups" :key="backup.id">
+                        <tr class="hover:bg-slate-700/30 transition-colors">
+                            <td class="px-5 py-4 text-sm text-white" x-text="backup.name">Backup_2024</td>
+                            <td class="px-5 py-4 text-sm text-slate-300" x-text="backup.backup_type">full</td>
+                            <td class="px-5 py-4 text-sm text-slate-300" x-text="backup.file_size_mb + ' MB'">0 MB</td>
+                            <td class="px-5 py-4">
+                                <span class="px-2.5 py-1 rounded text-xs font-medium" :class="{
+                                    'bg-emerald-500/20 text-emerald-400': backup.status === 'completed',
+                                    'bg-amber-500/20 text-amber-400': backup.status === 'running',
+                                    'bg-red-500/20 text-red-400': backup.status === 'failed'
+                                }" x-text="backup.status">status</span>
+                            </td>
+                            <td class="px-5 py-4 text-sm text-slate-400" x-text="new Date(backup.created_at).toLocaleDateString()">-</td>
+                            <td class="px-5 py-4 text-right">
+                                <button @click="restoreBackup(backup)" class="px-3 py-1.5 bg-blue-500/20 hover:bg-blue-500/30 text-blue-400 rounded-lg text-xs font-medium">Restore</button>
+                            </td>
+                        </tr>
+                    </template>
+                    <template x-if="backups.length === 0">
+                        <tr><td colspan="6" class="px-5 py-12 text-center text-slate-500">No backups yet</td></tr>
+                    </template>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div x-show="activeTab === 'logs'" x-transition class="p-6">
+        <div class="mb-6 flex items-center justify-between">
+            <div>
+                <h2 class="text-2xl font-bold text-white">System Logs</h2>
+                <p class="text-sm text-slate-500 mt-1">Postfix, Dovecot and system events</p>
+            </div>
+            <button @click="fetchLogs()" class="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-slate-300 rounded-lg text-sm font-medium flex items-center gap-2">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+                Refresh
+            </button>
+        </div>
+
+        <div class="bg-slate-800 border border-slate-700 rounded-xl overflow-hidden">
+            <div class="p-4 border-b border-slate-700 flex items-center gap-4">
+                <select x-model="logFilter" @change="fetchLogs()" class="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-300">
+                    <option value="">All</option>
+                    <option value="error">Error</option>
+                    <option value="warning">Warning</option>
+                    <option value="info">Info</option>
+                </select>
+            </div>
+            <div class="max-h-96 overflow-y-auto">
+                <template x-for="(log, index) in logs" :key="index">
+                    <div class="px-5 py-3 border-b border-slate-700/50 hover:bg-slate-700/30">
+                        <div class="flex items-start gap-3">
+                            <span class="w-2 h-2 mt-2 rounded-full flex-shrink-0" :class="{
+                                'bg-red-500': log.type === 'error',
+                                'bg-amber-500': log.type === 'warning',
+                                'bg-blue-500': log.type === 'info',
+                                'bg-emerald-500': log.type === 'success'
+                            }"></span>
+                            <div class="flex-1 min-w-0">
+                                <p class="text-sm text-white" x-text="log.message">Log message</p>
+                                <div class="flex items-center gap-3 mt-1">
+                                    <span class="text-xs text-slate-500" x-text="new Date(log.timestamp).toLocaleString()">-</span>
+                                    <span class="text-xs text-slate-600" x-text="log.source">source</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </template>
+                <template x-if="logs.length === 0">
+                    <div class="px-5 py-12 text-center text-slate-500">No logs found</div>
+                </template>
+            </div>
+        </div>
+    </div>
+
+    <div x-show="showAddModal" x-cloak class="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50" @click.self="showAddModal = false">
+        <div class="bg-slate-800 border border-slate-700 rounded-xl w-full max-w-md p-6 shadow-2xl">
+            <h3 class="text-lg font-semibold text-white mb-4">Create Mail Account</h3>
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-sm text-slate-400 mb-1">Username</label>
+                    <input type="text" x-model="newAccount.username" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-blue-500" placeholder="admin">
+                </div>
+                <div>
+                    <label class="block text-sm text-slate-400 mb-1">Domain</label>
+                    <select x-model="newAccount.domain" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-blue-500">
+                        <template x-for="d in domains" :key="d.id">
+                            <option :value="d.name" x-text="d.name">domain.com</option>
+                        </template>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-sm text-slate-400 mb-1">Password</label>
+                    <input type="password" x-model="newAccount.password" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-blue-500" placeholder="••••••••">
+                </div>
+            </div>
+            <div class="flex justify-end gap-3 mt-6">
+                <button @click="showAddModal = false" class="px-4 py-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-700">Cancel</button>
+                <button @click="createAccount()" class="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-medium">Create</button>
+            </div>
+        </div>
+    </div>
+
+    <div x-show="showAddDomainModal" x-cloak class="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50" @click.self="showAddDomainModal = false">
+        <div class="bg-slate-800 border border-slate-700 rounded-xl w-full max-w-md p-6 shadow-2xl">
+            <h3 class="text-lg font-semibold text-white mb-4">Add New Domain</h3>
+            <form @submit.prevent="createDomain()">
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-sm text-slate-400 mb-1">Domain Name</label>
+                        <input type="text" x-model="newDomain.name" required class="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-blue-500" placeholder="example.com">
+                        <p class="text-xs text-slate-500 mt-1">Enter your domain (e.g. mail.yourcompany.com)</p>
+                    </div>
+                </div>
+                <div class="flex justify-end gap-3 mt-6">
+                    <button type="button" @click="showAddDomainModal = false; newDomain.name = ''" class="px-4 py-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-700">Cancel</button>
+                    <button type="submit" class="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-medium">Add Domain</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div x-show="showDNSModalFlag" x-cloak class="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50" @click.self="showDNSModalFlag = false">
+        <div class="bg-slate-800 border border-slate-700 rounded-xl w-full max-w-lg p-6 shadow-2xl">
+            <div class="flex items-center justify-between mb-4">
+                <h3 class="text-lg font-semibold text-white">DNS Records for <span x-text="selectedDomain?.name"></span></h3>
+                <button @click="showDNSModalFlag = false" class="p-1 hover:bg-slate-700 rounded-lg text-slate-400">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                </button>
+            </div>
+            <div class="space-y-4">
+                <template x-if="selectedDomain">
+                    <div>
+                        <div class="flex items-center justify-between mb-2">
+                            <label class="text-sm font-medium text-slate-400">SPF Record</label>
+                            <button @click="copyToClipboard(selectedDomain.spf_record)" class="text-xs text-blue-400 hover:text-blue-300">Copy</button>
+                        </div>
+                        <div class="bg-slate-900 rounded-lg p-3 font-mono text-sm text-emerald-400 break-all" x-text="selectedDomain.spf_record || 'Not generated'"></div>
+                    </div>
+                </template>
+                <template x-if="selectedDomain">
+                    <div>
+                        <div class="flex items-center justify-between mb-2">
+                            <label class="text-sm font-medium text-slate-400">DKIM Record</label>
+                            <button @click="copyToClipboard(selectedDomain.dkim_record)" class="text-xs text-blue-400 hover:text-blue-300">Copy</button>
+                        </div>
+                        <div class="bg-slate-900 rounded-lg p-3 font-mono text-sm text-emerald-400 break-all max-h-32 overflow-y-auto" x-text="selectedDomain.dkim_record || 'Not generated'"></div>
+                    </div>
+                </template>
+                <template x-if="selectedDomain">
+                    <div>
+                        <div class="flex items-center justify-between mb-2">
+                            <label class="text-sm font-medium text-slate-400">DMARC Record</label>
+                            <button @click="copyToClipboard(selectedDomain.dmarc_record)" class="text-xs text-blue-400 hover:text-blue-300">Copy</button>
+                        </div>
+                        <div class="bg-slate-900 rounded-lg p-3 font-mono text-sm text-emerald-400 break-all" x-text="selectedDomain.dmarc_record || 'Not generated'"></div>
+                    </div>
+                </template>
+                <template x-if="selectedDomain?.mx_record">
+                    <div>
+                        <div class="flex items-center justify-between mb-2">
+                            <label class="text-sm font-medium text-slate-400">MX Record</label>
+                            <button @click="copyToClipboard(selectedDomain.mx_record)" class="text-xs text-blue-400 hover:text-blue-300">Copy</button>
+                        </div>
+                        <div class="bg-slate-900 rounded-lg p-3 font-mono text-sm text-emerald-400 break-all" x-text="selectedDomain.mx_record"></div>
+                    </div>
+                </template>
+            </div>
+        </div>
+    </div>
+
+    <div x-show="showDeleteConfirm" x-cloak class="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50" @click.self="showDeleteConfirm = false">
+        <div class="bg-slate-800 border border-red-700 rounded-xl w-full max-w-md p-6">
+            <div class="flex items-center gap-3 mb-4">
+                <div class="w-12 h-12 rounded-full bg-red-500/20 flex items-center justify-center">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                    </svg>
+                </div>
+                <div>
+                    <h3 class="text-lg font-semibold text-white">Delete Account</h3>
+                    <p class="text-red-400 text-sm">This action cannot be undone</p>
+                </div>
+            </div>
+            <p class="text-slate-400 text-sm mb-6">Are you sure you want to delete <strong class="text-white" x-text="selectedAccount?.email">this account</strong>?</p>
+            <div class="flex justify-end gap-3">
+                <button @click="showDeleteConfirm = false" class="px-4 py-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-700">Cancel</button>
+                <button @click="confirmDelete()" class="px-4 py-2 rounded-lg bg-red-600 hover:bg-red-500 text-white font-medium">Delete</button>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+<script>
+function dashboardApp() {
+    return {
+        activeTab: 'dashboard',
+        JIR_KEY: '{{ JIR_LOCAL_KEY }}',
+
+        specs: {
+            cpu_percent: 0,
+            ram_percent: 0,
+            ram_used_gb: 0,
+            ram_total_gb: 0,
+            disk_percent: 0,
+            disk_used_gb: 0,
+            disk_total_gb: 0,
+            total_container_cpu: 0,
+            total_container_ram_mb: 0,
+            docker_containers: []
+        },
+
+        accounts: [],
+        domains: [],
+        backups: [],
+        logs: [],
+        logFilter: '',
+
+        showAddModal: false,
+        showAddDomainModal: false,
+        showDeleteConfirm: false,
+        showDNSModalFlag: false,
+        selectedDomain: null,
+        selectedAccount: null,
+
+        newAccount: { username: '', domain: '', password: '' },
+        newDomain: { name: '' },
+
+        init() {
+            this.fetchSpecs();
+            this.fetchAccounts();
+            this.fetchDomains();
+            this.fetchBackups();
+            this.fetchLogs();
+
+            setInterval(() => this.fetchSpecs(), 30000);
+        },
+
+        refreshAll() {
+            this.fetchSpecs();
+            this.fetchAccounts();
+            this.fetchDomains();
+            this.fetchBackups();
+            this.fetchLogs();
+        },
+
+        async fetchSpecs() {
+            try {
+                const res = await fetch('/api/management/system-specs');
+                if (res.ok) {
+                    this.specs = await res.json();
+                }
+            } catch (e) { console.error('Specs fetch error:', e); }
+        },
+
+        async fetchAccounts() {
+            try {
+                const res = await fetch('/api/core/list-accounts?key=' + this.JIR_KEY);
+                const data = await res.json();
+                if (data.status === 'success') {
+                    this.accounts = data.accounts || [];
+                }
+            } catch (e) { console.error('Accounts fetch error:', e); }
+        },
+
+        async fetchDomains() {
+            try {
+                const res = await fetch('/api/core/list-domains?key=' + this.JIR_KEY);
+                const data = await res.json();
+                if (data.status === 'success') {
+                    this.domains = data.domains || [];
+                }
+            } catch (e) { console.error('Domains fetch error:', e); }
+        },
+
+        async fetchBackups() {
+            try {
+                const res = await fetch('/api/backup/list-backups');
+                if (res.ok) {
+                    this.backups = await res.json();
+                }
+            } catch (e) { console.error('Backups fetch error:', e); }
+        },
+
+        async fetchLogs() {
+            try {
+                const url = '/api/management/logs?key=' + this.JIR_KEY + '&lines=50' + (this.logFilter ? '&filter_type=' + this.logFilter : '');
+                const res = await fetch(url);
+                if (res.ok) {
+                    this.logs = await res.json();
+                }
+            } catch (e) { console.error('Logs fetch error:', e); }
+        },
+
+        async createAccount() {
+            if (!this.newAccount.username || !this.newAccount.password) {
+                alert('Username and password are required');
+                return;
+            }
+            try {
+                const res = await fetch('/api/management/create-account', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(this.newAccount)
+                });
+                const data = await res.json();
+                if (data.status === 'success') {
+                    this.showAddModal = false;
+                    this.newAccount = { username: '', domain: '', password: '' };
+                    this.fetchAccounts();
+                } else {
+                    alert(data.message || 'Failed to create account');
+                }
+            } catch (e) { console.error('Create account error:', e); }
+        },
+
+        async toggleAccount(email) {
+            try {
+                const res = await fetch('/api/core/toggle-account/' + encodeURIComponent(email) + '?key=' + this.JIR_KEY, { method: 'PATCH' });
+                const data = await res.json();
+                if (data.status === 'success') {
+                    this.fetchAccounts();
+                }
+            } catch (e) { console.error('Toggle account error:', e); }
+        },
+
+        async toggleDomain(domain) {
+            try {
+                const res = await fetch('/api/core/toggle-domain/' + domain.name + '?key=' + this.JIR_KEY, { method: 'PATCH' });
+                const data = await res.json();
+                if (data.status === 'success') {
+                    domain.is_active = data.is_active;
+                }
+            } catch (e) { console.error('Toggle domain error:', e); }
+        },
+
+        showDNSModal(domain) {
+            this.selectedDomain = domain;
+            this.showDNSModalFlag = true;
+        },
+
+        copyToClipboard(text) {
+            if (!text) return;
+            navigator.clipboard.writeText(text).then(() => {
+                alert('Copied to clipboard!');
+            }).catch(() => {
+                console.error('Failed to copy');
+            });
+        },
+
+        deleteAccount(account) {
+            this.selectedAccount = account;
+            this.showDeleteConfirm = true;
+        },
+
+        async confirmDelete() {
+            if (!this.selectedAccount) return;
+            try {
+                const res = await fetch('/api/core/delete-account/' + encodeURIComponent(this.selectedAccount.email) + '?key=' + this.JIR_KEY, { method: 'DELETE' });
+                const data = await res.json();
+                if (data.status === 'success') {
+                    this.showDeleteConfirm = false;
+                    this.selectedAccount = null;
+                    this.fetchAccounts();
+                } else {
+                    alert(data.message || 'Failed to delete');
+                }
+            } catch (e) { console.error('Delete account error:', e); }
+        },
+
+        async createBackup() {
+            if (!confirm('Create a full backup now?')) return;
+            try {
+                const res = await fetch('/api/backup/create-backup', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        backup_type: 'full',
+                        include_emails: false,
+                        include_configs: true,
+                        include_database: true
+                    })
+                });
+                const data = await res.json();
+                if (data.status === 'success') {
+                    this.fetchBackups();
+                    alert('Backup created successfully');
+                } else {
+                    alert(data.message || 'Failed to create backup');
+                }
+            } catch (e) { console.error('Create backup error:', e); }
+        },
+
+        async restoreBackup(backup) {
+            if (!confirm('Restore from this backup?')) return;
+            try {
+                const res = await fetch('/api/backup/restore-backup', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        backup_id: backup.id,
+                        restore_emails: true,
+                        restore_configs: true,
+                        restore_database: true
+                    })
+                });
+                const data = await res.json();
+                alert(data.message || 'Restore completed');
+            } catch (e) { console.error('Restore backup error:', e); }
+        },
+
+        async createDomain() {
+            if (!this.newDomain.name) {
+                alert('Domain name is required');
+                return;
+            }
+            try {
+                const res = await fetch('/api/core/add-domain?key=' + this.JIR_KEY, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name: this.newDomain.name, is_active: true })
+                });
+                const data = await res.json();
+                if (data.status === 'success') {
+                    this.showAddDomainModal = false;
+                    this.newDomain = { name: '' };
+                    this.fetchDomains();
+                } else {
+                    alert(data.message || 'Failed to add domain');
+                }
+            } catch (e) { console.error('Create domain error:', e); }
+        },
+
+        async generateDNS(domain) {
+            try {
+                const res = await fetch('/api/core/generate-dns-records/' + domain.name + '?key=' + this.JIR_KEY, { method: 'POST' });
+                const data = await res.json();
+                if (data.status === 'success') {
+                    this.fetchDomains();
+                } else {
+                    alert(data.message || 'Failed to generate DNS');
+                }
+            } catch (e) { console.error('Generate DNS error:', e); }
+        },
+
+        getRoleLabel(role) {
+            const labels = { 'FULL': 'Full Access', 'SEND': 'Send Only', 'RECV': 'Receive Only', 'BLOCK': 'Internal' };
+            return labels[role] || role;
+        }
+    };
+}
+</script>

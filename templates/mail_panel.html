@@ -1,0 +1,363 @@
+{% extends "base.html" %}
+
+{% block body %}
+<div x-data="mailPanel()" x-init="init()" class="flex flex-col h-screen">
+
+    <header class="bg-white border-b border-gray-200 px-6 py-3 flex items-center justify-between">
+        <div class="flex items-center gap-4">
+            <div class="w-8 h-8 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-lg flex items-center justify-center">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                </svg>
+            </div>
+            <h1 class="text-xl font-semibold text-gray-800">Jîr-Mail</h1>
+        </div>
+        <div class="flex items-center gap-4">
+            <span class="text-sm text-gray-600" x-text="email">user@example.com</span>
+            <a href="/logout/" class="px-3 py-1.5 text-sm text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors">Logout</a>
+        </div>
+    </header>
+
+    <div class="flex flex-1 overflow-hidden">
+
+        <aside class="w-56 bg-gray-50 border-r border-gray-200 overflow-y-auto">
+            <div class="p-3">
+                <button @click="showCompose = true" class="w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium text-sm shadow-sm transition-colors flex items-center justify-center gap-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+                    </svg>
+                    Compose
+                </button>
+            </div>
+            <nav class="px-2 py-1">
+                <button @click="currentFolder = 'inbox'" class="w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-colors" :class="currentFolder === 'inbox' ? 'bg-blue-50 text-blue-700 font-medium' : 'text-gray-600 hover:bg-gray-200'">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                    </svg>
+                    <span>Inbox</span>
+                    <span class="ml-auto bg-blue-100 text-blue-700 text-xs px-2 py-0.5 rounded-full" x-text="unreadCount">0</span>
+                </button>
+                <button @click="currentFolder = 'starred'" class="w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-colors" :class="currentFolder === 'starred' ? 'bg-blue-50 text-blue-700 font-medium' : 'text-gray-600 hover:bg-gray-200'">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
+                    </svg>
+                    <span>Starred</span>
+                </button>
+                <button @click="currentFolder = 'sent'" class="w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-colors" :class="currentFolder === 'sent' ? 'bg-blue-50 text-blue-700 font-medium' : 'text-gray-600 hover:bg-gray-200'">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                    </svg>
+                    <span>Sent</span>
+                </button>
+                <button @click="currentFolder = 'drafts'" class="w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-colors" :class="currentFolder === 'drafts' ? 'bg-blue-50 text-blue-700 font-medium' : 'text-gray-600 hover:bg-gray-200'">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                    </svg>
+                    <span>Drafts</span>
+                </button>
+                <button @click="currentFolder = 'trash'" class="w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-colors" :class="currentFolder === 'trash' ? 'bg-blue-50 text-blue-700 font-medium' : 'text-gray-600 hover:bg-gray-200'">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                    </svg>
+                    <span>Trash</span>
+                </button>
+            </nav>
+
+            <div class="px-3 py-4">
+                <h3 class="px-3 text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Labels</h3>
+                <button class="w-full flex items-center gap-3 px-3 py-1.5 rounded hover:bg-gray-200 text-gray-600">
+                    <span class="w-3 h-3 bg-green-500 rounded-full"></span>
+                    <span class="text-sm">Work</span>
+                </button>
+                <button class="w-full flex items-center gap-3 px-3 py-1.5 rounded hover:bg-gray-200 text-gray-600">
+                    <span class="w-3 h-3 bg-blue-500 rounded-full"></span>
+                    <span class="text-sm">Personal</span>
+                </button>
+            </div>
+        </aside>
+
+        <div class="w-96 bg-white border-r border-gray-200 flex flex-col">
+            <div class="p-3 border-b border-gray-200">
+                <div class="flex items-center gap-2">
+                    <input type="text" x-model="searchQuery" @input="filterMails()" placeholder="Search mail..." class="flex-1 px-3 py-2 bg-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    <button class="p-2 hover:bg-gray-100 rounded-lg">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+                        </svg>
+                    </button>
+                </div>
+            </div>
+            <div class="flex-1 overflow-y-auto">
+                <template x-for="mail in filteredMails" :key="mail.id">
+                    <div @click="selectMail(mail)" class="p-4 border-b border-gray-100 hover:bg-gray-50 cursor-pointer transition-colors" :class="selectedMail?.id === mail.id ? 'bg-blue-50' : ''">
+                        <div class="flex items-center gap-2 mb-1">
+                            <span class="w-2 h-2 rounded-full" :class="mail.unread ? 'bg-blue-500' : 'bg-gray-300'"></span>
+                            <span class="text-sm font-medium text-gray-800 truncate" x-text="mail.from">Sender</span>
+                            <span class="text-xs text-gray-500 ml-auto" x-text="formatDate(mail.date)">Date</span>
+                        </div>
+                        <div class="text-sm font-medium text-gray-900 truncate mb-1" x-text="mail.subject">Subject</div>
+                        <div class="text-xs text-gray-500 truncate" x-text="mail.preview">Preview text...</div>
+                    </div>
+                </template>
+                <template x-if="filteredMails.length === 0">
+                    <div class="p-8 text-center text-gray-400">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 mx-auto mb-3 text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                        </svg>
+                        <p>No mails in <span x-text="currentFolder">inbox</span></p>
+                    </div>
+                </template>
+            </div>
+        </div>
+
+        <div class="flex-1 bg-white flex flex-col">
+            <template x-if="!showCompose && selectedMail">
+                <div class="flex flex-col h-full">
+                    <div class="p-4 border-b border-gray-200 flex items-center justify-between">
+                        <h2 class="text-lg font-semibold text-gray-800" x-text="selectedMail.subject">Subject</h2>
+                        <div class="flex items-center gap-2">
+                            <button @click="toggleStar(selectedMail)" class="p-2 hover:bg-gray-100 rounded-lg" :class="selectedMail.starred ? 'text-amber-500' : 'text-gray-400'">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="currentColor" viewBox="0 0 24 24">
+                                    <path d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
+                                </svg>
+                            </button>
+                            <button @click="deleteMail(selectedMail)" class="p-2 hover:bg-gray-100 rounded-lg text-gray-400">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="p-4 border-b border-gray-100 bg-gray-50">
+                        <div class="flex items-center gap-3">
+                            <div class="w-10 h-10 bg-blue-500 rounded-full flex items-center justify-center text-white font-medium" x-text="selectedMail.from.charAt(0).toUpperCase()">A</div>
+                            <div>
+                                <div class="font-medium text-gray-800" x-text="selectedMail.from">Sender</div>
+                                <div class="text-sm text-gray-500" x-text="'To: ' + email">To: me</div>
+                            </div>
+                            <span class="text-sm text-gray-400 ml-auto" x-text="formatDateTime(selectedMail.date)">Date</span>
+                        </div>
+                    </div>
+                    <div class="flex-1 p-6 overflow-y-auto">
+                        <p class="text-gray-700 whitespace-pre-wrap" x-text="selectedMail.body">Mail body...</p>
+                    </div>
+                    <div class="p-4 border-t border-gray-200 flex items-center gap-3">
+                        <button @click="replyTo(selectedMail)" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium text-sm flex items-center gap-2">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
+                            </svg>
+                            Reply
+                        </button>
+                        <button @click="forwardMail(selectedMail)" class="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg font-medium text-sm flex items-center gap-2">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 5l7 7-7 7M5 5l7 7-7 7" />
+                            </svg>
+                            Forward
+                        </button>
+                    </div>
+                </div>
+            </template>
+
+            <template x-if="!showCompose && !selectedMail">
+                <div class="flex-1 flex items-center justify-center text-gray-400">
+                    <div class="text-center">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-16 w-16 mx-auto mb-4 text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                        </svg>
+                        <p class="text-lg">Select a mail to read</p>
+                    </div>
+                </div>
+            </template>
+
+            <template x-if="showCompose">
+                <div class="flex flex-col h-full">
+                    <div class="p-4 border-b border-gray-200 flex items-center justify-between bg-gray-50">
+                        <h2 class="text-lg font-semibold text-gray-800" x-text="composeType === 'reply' ? 'Reply to ' + selectedMail?.from : composeType === 'forward' ? 'Forward mail' : 'New Message'">New Message</h2>
+                        <button @click="closeCompose()" class="p-2 hover:bg-gray-200 rounded-lg text-gray-500">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                        </button>
+                    </div>
+                    <div class="p-4 space-y-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">To</label>
+                            <input type="email" x-model="composeTo" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="recipient@example.com">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Subject</label>
+                            <input type="text" x-model="composeSubject" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="Subject">
+                        </div>
+                        <div class="flex-1">
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Message</label>
+                            <textarea x-model="composeBody" rows="10" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none" placeholder="Write your message..."></textarea>
+                        </div>
+                    </div>
+                    <div class="p-4 border-t border-gray-200 flex items-center justify-between bg-gray-50">
+                        <button @click="saveDraft()" class="px-4 py-2 text-gray-600 hover:text-gray-800 hover:bg-gray-200 rounded-lg font-medium text-sm">Save Draft</button>
+                        <button @click="sendMail()" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium text-sm flex items-center gap-2">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                            </svg>
+                            Send
+                        </button>
+                    </div>
+                </div>
+            </template>
+        </div>
+
+    </div>
+</div>
+
+<script>
+function mailPanel() {
+    return {
+        email: '{{ email }}',
+        currentFolder: 'inbox',
+        selectedMail: null,
+        showCompose: false,
+        composeType: 'new',
+        searchQuery: '',
+        unreadCount: 3,
+
+        composeTo: '',
+        composeSubject: '',
+        composeBody: '',
+
+        mails: [
+            { id: 1, from: 'John Doe', email: 'john@example.com', subject: 'Welcome to Jîr-Mail', preview: 'Thank you for signing up...', date: new Date(Date.now() - 3600000), body: 'Thank you for signing up to Jîr-Mail!\n\nWe are excited to have you on board. Our platform provides a secure and reliable mail service for your business.\n\nBest regards,\nJîr-Mail Team', unread: true, starred: false, folder: 'inbox' },
+            { id: 2, from: 'Alice Smith', email: 'alice@example.com', subject: 'Meeting Tomorrow', preview: 'Hi, just wanted to remind you...', date: new Date(Date.now() - 7200000), body: 'Hi there,\n\nJust wanted to remind you about our meeting tomorrow at 10 AM.\n\nSee you there!\nAlice', unread: true, starred: true, folder: 'inbox' },
+            { id: 3, from: 'Bob Wilson', email: 'bob@example.com', subject: 'Project Update', preview: 'The latest updates on the project...', date: new Date(Date.now() - 86400000), body: 'Hi,\n\nHere are the latest updates on our project:\n\n1. Design phase completed\n2. Development started\n3. Testing scheduled for next week\n\nRegards,\nBob', unread: false, starred: false, folder: 'inbox' },
+            { id: 4, from: 'Carol Johnson', email: 'carol@example.com', subject: 'Re: Documentation', preview: 'Thanks for the update...', date: new Date(Date.now() - 172800000), body: 'Thanks for the update!\n\nI will review the documentation and get back to you.\n\nBest,\nCarol', unread: false, starred: false, folder: 'sent' },
+            { id: 5, from: 'David Brown', email: 'david@example.com', subject: 'Draft: Proposal', preview: 'This is a draft of the proposal...', date: new Date(Date.now() - 259200000), body: 'This is a draft of the proposal document I am working on...', unread: false, starred: false, folder: 'drafts' },
+        ],
+
+        filteredMails: [],
+
+        init() {
+            this.filterMails();
+        },
+
+        filterMails() {
+            let folderMails = this.mails.filter(m => m.folder === this.currentFolder);
+            if (this.searchQuery) {
+                const query = this.searchQuery.toLowerCase();
+                folderMails = folderMails.filter(m =>
+                    m.subject.toLowerCase().includes(query) ||
+                    m.from.toLowerCase().includes(query) ||
+                    m.preview.toLowerCase().includes(query)
+                );
+            }
+            this.filteredMails = folderMails.sort((a, b) => b.date - a.date);
+        },
+
+        selectMail(mail) {
+            this.selectedMail = mail;
+            if (mail.unread) {
+                mail.unread = false;
+                this.updateUnreadCount();
+            }
+        },
+
+        formatDate(date) {
+            const now = new Date();
+            const diff = now - date;
+            const days = Math.floor(diff / 86400000);
+            if (days === 0) return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            if (days === 1) return 'Yesterday';
+            if (days < 7) return date.toLocaleDateString([], { weekday: 'short' });
+            return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
+        },
+
+        formatDateTime(date) {
+            return date.toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+        },
+
+        updateUnreadCount() {
+            this.unreadCount = this.mails.filter(m => m.unread && m.folder === 'inbox').length;
+        },
+
+        toggleStar(mail) {
+            mail.starred = !mail.starred;
+        },
+
+        deleteMail(mail) {
+            if (confirm('Move this mail to trash?')) {
+                mail.folder = 'trash';
+                if (this.selectedMail === mail) {
+                    this.selectedMail = null;
+                }
+                this.filterMails();
+            }
+        },
+
+        replyTo(mail) {
+            this.composeType = 'reply';
+            this.composeTo = mail.email;
+            this.composeSubject = 'Re: ' + mail.subject;
+            this.composeBody = '\n\n--- Original Message ---\nFrom: ' + mail.from + '\nDate: ' + this.formatDateTime(mail.date) + '\nSubject: ' + mail.subject + '\n\n' + mail.body;
+            this.showCompose = true;
+        },
+
+        forwardMail(mail) {
+            this.composeType = 'forward';
+            this.composeTo = '';
+            this.composeSubject = 'Fwd: ' + mail.subject;
+            this.composeBody = '\n\n--- Forwarded Message ---\nFrom: ' + mail.from + '\nDate: ' + this.formatDateTime(mail.date) + '\nSubject: ' + mail.subject + '\n\n' + mail.body;
+            this.showCompose = true;
+        },
+
+        closeCompose() {
+            this.showCompose = false;
+            this.composeType = 'new';
+            this.composeTo = '';
+            this.composeSubject = '';
+            this.composeBody = '';
+        },
+
+        saveDraft() {
+            const draftMail = {
+                id: Date.now(),
+                from: this.email,
+                email: this.email,
+                subject: this.composeSubject || '(No Subject)',
+                preview: this.composeBody.substring(0, 50),
+                date: new Date(),
+                body: this.composeBody,
+                unread: false,
+                starred: false,
+                folder: 'drafts'
+            };
+            this.mails.push(draftMail);
+            this.closeCompose();
+            this.filterMails();
+            alert('Draft saved!');
+        },
+
+        sendMail() {
+            if (!this.composeTo) {
+                alert('Please enter a recipient');
+                return;
+            }
+            const sentMail = {
+                id: Date.now(),
+                from: this.email,
+                email: this.composeTo,
+                subject: this.composeSubject || '(No Subject)',
+                preview: this.composeBody.substring(0, 50),
+                date: new Date(),
+                body: this.composeBody,
+                unread: false,
+                starred: false,
+                folder: 'sent'
+            };
+            this.mails.push(sentMail);
+            this.closeCompose();
+            this.currentFolder = 'sent';
+            this.filterMails();
+            alert('Mail sent successfully!');
+        }
+    };
+}
+</script>
+{% endblock %}

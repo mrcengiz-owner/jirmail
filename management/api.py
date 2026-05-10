@@ -187,25 +187,7 @@ def setup_complete(request, data: SetupCompleteSchema):
             )
             conn.close()
 
-            db_url = f"postgres://{data.db_user}:{data.db_pass}@{data.db_host}:{data.db_port or 5432}/{data.db_name}"
-            db_config = dj_database_url.config(default=db_url, conn_max_age=600)
-        else:
-            db_config = {
-                'ENGINE': 'django.db.backends.sqlite3',
-                'NAME': str(settings.BASE_DIR / 'db.sqlite3'),
-            }
-
-        db_config.setdefault('ATOMIC_REQUESTS', False)
-        db_config.setdefault('AUTOCOMMIT', True)
-        db_config.setdefault('CONN_MAX_AGE', 600)
-        db_config.setdefault('OPTIONS', {})
-
-        import json
-        os.makedirs(settings.BASE_DIR / 'config', exist_ok=True)
-        with open(settings.BASE_DIR / 'config' / 'db_config.json', 'w') as f:
-            json.dump(db_config, f)
-
-        settings.DATABASES['default'] = db_config
+        db_engine = 'django.db.backends.postgresql' if data.db_type == 'postgresql' else 'django.db.backends.sqlite3'
 
         from django.core.management import call_command
         call_command('makemigrations', 'saas', 'core', '--noinput', verbosity=0)
@@ -228,7 +210,21 @@ def setup_complete(request, data: SetupCompleteSchema):
         config.instance_id = data.instance_id
         config.is_installed = True
         config.jir_local_key = data.jir_local_key
+
+        config.db_engine = db_engine
+        if data.db_type == 'postgresql':
+            config.db_host = data.db_host
+            config.db_port = data.db_port or 5432
+            config.db_name = data.db_name
+            config.db_user = data.db_user
+            config.db_password = data.db_pass
+
         config.save()
+
+        from django.db import connection
+        connection.close()
+        from django.conf import settings
+        settings.DATABASES['default'] = config.get_database_config()
 
         return {
             "status": "success",
@@ -435,10 +431,12 @@ class LogEntrySchema(Schema):
     source: str
 
 
-@router.get("/logs", response={200: list[LogEntrySchema]}, summary="Mail Loglarını Getir")
+@router.get("/logs", summary="Mail Loglarını Getir")
 def get_logs(request, key: str, lines: int = 50, filter_type: str = None):
     if key != getattr(settings, 'JIR_LOCAL_KEY', None):
-        return {"status": "error", "message": "Yetkisiz erişim!"}
+        return [
+            {'timestamp': datetime.now().isoformat(), 'type': 'error', 'message': 'Yetkisiz erişim! Geçersiz anahtar.', 'source': 'system'}
+        ]
 
     log_files = [
         '/var/log/mail.log',

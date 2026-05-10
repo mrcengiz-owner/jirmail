@@ -1,1 +1,0 @@
-{"NAME": "dbmail2", "USER": "postgres", "PASSWORD": "YwzYYQkUjO29REPbignRwVVyJnM3r8cBg5h7NE7kyvc0wMYg99Ccf5mGPMnpuig1", "HOST": "82.153.241.171", "PORT": 5432, "CONN_MAX_AGE": 600, "CONN_HEALTH_CHECKS": false, "DISABLE_SERVER_SIDE_CURSORS": false, "ENGINE": "django.db.backends.postgresql", "ATOMIC_REQUESTS": false, "AUTOCOMMIT": true, "OPTIONS": {}}

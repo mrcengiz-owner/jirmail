@@ -12,6 +12,8 @@ services:
     environment:
       - DATABASE_URL=${DATABASE_URL}
       - JIR_LOCAL_KEY=${JIR_LOCAL_KEY}
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
       - POSTFIX_VMAIL_PATH=/etc/postfix/vmail_accounts
       - DOVECOT_PASSDB_PATH=/etc/dovecot/userdb
     volumes:
@@ -23,6 +25,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      redis:
+        condition: service_healthy
     networks:
       - jir_network
     healthcheck:
@@ -30,6 +34,61 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
+
+  celery:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: jir_celery
+    restart: unless-stopped
+    command: ["celery", "-A", "jir_mail.celery", "worker", "--loglevel=info"]
+    environment:
+      - DATABASE_URL=${DATABASE_URL}
+      - JIR_LOCAL_KEY=${JIR_LOCAL_KEY}
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+    volumes:
+      - static_data:/app/static
+      - config_data:/app/config
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - jir_network
+
+  celery-beat:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: jir_celery_beat
+    restart: unless-stopped
+    command: ["celery", "-A", "jir_mail.celery", "beat", "--loglevel=info"]
+    environment:
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - jir_network
+
+  redis:
+    image: redis:7-alpine
+    container_name: jir_redis
+    restart: unless-stopped
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - jir_network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   postgres:
     image: postgres:17
@@ -95,6 +154,7 @@ volumes:
   mail_data:
   static_data:
   config_data:
+  redis_data:
 
 networks:
   jir_network:

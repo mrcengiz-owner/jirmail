@@ -117,7 +117,7 @@
                     this.errorMessage = '';
 
                     try {
-                        const res = await fetch('/api/management/login', {
+                        const res = await fetch('/login-success/', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({
@@ -129,7 +129,7 @@
                         const data = await res.json();
 
                         if (data.status === 'success') {
-                            window.location.href = '/dashboard/';
+                            window.location.href = data.redirect_url;
                         } else {
                             this.errorMessage = data.message || 'Login failed. Please check your credentials.';
                         }

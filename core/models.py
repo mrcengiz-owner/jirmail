@@ -123,3 +123,41 @@ class MailAccount(models.Model):
     @property
     def storage_used_mb(self):
         return round(self.current_storage_bytes / (1024 * 1024), 2)
+
+
+class Backup(models.Model):
+    BACKUP_TYPES = [
+        ('full', 'Tam Yedekleme'),
+        ('incremental', 'Artımlı Yedekleme'),
+        ('config', 'Konfigürasyon'),
+        ('emails', 'E-postalar'),
+    ]
+
+    STATUS_CHOICES = [
+        ('pending', 'Beklemede'),
+        ('running', 'Çalışıyor'),
+        ('completed', 'Tamamlandı'),
+        ('failed', 'Başarısız'),
+    ]
+
+    name = models.CharField(max_length=255)
+    backup_type = models.CharField(max_length=20, choices=BACKUP_TYPES, default='full')
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
+    file_path = models.CharField(max_length=500, blank=True, default='')
+    file_size_mb = models.FloatField(default=0)
+    includes_emails = models.BooleanField(default=False)
+    includes_configs = models.BooleanField(default=False)
+    includes_database = models.BooleanField(default=True)
+    error_message = models.TextField(blank=True, default='')
+    created_at = models.DateTimeField(auto_now_add=True)
+    completed_at = models.DateTimeField(null=True, blank=True)
+    scheduled_for = models.DateTimeField(null=True, blank=True)
+    is_auto_backup = models.BooleanField(default=False)
+
+    class Meta:
+        ordering = ['-created_at']
+        verbose_name = 'Yedekleme'
+        verbose_name_plural = 'Yedeklemeler'
+
+    def __str__(self):
+        return f"{self.name} ({self.backup_type}) - {self.status}"
