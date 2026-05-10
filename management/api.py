@@ -447,6 +447,17 @@ def get_logs(request, key: str, lines: int = 50, filter_type: str = None):
     ]
 
     logs = []
+
+    missing_files = []
+    for log_file in log_files:
+        if not os.path.exists(log_file):
+            missing_files.append(log_file)
+
+    if missing_files:
+        return [
+            {'timestamp': datetime.now().isoformat(), 'type': 'info', 'message': f'Log files not found: {", ".join(missing_files)}. Mail services may not be configured yet.', 'source': 'system'}
+        ]
+
     for log_file in log_files:
         if os.path.exists(log_file):
             try:
@@ -454,16 +465,25 @@ def get_logs(request, key: str, lines: int = 50, filter_type: str = None):
                     all_lines = f.readlines()
                     recent = all_lines[-lines:] if len(all_lines) > lines else all_lines
                     for line in recent:
+                        if not line.strip():
+                            continue
                         entry = parse_log_line(line, log_file)
                         if entry:
-                            if filter_type and entry['type'] != filter_type:
+                            if filter_type and entry.get('type') != filter_type:
                                 continue
                             logs.append(entry)
+            except PermissionError:
+                logs.append({
+                    'timestamp': datetime.now().isoformat(),
+                    'type': 'warning',
+                    'message': f'Permission denied reading: {log_file}',
+                    'source': 'system'
+                })
             except Exception as e:
                 logs.append({
                     'timestamp': datetime.now().isoformat(),
                     'type': 'error',
-                    'message': f'Log okunamadı: {log_file}',
+                    'message': f'Error reading {log_file}: {str(e)}',
                     'source': 'system'
                 })
 

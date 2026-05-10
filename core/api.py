@@ -28,6 +28,11 @@ class RoleUpdateSchema(Schema):
     role: str
 
 
+class AccountUpdateSchema(Schema):
+    username: str = None
+    password: str = None
+
+
 class EmailSettingsSchema(Schema):
     signature: str = ''
     auto_responder_enabled: bool = False
@@ -36,6 +41,18 @@ class EmailSettingsSchema(Schema):
     forward_to: str = ''
     forward_enabled: bool = False
     keep_copy: bool = True
+
+
+class DomainVerificationSchema(Schema):
+    domain: str
+
+
+class DomainDNSRecordsSchema(Schema):
+    domain: str
+    spf_record: str
+    dkim_record: str
+    dmarc_record: str
+    mx_record: str
 
 
 def update_postfix_vmail(email, action="add"):
@@ -210,6 +227,88 @@ def get_email_settings(request, email: str, key: str):
         return {"status": "error", "message": "Hesap bulunamadı."}
 
 
+@router.patch("/update-account/{email}", summary="Hesap Güncelle")
+def update_account(request, email: str, key: str, data: AccountUpdateSchema):
+    if key != getattr(settings, 'JIR_LOCAL_KEY', None):
+        return {"status": "error", "message": "Yetkisiz erişim!"}
+
+    try:
+        account = MailAccount.objects.get(email=email)
+
+        if data.username is not None:
+            account.username = data.username
+            new_email = f"{data.username}@{account.domain.name}".lower()
+            if new_email != email:
+                existing = MailAccount.objects.filter(email=new_email).exclude(id=account.id).first()
+                if existing:
+                    return {"status": "error", "message": "Bu e-posta adresi zaten kullanımda."}
+                update_postfix_vmail(email, action="remove")
+                account.email = new_email
+                update_postfix_vmail(new_email, action="add")
+
+        if data.password is not None and data.password:
+            salt = bcrypt.gensalt()
+            account.password_hash = bcrypt.hashpw(data.password.encode('utf-8'), salt).decode('utf-8')
+
+        account.save()
+
+        return {
+            "status": "success",
+            "message": "Hesap güncellendi",
+            "email": account.email,
+            "username": account.username
+        }
+    except MailAccount.DoesNotExist:
+        return {"status": "error", "message": "Hesap bulunamadı."}
+
+
+@router.delete("/delete-account/{email}", summary="Hesap Sil")
+def delete_account(request, email: str, key: str):
+    if key != getattr(settings, 'JIR_LOCAL_KEY', None):
+        return {"status": "error", "message": "Yetkisiz erişim!"}
+
+    try:
+        account = MailAccount.objects.get(email=email)
+        update_postfix_vmail(email, action="remove")
+        account.delete()
+
+        return {"status": "success", "message": "Hesap silindi"}
+    except MailAccount.DoesNotExist:
+        return {"status": "error", "message": "Hesap bulunamadı."}
+
+
+@router.get("/account-details/{email}", summary="Hesap Detayları")
+def get_account_details(request, email: str, key: str):
+    if key != getattr(settings, 'JIR_LOCAL_KEY', None):
+        return {"status": "error", "message": "Yetkisiz erişim!"}
+
+    try:
+        account = MailAccount.objects.select_related('domain').get(email=email)
+
+        return {
+            "status": "success",
+            "account": {
+                "email": account.email,
+                "username": account.username,
+                "domain": account.domain.name,
+                "is_active": account.is_active,
+                "role": account.role,
+                "quota_bytes": account.quota_bytes,
+                "quota_mb": account.quota_mb,
+                "created_at": account.created_at.isoformat(),
+                "signature": account.signature,
+                "auto_responder_enabled": account.auto_responder_enabled,
+                "auto_responder_subject": account.auto_responder_subject,
+                "auto_responder_body": account.auto_responder_body,
+                "forward_to": account.forward_to,
+                "forward_enabled": account.forward_enabled,
+                "keep_copy": account.keep_copy
+            }
+        }
+    except MailAccount.DoesNotExist:
+        return {"status": "error", "message": "Hesap bulunamadı."}
+
+
 @router.post("/create-account", summary="Yeni Mail Hesabı Oluştur")
 def create_mail_account(request, data: MailAccountSchema):
     config = SystemConfig.objects.first()
@@ -239,3 +338,90 @@ def create_mail_account(request, data: MailAccountSchema):
         }
     except Exception as e:
         return {"status": "error", "message": "E-posta adresi kullanımda veya bir hata oluştu."}
+
+
+@router.post("/generate-dns-records/{domain}", summary="DNS Kayıtları Oluştur")
+def generate_dns_records(request, domain: str, key: str):
+    if key != getattr(settings, 'JIR_LOCAL_KEY', None):
+        return {"status": "error", "message": "Yetkisiz erişim!"}
+
+    try:
+        domain_obj = MailDomain.objects.get(name=domain)
+
+        if not domain_obj.dkim_private_key:
+            keys = domain_obj.generate_dkim_keys()
+        else:
+            keys = {
+                'dkim_selector': domain_obj.dkim_record.split(' ')[0],
+                'spf_record': domain_obj.spf_record,
+                'dkim_record': domain_obj.dkim_record,
+                'dmarc_record': domain_obj.dmarc_record
+            }
+
+        mail_server_hostname = getattr(settings, 'MAIL_SERVER_HOSTNAME', 'mail.jircode.com')
+
+        return {
+            "status": "success",
+            "domain": domain,
+            "spf_record": domain_obj.spf_record,
+            "dkim_record": domain_obj.dkim_record,
+            "dmarc_record": domain_obj.dmarc_record,
+            "mx_record": f"@ {mail_server_hostname}",
+            "verification_status": domain_obj.verification_status,
+            "verified_at": domain_obj.verified_at.isoformat() if domain_obj.verified_at else None
+        }
+    except MailDomain.DoesNotExist:
+        return {"status": "error", "message": "Domain bulunamadı."}
+    except Exception as e:
+        return {"status": "error", "message": f"Error: {str(e)}"}
+
+
+@router.get("/list-domains", summary="Domain Listesi")
+def list_domains(request, key: str):
+    if key != getattr(settings, 'JIR_LOCAL_KEY', None):
+        return {"status": "error", "message": "Yetkisiz erişim!"}
+
+    domains = MailDomain.objects.all()
+
+    return {
+        "status": "success",
+        "domains": [
+            {
+                "id": d.id,
+                "name": d.name,
+                "is_active": d.is_active,
+                "dkim_enabled": d.dkim_enabled,
+                "verification_status": d.verification_status,
+                "verified_at": d.verified_at.isoformat() if d.verified_at else None,
+                "spf_record": d.spf_record,
+                "dkim_record": d.dkim_record,
+                "dmarc_record": d.dmarc_record,
+                "created_at": d.created_at.isoformat()
+            } for d in domains
+        ]
+    }
+
+
+@router.post("/verify-domain/{domain}", summary="Domain Doğrulama")
+def verify_domain(request, domain: str, key: str):
+    if key != getattr(settings, 'JIR_LOCAL_KEY', None):
+        return {"status": "error", "message": "Yetkisiz erişim!"}
+
+    try:
+        from datetime import datetime
+        domain_obj = MailDomain.objects.get(name=domain)
+
+        domain_obj.verification_status = 'verified'
+        domain_obj.verified_at = datetime.now()
+        domain_obj.save()
+
+        return {
+            "status": "success",
+            "message": "Domain başarıyla doğrulandı",
+            "verification_status": domain_obj.verification_status,
+            "verified_at": domain_obj.verified_at.isoformat()
+        }
+    except MailDomain.DoesNotExist:
+        return {"status": "error", "message": "Domain bulunamadı."}
+    except Exception as e:
+        return {"status": "error", "message": f"Error: {str(e)}"}

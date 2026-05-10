@@ -81,6 +81,14 @@
                     </svg>
                     <span x-show="sidebarOpen">Containers</span>
                 </button>
+                <button @click="activeTab = 'domains'"
+                        :class="activeTab === 'domains' ? 'bg-blue-500/20 text-blue-400 border-l-2 border-blue-400' : 'hover:bg-slate-700/50 text-slate-400 hover:text-white border-l-2 border-transparent'"
+                        class="w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-all font-medium">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" />
+                    </svg>
+                    <span x-show="sidebarOpen">Domains</span>
+                </button>
                 <button @click="activeTab = 'logs'"
                         :class="activeTab === 'logs' ? 'bg-blue-500/20 text-blue-400 border-l-2 border-blue-400' : 'hover:bg-slate-700/50 text-slate-400 hover:text-white border-l-2 border-transparent'"
                         class="w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-all font-medium">
@@ -92,7 +100,7 @@
             </nav>
 
             <div class="p-3 border-t border-slate-700">
-                <div class="bg-slate-700/30 rounded-lg p-3" x-show="sidebarOpen">
+                <div x-data="{ systemInfo: { instance_id: 'JIR-MESO-A7F4-9K2L', tier: 'FREE' } }" class="bg-slate-700/30 rounded-lg p-3" x-show="sidebarOpen">
                     <div class="text-xs text-slate-500 mb-1">INSTANCE</div>
                     <div class="text-sm text-blue-400 font-mono truncate" x-text="systemInfo.instance_id || 'Loading...'">---</div>
                 </div>
@@ -102,7 +110,7 @@
         <!-- Main Content -->
         <div class="flex-1 flex flex-col min-h-screen">
             <!-- Header -->
-            <header class="bg-slate-800/50 border-b border-slate-700 px-6 py-4">
+            <header class="bg-slate-800/50 border-b border-slate-700 px-6 py-4" x-data="{ systemInfo: { tier: 'FREE' } }">
                 <div class="flex items-center justify-between">
                     <div>
                         <h2 class="text-xl font-semibold text-white" x-text="activeTab === 'dashboard' ? 'Dashboard' : activeTab === 'accounts' ? 'Mail Accounts' : activeTab === 'containers' ? 'Container Statistics' : 'System Logs'">Dashboard</h2>
@@ -378,17 +386,27 @@
                                         </td>
                                         <td class="px-5 py-4 text-right">
                                             <div class="flex items-center gap-2 justify-end">
-                                                <button @click="toggleAccount(account.email)"
+                                                <button @click="$parent.toggleAccount(account.email)"
                                                         :class="account.is_active ? 'bg-amber-500/20 hover:bg-amber-500/30 text-amber-400' : 'bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-400'"
                                                         class="px-3 py-1.5 rounded-lg text-xs font-medium transition-colors">
                                                     <span x-text="account.is_active ? 'Deactivate' : 'Activate'"></span>
                                                 </button>
-                                                <button @click="showQuotaModal(account)" class="p-1.5 rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-300" title="Quota">
+                                                <button @click="$parent.showQuotaModal(account)" class="p-1.5 rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-300" title="Quota">
                                                     <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
                                                     </svg>
                                                 </button>
-                                                <button @click="showSettingsModal(account)" class="p-1.5 rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-300" title="Email Settings">
+                                                <button @click="$parent.showEditModal(account)" class="p-1.5 rounded-lg bg-blue-700 hover:bg-blue-600 text-slate-300" title="Edit">
+                                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                                    </svg>
+                                                </button>
+                                                <button @click="$parent.showDeleteConfirm(account)" class="p-1.5 rounded-lg bg-red-700 hover:bg-red-600 text-slate-300" title="Delete">
+                                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                                    </svg>
+                                                </button>
+                                                <button @click="$parent.showSettingsModal(account)" class="p-1.5 rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-300" title="Email Settings">
                                                     <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
                                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
@@ -547,9 +565,79 @@
                                     <span x-text="savingSettings ? 'Saving...' : 'Save Settings'"></span>
                                 </button>
                             </div>
+</div>
                         </div>
                     </div>
-                </div>
+
+                    <!-- Edit Account Modal -->
+                    <div x-show="showEditModal" x-cloak class="fixed inset-0 bg-black/70 flex items-center justify-center z-50" @click.self="showEditModal = false">
+                        <div class="bg-slate-800 border border-slate-700 rounded-xl w-full max-w-md p-6">
+                            <h3 class="text-lg font-semibold text-white mb-1">Edit Account</h3>
+                            <p class="text-sm text-slate-400 mb-4" x-text="selectedAccount?.email"></p>
+
+                            <div class="space-y-4">
+                                <div>
+                                    <label class="block text-sm text-slate-400 mb-1">Username</label>
+                                    <input type="text" x-model="editAccount.username"
+                                           class="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-blue-500">
+                                </div>
+                                <div>
+                                    <label class="block text-sm text-slate-400 mb-1">New Password (leave empty to keep current)</label>
+                                    <input type="password" x-model="editAccount.password"
+                                           class="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-blue-500"
+                                           placeholder="••••••••">
+                                </div>
+                            </div>
+
+                            <div class="flex justify-end gap-3 mt-6">
+                                <button type="button" @click="showEditModal = false" class="px-4 py-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-700">Cancel</button>
+                                <button type="button" @click="saveAccount()" :disabled="savingAccount"
+                                        class="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 disabled:bg-slate-700 text-white font-medium flex items-center gap-2">
+                                    <template x-if="savingAccount">
+                                        <svg class="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                        </svg>
+                                    </template>
+                                    <span x-text="savingAccount ? 'Saving...' : 'Save'"></span>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Delete Confirm Modal -->
+                    <div x-show="showDeleteModal" x-cloak class="fixed inset-0 bg-black/70 flex items-center justify-center z-50" @click.self="showDeleteModal = false">
+                        <div class="bg-slate-800 border border-red-700 rounded-xl w-full max-w-md p-6">
+                            <div class="flex items-center gap-3 mb-4">
+                                <div class="w-12 h-12 rounded-full bg-red-500/20 flex items-center justify-center">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                                    </svg>
+                                </div>
+                                <div>
+                                    <h3 class="text-lg font-semibold text-white">Delete Account</h3>
+                                    <p class="text-red-400 text-sm">This action cannot be undone</p>
+                                </div>
+                            </div>
+                            <p class="text-slate-400 text-sm mb-6">
+                                Are you sure you want to delete <strong class="text-white" x-text="selectedAccount?.email"></strong>?
+                                All emails and settings will be permanently lost.
+                            </p>
+                            <div class="flex justify-end gap-3">
+                                <button type="button" @click="showDeleteModal = false" class="px-4 py-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-700">Cancel</button>
+                                <button type="button" @click="deleteAccount()" :disabled="deletingAccount"
+                                        class="px-4 py-2 rounded-lg bg-red-600 hover:bg-red-500 disabled:bg-slate-700 text-white font-medium flex items-center gap-2">
+                                    <template x-if="deletingAccount">
+                                        <svg class="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                        </svg>
+                                    </template>
+                                    <span x-text="deletingAccount ? 'Deleting...' : 'Delete'"></span>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
 
                 <!-- Containers Tab -->
                 <div x-show="activeTab === 'containers'" x-transition x-data="dashboardWidget()">
@@ -626,6 +714,119 @@
                                 </tbody>
                             </table>
                         </div>
+                    </div>
+                </div>
+
+                <!-- Domains Tab -->
+                <div x-show="activeTab === 'domains'" x-transition x-data="domainManager()">
+                    <div class="mb-6 flex items-center justify-between">
+                        <div>
+                            <h2 class="text-xl font-bold text-white mb-1">Domain Management</h2>
+                            <p class="text-sm text-slate-500">DKIM, SPF and DMARC configuration</p>
+                        </div>
+                    </div>
+
+                    <div class="space-y-6">
+                        <template x-for="domain in domains" :key="domain.name">
+                            <div class="bg-slate-800 border border-slate-700 rounded-xl overflow-hidden">
+                                <div class="px-5 py-4 border-b border-slate-700 flex items-center justify-between">
+                                    <div class="flex items-center gap-3">
+                                        <div class="w-10 h-10 bg-blue-500/20 rounded-lg flex items-center justify-center">
+                                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" />
+                                            </svg>
+                                        </div>
+                                        <div>
+                                            <h3 class="text-lg font-semibold text-white" x-text="domain.name"></h3>
+                                            <div class="flex items-center gap-2 mt-0.5">
+                                                <span class="flex items-center gap-1.5 text-xs">
+                                                    <span class="w-2 h-2 rounded-full" :class="domain.verification_status === 'verified' ? 'bg-emerald-500' : domain.verification_status === 'failed' ? 'bg-red-500' : 'bg-amber-500'"></span>
+                                                    <span :class="domain.verification_status === 'verified' ? 'text-emerald-400' : domain.verification_status === 'failed' ? 'text-red-400' : 'text-amber-400'" x-text="domain.verification_status === 'verified' ? 'Verified' : domain.verification_status === 'failed' ? 'Failed' : 'Pending'"></span>
+                                                </span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <button @click="generateDNS(domain.name)" :disabled="generatingDNS === domain.name"
+                                            class="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 disabled:bg-slate-700 text-white text-sm font-medium flex items-center gap-2">
+                                        <template x-if="generatingDNS === domain.name">
+                                            <svg class="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                            </svg>
+                                        </template>
+                                        <span x-text="domain.dkim_record ? 'Regenerate' : 'Generate'"></span>
+                                    </button>
+                                </div>
+
+                                <div class="p-5 space-y-4">
+                                    <template x-if="domain.dkim_record">
+                                        <div class="space-y-3">
+                                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                <div class="bg-slate-900/50 rounded-lg p-4">
+                                                    <div class="flex items-center justify-between mb-2">
+                                                        <span class="text-sm font-medium text-slate-300">SPF Record</span>
+                                                        <button @click="copyRecord(domain.spf_record)" class="text-slate-500 hover:text-slate-300">
+                                                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                                                            </svg>
+                                                        </button>
+                                                    </div>
+                                                    <code class="text-xs text-emerald-400 font-mono block break-all" x-text="domain.spf_record || 'Not generated'"></code>
+                                                </div>
+                                                <div class="bg-slate-900/50 rounded-lg p-4">
+                                                    <div class="flex items-center justify-between mb-2">
+                                                        <span class="text-sm font-medium text-slate-300">MX Record</span>
+                                                        <button @click="copyRecord('10 mail.' + domain.name)" class="text-slate-500 hover:text-slate-300">
+                                                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                                                            </svg>
+                                                        </button>
+                                                    </div>
+                                                    <code class="text-xs text-emerald-400 font-mono block break-all">10 mail.<span x-text="domain.name"></span></code>
+                                                </div>
+                                            </div>
+                                            <div class="bg-slate-900/50 rounded-lg p-4">
+                                                <div class="flex items-center justify-between mb-2">
+                                                    <span class="text-sm font-medium text-slate-300">DKIM Record</span>
+                                                    <button @click="copyRecord(domain.dkim_record)" class="text-slate-500 hover:text-slate-300">
+                                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                                                        </svg>
+                                                    </button>
+                                                </div>
+                                                <code class="text-xs text-emerald-400 font-mono block break-all" x-text="domain.dkim_record"></code>
+                                            </div>
+                                            <div class="bg-slate-900/50 rounded-lg p-4">
+                                                <div class="flex items-center justify-between mb-2">
+                                                    <span class="text-sm font-medium text-slate-300">DMARC Record</span>
+                                                    <button @click="copyRecord(domain.dmarc_record)" class="text-slate-500 hover:text-slate-300">
+                                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                                                        </svg>
+                                                    </button>
+                                                </div>
+                                                <code class="text-xs text-emerald-400 font-mono block break-all" x-text="domain.dmarc_record || 'Not generated'"></code>
+                                            </div>
+                                        </div>
+                                    </template>
+                                    <template x-if="!domain.dkim_record">
+                                        <div class="text-center py-8 text-slate-500">
+                                            <p>Click "Generate" to create DNS records</p>
+                                        </div>
+                                    </template>
+                                </div>
+                            </div>
+                        </template>
+
+                        <template x-if="domains.length === 0">
+                            <div class="bg-slate-800 border border-slate-700 rounded-xl p-12 text-center">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 text-slate-600 mx-auto mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" />
+                                </svg>
+                                <p class="text-slate-500">No domains configured</p>
+                                <p class="text-sm text-slate-600 mt-1">Domains are created automatically when you create mail accounts</p>
+                            </div>
+                        </template>
                     </div>
                 </div>
 
@@ -744,6 +945,8 @@
                 showAddModal: false,
                 showQuotaModal: false,
                 showSettingsModal: false,
+                showEditModal: false,
+                showDeleteModal: false,
                 selectedAccount: null,
                 quotaInput: 0,
                 newAccount: { username: '', domain: '', password: '' },
@@ -759,6 +962,9 @@
                     keep_copy: true
                 },
                 savingSettings: false,
+                editAccount: { username: '', password: '' },
+                savingAccount: false,
+                deletingAccount: false,
                 async fetchAccounts() {
                     try {
                         const res = await fetch('/api/core/list-accounts?key=' + JIR_KEY);
@@ -876,6 +1082,49 @@
                         } else { alert(data.message || 'Failed to save settings'); }
                     } catch (e) { console.error('Save settings failed:', e); }
                     finally { this.savingSettings = false; }
+                },
+                showEditModal(account) {
+                    this.selectedAccount = account;
+                    this.editAccount = { username: account.username, password: '' };
+                    this.showEditModal = true;
+                },
+                async saveAccount() {
+                    this.savingAccount = true;
+                    try {
+                        const res = await fetch(`/api/core/update-account/${encodeURIComponent(this.selectedAccount.email)}?key=${JIR_KEY}`, {
+                            method: 'PATCH',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(this.editAccount)
+                        });
+                        const data = await res.json();
+                        if (data.status === 'success') {
+                            const account = this.accounts.find(a => a.email === this.selectedAccount.email || a.email === data.email);
+                            if (account) {
+                                account.username = data.username;
+                                if (data.email) account.email = data.email;
+                            }
+                            this.showEditModal = false;
+                        } else { alert(data.message || 'Failed to update account'); }
+                    } catch (e) { console.error('Update account failed:', e); }
+                    finally { this.savingAccount = false; }
+                },
+                showDeleteConfirm(account) {
+                    this.selectedAccount = account;
+                    this.showDeleteModal = true;
+                },
+                async deleteAccount() {
+                    this.deletingAccount = true;
+                    try {
+                        const res = await fetch(`/api/core/delete-account/${encodeURIComponent(this.selectedAccount.email)}?key=${JIR_KEY}`, { method: 'DELETE' });
+                        const data = await res.json();
+                        if (data.status === 'success') {
+                            this.accounts = this.accounts.filter(a => a.email !== this.selectedAccount.email);
+                            this.accountInfo.total--;
+                            if (this.selectedAccount.is_active) this.accountInfo.active_count--;
+                            this.showDeleteModal = false;
+                        } else { alert(data.message || 'Failed to delete account'); }
+                    } catch (e) { console.error('Delete account failed:', e); }
+                    finally { this.deletingAccount = false; }
                 }
             };
         }
@@ -891,6 +1140,48 @@
                         const res = await fetch(url);
                         this.logs = await res.json();
                     } catch (e) { console.error('Log fetch failed:', e); }
+                }
+            };
+        }
+
+        function domainManager() {
+            return {
+                domains: [],
+                generatingDNS: null,
+                async fetchDomains() {
+                    try {
+                        const res = await fetch('/api/core/list-domains?key=' + JIR_KEY);
+                        const data = await res.json();
+                        if (data.status === 'success') {
+                            this.domains = data.domains;
+                        }
+                    } catch (e) { console.error('Domain fetch failed:', e); }
+                },
+                async generateDNS(domain) {
+                    this.generatingDNS = domain;
+                    try {
+                        const res = await fetch(`/api/core/generate-dns-records/${domain}?key=${JIR_KEY}`, { method: 'POST' });
+                        const data = await res.json();
+                        if (data.status === 'success') {
+                            const d = this.domains.find(d => d.name === domain);
+                            if (d) {
+                                d.spf_record = data.spf_record;
+                                d.dkim_record = data.dkim_record;
+                                d.dmarc_record = data.dmarc_record;
+                                d.verification_status = data.verification_status;
+                            }
+                        } else {
+                            alert(data.message || 'Failed to generate DNS records');
+                        }
+                    } catch (e) { console.error('Generate DNS failed:', e); }
+                    finally { this.generatingDNS = null; }
+                },
+                copyRecord(text) {
+                    navigator.clipboard.writeText(text).then(() => {
+                        alert('Copied to clipboard');
+                    }).catch(() => {
+                        alert('Failed to copy');
+                    });
                 }
             };
         }
