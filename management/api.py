@@ -387,45 +387,46 @@ def get_system_specs(request):
     try:
         import docker
         client = docker.DockerClient(base_url='unix://var/run/docker.sock')
-        jir_containers = ['jir_django', 'jir_postgres', 'jir_postfix', 'jir_dovecot']
+        jir_containers = ['jir_django', 'jir_postgres', 'jir_postfix', 'jir_dovecot', 'jir_redis', 'jir_celery', 'jir_celery_beat']
 
         for container in client.containers.list():
             if any(c in container.name for c in jir_containers):
-                stats = container.stats(stream=False)
-                cpu_delta = stats['cpu_stats']['cpu_usage']['total_usage'] - stats['precpu_stats']['cpu_usage']['total_usage']
-                system_delta = stats['cpu_stats']['system_cpu_usage'] - stats['precpu_stats']['system_cpu_usage']
-                cpu_count = stats['cpu_stats'].get('online_cpus', 1)
-                cpu_percent = (cpu_delta / system_delta * cpu_count * 100.0) if system_delta > 0 else 0
+                try:
+                    container.reload()
+                    state = container.status
+                    is_running = state == 'running'
 
-                mem_usage = stats['memory_stats'].get('usage', 0) / (1024 * 1024)
-                mem_limit = stats['memory_stats'].get('limit', 1) / (1024 * 1024)
-                mem_percent = (mem_usage / mem_limit * 100) if mem_limit > 0 else 0
+                    stats = container.stats(stream=False) if is_running else None
+                    cpu_percent = 0
+                    mem_usage = 0
+                    mem_limit = 0
+                    mem_percent = 0
 
-                net_rx = 0.0
-                net_tx = 0.0
-                if 'networks' in stats:
-                    for net in stats['networks'].values():
-                        net_rx += net.get('rx_bytes', 0)
-                        net_tx += net.get('tx_bytes', 0)
+                    if stats:
+                        cpu_delta = stats['cpu_stats']['cpu_usage']['total_usage'] - stats['precpu_stats']['cpu_usage']['total_usage']
+                        system_delta = stats['cpu_stats']['system_cpu_usage'] - stats['precpu_stats']['system_cpu_usage']
+                        cpu_count = stats['cpu_stats'].get('online_cpus', 1)
+                        cpu_percent = (cpu_delta / system_delta * cpu_count * 100.0) if system_delta > 0 else 0
 
-                disk_usage = 0.0
-                if 'storage' in stats:
-                    disk_usage = stats['storage'].get('usage', 0) / (1024 * 1024)
+                        mem_usage = stats['memory_stats'].get('usage', 0) / (1024 * 1024)
+                        mem_limit = stats['memory_stats'].get('limit', 1) / (1024 * 1024)
+                        mem_percent = (mem_usage / mem_limit * 100) if mem_limit > 0 else 0
 
-                docker_containers.append({
-                    "container_id": container.short_id,
-                    "container_name": container.name,
-                    "cpu_percent": round(cpu_percent, 2),
-                    "ram_percent": round(mem_percent, 2),
-                    "ram_usage_mb": round(mem_usage, 2),
-                    "ram_limit_mb": round(mem_limit, 2),
-                    "network_rx_mb": round(net_rx / (1024 * 1024), 2),
-                    "network_tx_mb": round(net_tx / (1024 * 1024), 2),
-                    "disk_usage_mb": round(disk_usage, 2),
-                })
+                    docker_containers.append({
+                        "container_id": container.short_id,
+                        "container_name": container.name,
+                        "status": state,
+                        "cpu_percent": round(cpu_percent, 2),
+                        "ram_percent": round(mem_percent, 2),
+                        "ram_usage_mb": round(mem_usage, 2),
+                        "ram_limit_mb": round(mem_limit, 2),
+                    })
 
-                total_container_cpu += cpu_percent
-                total_container_ram_mb += mem_usage
+                    if is_running:
+                        total_container_cpu += cpu_percent
+                        total_container_ram_mb += mem_usage
+                except Exception as e:
+                    continue
 
         client.close()
     except Exception as e:
@@ -443,6 +444,97 @@ def get_system_specs(request):
         "total_container_cpu": round(total_container_cpu, 2),
         "total_container_ram_mb": round(total_container_ram_mb, 2),
     }
+
+
+class ContainerStatusSchema(Schema):
+    container_id: str
+    container_name: str
+    status: str
+    cpu_percent: float
+    ram_percent: float
+    ram_usage_mb: float
+    ram_limit_mb: float
+
+
+@router.get("/container-status", response={200: list}, summary="Container Durumu")
+def get_container_status(request):
+    containers = []
+
+    docker_socket_paths = [
+        'unix://var/run/docker.sock',
+        'unix:///var/run/docker.sock',
+        'npipe:////./pipe/docker_engine',
+    ]
+
+    client = None
+    for socket_path in docker_socket_paths:
+        try:
+            import docker
+            if socket_path.startswith('npipe'):
+                client = docker.DockerClient(base_url=socket_path)
+            else:
+                client = docker.DockerClient(base_url=socket_path)
+            client.ping()
+            break
+        except Exception as e:
+            client = None
+            continue
+
+    if not client:
+        return [{
+            "container_id": "error",
+            "container_name": "Docker Connection Error",
+            "status": "offline",
+            "cpu_percent": 0,
+            "ram_percent": 0,
+            "ram_usage_mb": 0,
+            "ram_limit_mb": 0,
+            "error": "Could not connect to Docker. Make sure Docker is running and socket is accessible."
+        }]
+
+    try:
+        jir_containers = ['jir_django', 'jir_postgres', 'jir_postfix', 'jir_dovecot', 'jir_redis', 'jir_celery', 'jir_celery_beat']
+
+        for container in client.containers.list():
+            if any(c in container.name for c in jir_containers):
+                try:
+                    container.reload()
+                    state = container.status
+                    is_running = state == 'running'
+
+                    stats = container.stats(stream=False) if is_running else None
+                    cpu_percent = 0
+                    mem_usage = 0
+                    mem_limit = 0
+                    mem_percent = 0
+
+                    if stats:
+                        cpu_delta = stats['cpu_stats']['cpu_usage']['total_usage'] - stats['precpu_stats']['cpu_usage']['total_usage']
+                        system_delta = stats['cpu_stats']['system_cpu_usage'] - stats['precpu_stats']['system_cpu_usage']
+                        cpu_count = stats['cpu_stats'].get('online_cpus', 1)
+                        cpu_percent = (cpu_delta / system_delta * cpu_count * 100.0) if system_delta > 0 else 0
+
+                        mem_usage = stats['memory_stats'].get('usage', 0) / (1024 * 1024)
+                        mem_limit = stats['memory_stats'].get('limit', 1) / (1024 * 1024)
+                        mem_percent = (mem_usage / mem_limit * 100) if mem_limit > 0 else 0
+
+                    containers.append({
+                        "container_id": container.short_id,
+                        "container_name": container.name,
+                        "status": state,
+                        "cpu_percent": round(cpu_percent, 2),
+                        "ram_percent": round(mem_percent, 2),
+                        "ram_usage_mb": round(mem_usage, 2),
+                        "ram_limit_mb": round(mem_limit, 2),
+                    })
+                except Exception as e:
+                    continue
+
+        client.close()
+    except Exception as e:
+        pass
+
+    return containers
 
 
 class LogEntrySchema(Schema):

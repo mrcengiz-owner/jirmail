@@ -131,6 +131,7 @@ def login_success(request):
         request.session['email'] = account.email
         request.session['role'] = account.role
         request.session['domain'] = account.domain.name
+        request.session['is_logged_in'] = True
         request.session.set_expiry(86400)
 
         from saas.models import SystemConfig
@@ -157,4 +158,6 @@ def login_success(request):
 
 def logout_view(request):
     request.session.flush()
-    return redirect('login')
+    response = redirect('login')
+    response['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+    return response
