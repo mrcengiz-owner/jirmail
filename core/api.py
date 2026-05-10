@@ -28,6 +28,16 @@ class RoleUpdateSchema(Schema):
     role: str
 
 
+class EmailSettingsSchema(Schema):
+    signature: str = ''
+    auto_responder_enabled: bool = False
+    auto_responder_subject: str = ''
+    auto_responder_body: str = ''
+    forward_to: str = ''
+    forward_enabled: bool = False
+    keep_copy: bool = True
+
+
 def update_postfix_vmail(email, action="add"):
     vmail_path = getattr(settings, 'POSTFIX_VMAIL_PATH', '/etc/postfix/vmail_accounts')
     try:
@@ -137,6 +147,65 @@ def update_role(request, email: str, key: str, data: RoleUpdateSchema):
         account.save()
 
         return {"status": "success", "message": f"Rol '{account.get_role_display()}' olarak güncellendi.", "role": account.role}
+    except MailAccount.DoesNotExist:
+        return {"status": "error", "message": "Hesap bulunamadı."}
+
+
+@router.patch("/update-settings/{email}", summary="Hesap Email Ayarlarını Güncelle")
+def update_email_settings(request, email: str, key: str, data: EmailSettingsSchema):
+    if key != getattr(settings, 'JIR_LOCAL_KEY', None):
+        return {"status": "error", "message": "Yetkisiz erişim!"}
+
+    try:
+        account = MailAccount.objects.get(email=email)
+
+        account.signature = data.signature
+        account.auto_responder_enabled = data.auto_responder_enabled
+        account.auto_responder_subject = data.auto_responder_subject
+        account.auto_responder_body = data.auto_responder_body
+        account.forward_to = data.forward_to
+        account.forward_enabled = data.forward_enabled
+        account.keep_copy = data.keep_copy
+        account.save()
+
+        return {
+            "status": "success",
+            "message": "Email ayarları güncellendi.",
+            "settings": {
+                "signature": account.signature,
+                "auto_responder_enabled": account.auto_responder_enabled,
+                "auto_responder_subject": account.auto_responder_subject,
+                "auto_responder_body": account.auto_responder_body,
+                "forward_to": account.forward_to,
+                "forward_enabled": account.forward_enabled,
+                "keep_copy": account.keep_copy
+            }
+        }
+    except MailAccount.DoesNotExist:
+        return {"status": "error", "message": "Hesap bulunamadı."}
+
+
+@router.get("/account-settings/{email}", summary="Hesap Email Ayarlarını Getir")
+def get_email_settings(request, email: str, key: str):
+    if key != getattr(settings, 'JIR_LOCAL_KEY', None):
+        return {"status": "error", "message": "Yetkisiz erişim!"}
+
+    try:
+        account = MailAccount.objects.get(email=email)
+
+        return {
+            "status": "success",
+            "email": account.email,
+            "settings": {
+                "signature": account.signature,
+                "auto_responder_enabled": account.auto_responder_enabled,
+                "auto_responder_subject": account.auto_responder_subject,
+                "auto_responder_body": account.auto_responder_body,
+                "forward_to": account.forward_to,
+                "forward_enabled": account.forward_enabled,
+                "keep_copy": account.keep_copy
+            }
+        }
     except MailAccount.DoesNotExist:
         return {"status": "error", "message": "Hesap bulunamadı."}
 

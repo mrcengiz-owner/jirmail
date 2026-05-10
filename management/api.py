@@ -22,6 +22,41 @@ class HealthStatusSchema(Schema):
     dovecot: bool
 
 
+class LoginSchema(Schema):
+    email: str
+    password: str
+
+
+@router.post("/login", summary="Admin Girişi")
+def admin_login(request, data: LoginSchema):
+    try:
+        account = MailAccount.objects.filter(email=data.email.lower()).first()
+        if not account:
+            return {"status": "error", "message": "Invalid email or password"}
+
+        if not bcrypt.checkpw(data.password.encode('utf-8'), account.password_hash.encode('utf-8')):
+            return {"status": "error", "message": "Invalid email or password"}
+
+        if not account.is_active:
+            return {"status": "error", "message": "Account is inactive"}
+
+        config = SystemConfig.objects.first()
+        jir_key = config.jir_local_key if config else getattr(settings, 'JIR_LOCAL_KEY', 'JirCode_Alpha_2026_Secure_Key_v1')
+
+        return {
+            "status": "success",
+            "message": "Login successful",
+            "jir_key": jir_key,
+            "email": account.email,
+            "role": account.role
+        }
+    except Exception as e:
+        return {
+            "status": "error",
+            "message": f"Login error: {str(e)}"
+        }
+
+
 @router.get("/health", response={200: HealthStatusSchema}, summary="Sistem Sağlığı")
 def health_check(request):
     checks = {
@@ -209,6 +244,18 @@ def setup_complete(request, data: SetupCompleteSchema):
         }
 
 
+class DockerContainerStatsSchema(Schema):
+    container_id: str
+    container_name: str
+    cpu_percent: float
+    ram_percent: float
+    ram_usage_mb: float
+    ram_limit_mb: float
+    network_rx_mb: float
+    network_tx_mb: float
+    disk_usage_mb: float
+
+
 class SystemSpecsSchema(Schema):
     cpu_percent: float
     ram_percent: float
@@ -217,6 +264,9 @@ class SystemSpecsSchema(Schema):
     disk_percent: float
     disk_total_gb: float
     disk_used_gb: float
+    docker_containers: list
+    total_container_cpu: float
+    total_container_ram_mb: float
 
 
 class ServiceStatusSchema(Schema):
@@ -313,6 +363,57 @@ def get_system_specs(request):
     ram = psutil.virtual_memory()
     disk = psutil.disk_usage('/')
 
+    docker_containers = []
+    total_container_cpu = 0.0
+    total_container_ram_mb = 0.0
+
+    try:
+        import docker
+        client = docker.DockerClient(base_url='unix://var/run/docker.sock')
+        jir_containers = ['jir_django', 'jir_postgres', 'jir_postfix', 'jir_dovecot']
+
+        for container in client.containers.list():
+            if any(c in container.name for c in jir_containers):
+                stats = container.stats(stream=False)
+                cpu_delta = stats['cpu_stats']['cpu_usage']['total_usage'] - stats['precpu_stats']['cpu_usage']['total_usage']
+                system_delta = stats['cpu_stats']['system_cpu_usage'] - stats['precpu_stats']['system_cpu_usage']
+                cpu_count = stats['cpu_stats'].get('online_cpus', 1)
+                cpu_percent = (cpu_delta / system_delta * cpu_count * 100.0) if system_delta > 0 else 0
+
+                mem_usage = stats['memory_stats'].get('usage', 0) / (1024 * 1024)
+                mem_limit = stats['memory_stats'].get('limit', 1) / (1024 * 1024)
+                mem_percent = (mem_usage / mem_limit * 100) if mem_limit > 0 else 0
+
+                net_rx = 0.0
+                net_tx = 0.0
+                if 'networks' in stats:
+                    for net in stats['networks'].values():
+                        net_rx += net.get('rx_bytes', 0)
+                        net_tx += net.get('tx_bytes', 0)
+
+                disk_usage = 0.0
+                if 'storage' in stats:
+                    disk_usage = stats['storage'].get('usage', 0) / (1024 * 1024)
+
+                docker_containers.append({
+                    "container_id": container.short_id,
+                    "container_name": container.name,
+                    "cpu_percent": round(cpu_percent, 2),
+                    "ram_percent": round(mem_percent, 2),
+                    "ram_usage_mb": round(mem_usage, 2),
+                    "ram_limit_mb": round(mem_limit, 2),
+                    "network_rx_mb": round(net_rx / (1024 * 1024), 2),
+                    "network_tx_mb": round(net_tx / (1024 * 1024), 2),
+                    "disk_usage_mb": round(disk_usage, 2),
+                })
+
+                total_container_cpu += cpu_percent
+                total_container_ram_mb += mem_usage
+
+        client.close()
+    except Exception as e:
+        pass
+
     return {
         "cpu_percent": cpu_percent,
         "ram_percent": ram.percent,
@@ -321,6 +422,9 @@ def get_system_specs(request):
         "disk_percent": disk.percent,
         "disk_total_gb": round(disk.total / (1024**3), 2),
         "disk_used_gb": round(disk.used / (1024**3), 2),
+        "docker_containers": docker_containers,
+        "total_container_cpu": round(total_container_cpu, 2),
+        "total_container_ram_mb": round(total_container_ram_mb, 2),
     }
 
 
