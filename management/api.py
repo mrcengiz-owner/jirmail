@@ -651,6 +651,9 @@ class MailAccountSchema(Schema):
 def update_postfix_vmail(email, action="add"):
     vmail_path = getattr(settings, 'POSTFIX_VMAIL_PATH', '/etc/postfix/vmail_accounts')
     try:
+        import os
+        os.makedirs(os.path.dirname(vmail_path), exist_ok=True)
+
         if action == "remove":
             if os.path.exists(vmail_path):
                 with open(vmail_path, 'r') as f:
@@ -663,15 +666,24 @@ def update_postfix_vmail(email, action="add"):
             with open(vmail_path, 'a') as f:
                 f.write(f"{email} OK\n")
 
-        result = subprocess.run(['postmap', vmail_path], capture_output=True, text=True)
-        if result.returncode != 0:
+        try:
+            result = subprocess.run(['postmap', vmail_path], capture_output=True, text=True, timeout=10)
+            if result.returncode != 0:
+                import logging
+                logging.warning(f"Postfix map update warning: {result.stderr}")
+                return True
+        except FileNotFoundError:
             import logging
-            logging.error(f"Postfix Mapping Hatası: {result.stderr}")
-            return False
+            logging.warning("postmap command not found, skipping postmap")
+            return True
+        except Exception as e:
+            import logging
+            logging.warning(f"Postfix map update warning: {e}")
+            return True
         return True
     except Exception as e:
         import logging
-        logging.error(f"Postfix güncelleme hatası: {e}")
+        logging.error(f"Postfix update error: {e}")
         return False
 
 
@@ -702,7 +714,12 @@ def create_mail_account(request, data: MailAccountSchema):
             email=full_email,
             password_hash=hashed_pw
         )
-        update_postfix_vmail(full_email, action="add")
+
+        try:
+            update_postfix_vmail(full_email, action="add")
+        except Exception as e:
+            import logging
+            logging.warning(f"Postfix vmail update skipped: {e}")
 
         return {
             "status": "success",
@@ -710,4 +727,6 @@ def create_mail_account(request, data: MailAccountSchema):
             "remaining_slots": config.max_accounts - (current_count + 1)
         }
     except Exception as e:
-        return {"status": "error", "message": "Bu e-posta adresi zaten kullanımda."}
+        import logging
+        logging.error(f"Create account error: {e}")
+        return {"status": "error", "message": f"Hesap oluşturulamadı: {str(e)}"}
