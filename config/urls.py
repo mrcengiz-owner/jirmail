@@ -62,4 +62,8 @@ urlpatterns = [
     path('master-panel/', master_panel, name='master_panel'),
     path('mail-panel/', mail_panel, name='mail_panel'),
     path('', root_redirect, name='root'),
-] + static(settings.STATIC_URL, document_root=settings.STATICFILES_DIRS[0])
+]
+
+# Serve static files in development mode
+if settings.DEBUG:
+    urlpatterns += static(settings.STATIC_URL, document_root=settings.STATICFILES_DIRS[0])

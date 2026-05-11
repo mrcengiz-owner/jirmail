@@ -18,7 +18,6 @@ services:
       - POSTFIX_VMAIL_PATH=/etc/postfix/vmail_accounts
       - DOVECOT_PASSDB_PATH=/etc/dovecot/userdb
     volumes:
-      - static_data:/app/static
       - config_data:/app/config
       - postfix_data:/etc/postfix
       - dovecot_data:/etc/dovecot

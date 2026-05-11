@@ -41,4 +41,7 @@ else:
 EOF
 fi
 
+echo "=== Collecting static files ==="
+python manage.py collectstatic --noinput --clear
+
 exec "$@"

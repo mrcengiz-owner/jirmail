@@ -208,9 +208,21 @@ TIME_ZONE = 'UTC'
 USE_I18N = True
 USE_TZ = True
 
-STATIC_URL = 'static/'
+STATIC_URL = '/static/'
 STATICFILES_DIRS = [BASE_DIR / 'static']
 STATIC_ROOT = BASE_DIR / 'staticfiles'
+STATICFILES_FINDERS = [
+    'django.contrib.staticfiles.finders.FileSystemFinder',
+    'django.contrib.staticfiles.finders.AppDirectoriesFinder',
+]
+
+if DEBUG:
+    STATICFILES_DIRS = [BASE_DIR / 'static']
+    import os
+    # Development modda static dosyaları doğrudan serve et
+    import mimetypes
+    mimetypes.add_type("text/css", ".css", True)
+    mimetypes.add_type("application/javascript", ".js", True)
 
 def get_jir_path(path_type='mail_data'):
     """
