@@ -72,6 +72,7 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware',
     'corsheaders.middleware.CorsMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -216,10 +217,11 @@ STATICFILES_FINDERS = [
     'django.contrib.staticfiles.finders.AppDirectoriesFinder',
 ]
 
+STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
+
 if DEBUG:
     STATICFILES_DIRS = [BASE_DIR / 'static']
-    import os
-    # Development modda static dosyaları doğrudan serve et
+    import mimetypes
     import mimetypes
     mimetypes.add_type("text/css", ".css", True)
     mimetypes.add_type("application/javascript", ".js", True)

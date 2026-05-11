@@ -9,7 +9,7 @@ services:
     user: "999:999"
     restart: unless-stopped
     entrypoint: ["./docker-entrypoint.sh"]
-    command: ["python", "manage.py", "runserver", "0.0.0.0:8000"]
+    command: ["gunicorn", "--bind", "0.0.0.0:8000", "--workers", "4", "--timeout", "60", "config.wsgi:application"]
     environment:
       - DATABASE_URL=${DATABASE_URL}
       - JIR_LOCAL_KEY=${JIR_LOCAL_KEY}
@@ -17,11 +17,14 @@ services:
       - CELERY_RESULT_BACKEND=redis://redis:6379/0
       - POSTFIX_VMAIL_PATH=/etc/postfix/vmail_accounts
       - DOVECOT_PASSDB_PATH=/etc/dovecot/userdb
+      - PYTHONUNBUFFERED=1
     volumes:
       - config_data:/app/config
       - postfix_data:/etc/postfix
       - dovecot_data:/etc/dovecot
       - /var/run/docker.sock:/var/run/docker.sock
+    expose:
+      - "8000"
     depends_on:
       postgres:
         condition: service_healthy
