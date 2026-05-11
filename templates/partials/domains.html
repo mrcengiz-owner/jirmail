@@ -1,0 +1,93 @@
+<!-- templates/partials/domains.html -->
+<div class="p-8 fade-in htmx-fade" id="domains-content">
+    
+    <div class="flex items-center justify-between mb-8">
+        <div>
+            <h2 class="text-3xl font-bold tracking-tight text-white">Domain Management</h2>
+            <p class="text-slate-400 mt-1">
+                <span class="text-primary-400 font-semibold" x-text="domains.length">0</span> domains active on this instance
+            </p>
+        </div>
+        <button @click="showAddDomainModal = true" class="px-5 py-2.5 bg-primary-600 hover:bg-primary-500 text-white rounded-xl text-sm font-medium flex items-center gap-2 shadow-lg shadow-primary-500/20 transition-all active:scale-95">
+            <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+            </svg>
+            Add Domain
+        </button>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        <template x-for="domain in domains" :key="domain.id">
+            <div class="bento-card bg-white dark:bg-slate-800/50 border border-gray-200 dark:border-slate-700 hover:border-primary-500/30 transition-all group relative overflow-hidden">
+                <!-- Background Decoration -->
+                <div class="absolute -right-12 -top-12 w-32 h-32 bg-primary-500/5 blur-3xl rounded-full group-hover:bg-primary-500/10 transition-colors"></div>
+                
+                <div class="flex items-center justify-between mb-6 relative">
+                    <div class="flex items-center gap-4">
+                        <div class="w-12 h-12 bg-primary-500/10 border border-primary-500/20 rounded-xl flex items-center justify-center text-primary-400 shadow-lg shadow-primary-500/10">
+                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0 3-4.03 3-9s-1.343-9-3-9m-9 9a9 9 0 019-9" /></svg>
+                        </div>
+                        <div>
+                            <h3 class="text-lg font-bold text-white tracking-tight" x-text="domain.name"></h3>
+                            <div class="flex items-center gap-2 mt-0.5">
+                                <span class="w-2 h-2 rounded-full" :class="domain.is_active ? 'bg-success-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]' : 'bg-slate-500'"></span>
+                                <span class="text-xs font-medium uppercase tracking-widest" :class="domain.is_active ? 'text-success-400' : 'text-slate-500'" x-text="domain.is_active ? 'Active' : 'Inactive'"></span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- DNS Verification Badge -->
+                    <div class="flex items-center gap-2">
+                        <span class="px-2.5 py-1 rounded-full text-xs font-semibold border" :class="{
+                            'bg-success-500/10 text-success-400 border border-success-500/20': domain.dns_status === 'verified',
+                            'bg-warning-500/10 text-warning-400 border border-warning-500/20': domain.dns_status === 'pending',
+                            'bg-danger-500/10 text-danger-400 border border-danger-500/20': domain.dns_status === 'failed'
+                        }" x-text="domain.dns_status || 'pending'"></span>
+                        <button @click="showDNSModal(domain)" class="p-2 hover:bg-gray-100 dark:hover:bg-slate-800 rounded-lg text-slate-400 hover:text-white transition-colors border border-transparent hover:border-gray-200 dark:hover:border-slate-700" title="DNS Records">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="space-y-4 relative">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div class="p-4 bg-gray-50 dark:bg-slate-950/50 rounded-xl border border-gray-200 dark:border-slate-800 group-hover:border-gray-300 dark:group-hover:border-slate-700 transition-colors">
+                            <span class="text-[10px] font-bold text-slate-500 uppercase tracking-widest block mb-1">SPF Status</span>
+                            <div class="flex items-center justify-between">
+                                <span class="text-xs font-mono text-slate-300 truncate pr-4" x-text="domain.spf_record || 'Not Configured'"></span>
+                                <svg class="w-4 h-4 text-success-400 shrink-0" fill="currentColor" viewBox="0 0 20 20" x-show="domain.spf_record"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/></svg>
+                            </div>
+                        </div>
+                        <div class="p-4 bg-gray-50 dark:bg-slate-950/50 rounded-xl border border-gray-200 dark:border-slate-800 group-hover:border-gray-300 dark:group-hover:border-slate-700 transition-colors">
+                            <span class="text-[10px] font-bold text-slate-500 uppercase tracking-widest block mb-1">DKIM Config</span>
+                            <div class="flex items-center justify-between">
+                                <span class="text-xs font-mono text-slate-300 truncate pr-4" x-text="domain.dkim_record ? 'Active' : 'Missing'"></span>
+                                <svg class="w-4 h-4 text-success-400 shrink-0" fill="currentColor" viewBox="0 0 20 20" x-show="domain.dkim_record"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/></svg>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="flex items-center gap-2 pt-2">
+                        <button @click="generateDNS(domain)" class="flex-1 bg-gray-100 dark:bg-slate-800 hover:bg-gray-200 dark:hover:bg-slate-700 text-slate-300 rounded-lg py-2.5 text-xs font-semibold transition-all border border-gray-200 dark:border-slate-700 active:scale-[0.98]">
+                            Sync DNS Records
+                        </button>
+                        <button @click="toggleDomain(domain)" class="flex-1 rounded-lg py-2.5 text-xs font-semibold transition-all active:scale-[0.98]" :class="domain.is_active ? 'bg-warning-500/10 text-warning-400 hover:bg-warning-500/20' : 'bg-success-500/10 text-success-400 hover:bg-success-500/20'">
+                            <span x-text="domain.is_active ? 'Suspend Domain' : 'Activate Domain'"></span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </template>
+        
+        <template x-if="domains.length === 0">
+            <div class="col-span-full py-20 bg-white dark:bg-slate-900/50 border border-gray-200 dark:border-slate-800 rounded-2xl flex flex-col items-center justify-center text-center">
+                <div class="w-16 h-16 bg-gray-100 dark:bg-slate-800 rounded-full flex items-center justify-center mb-4 text-slate-500">
+                    <svg class="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0 3-4.03 3-9s-1.343-9-3-9m-9 9a9 9 0 019-9" /></svg>
+                </div>
+                <h3 class="text-white font-bold text-lg">No Domains Found</h3>
+                <p class="text-slate-500 text-sm mt-1 mb-6">Start by adding your first mail domain.</p>
+                <button @click="showAddDomainModal = true" class="bg-primary-600 hover:bg-primary-500 text-white px-6 py-2.5 rounded-xl font-medium transition-all shadow-lg shadow-primary-500/20">Add Domain</button>
+            </div>
+        </template>
+    </div>
+</div>

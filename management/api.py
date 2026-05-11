@@ -1,7 +1,8 @@
 from ninja import Router, Schema
 from django.conf import settings
 from django.db import connection
-from django.http import StreamingHttpResponse
+from django.http import JsonResponse
+from django.views.decorators.csrf import csrf_exempt
 from core.models import MailAccount, MailDomain
 from saas.models import SystemConfig
 import bcrypt
@@ -11,6 +12,7 @@ import re
 import subprocess
 import dj_database_url
 from datetime import datetime
+
 
 router = Router()
 
@@ -28,6 +30,7 @@ class LoginSchema(Schema):
 
 
 @router.post("/login", summary="Admin Girişi")
+@csrf_exempt
 def admin_login(request, data: LoginSchema):
     try:
         account = MailAccount.objects.filter(email=data.email.lower()).first()
@@ -153,7 +156,7 @@ def test_db(request, data: TestDbSchema):
         return {
             "status": "error",
             "message": f"Bağlantı hatası: {error_msg}",
-            "syntax": f"psql -h {data.db_host} -p {data.db_port or 5432} -U {data.db_user} -d {data.db_name}\n\nveya eventual:\n\nCREATE DATABASE {data.db_name};\nCREATE USER {data.db_user} WITH PASSWORD '{data.db_pass}';\nGRANT ALL PRIVILEGES ON DATABASE {data.db_name} TO {data.db_user};"
+            "syntax": f"psql -h {data.db_host} -p {data.db_port or 5432} -U {data.db_user} -d {data.db_name}"
         }
     except Exception as e:
         return {
@@ -177,7 +180,6 @@ def setup_complete(request, data: SetupCompleteSchema):
 
         if data.db_type == 'postgresql':
             import psycopg2
-
             conn = psycopg2.connect(
                 host=data.db_host,
                 port=data.db_port or 5432,
@@ -224,10 +226,14 @@ def setup_complete(request, data: SetupCompleteSchema):
             config.save()
             config.refresh_from_db()
 
-        with open('/app/config/.installed', 'w') as f:
+        # Flag file creation with portable path
+        installed_flag_path = os.path.join(settings.BASE_DIR, 'config', '.installed')
+        os.makedirs(os.path.dirname(installed_flag_path), exist_ok=True)
+        with open(installed_flag_path, 'w') as f:
             f.write(str(config.instance_id))
 
-        env_file = '/app/.env'
+        # .env update with portable path
+        env_file = os.path.join(settings.BASE_DIR, '.env')
         if os.path.exists(env_file):
             with open(env_file, 'r') as f:
                 env_lines = f.readlines()
@@ -241,11 +247,6 @@ def setup_complete(request, data: SetupCompleteSchema):
 
         from django.db import connection
         connection.close()
-        from django.conf import settings
-        settings.DATABASES['default'] = config.get_database_config()
-
-        final_check = SystemConfig.objects.first()
-        print(f"[JIR-MAIL] Setup complete: is_installed={final_check.is_installed}, instance_id={final_check.instance_id}")
 
         return {
             "status": "success",
@@ -460,23 +461,24 @@ class ContainerStatusSchema(Schema):
 def get_container_status(request):
     containers = []
 
-    docker_socket_paths = [
-        'unix://var/run/docker.sock',
-        'unix:///var/run/docker.sock',
-        'npipe:////./pipe/docker_engine',
+    socket_paths = [
+        '/var/run/docker.sock',
+        '/run/docker.sock',
     ]
 
     client = None
-    for socket_path in docker_socket_paths:
+    last_error = None
+
+    for socket_path in socket_paths:
+        if not os.path.exists(socket_path):
+            continue
         try:
             import docker
-            if socket_path.startswith('npipe'):
-                client = docker.DockerClient(base_url=socket_path)
-            else:
-                client = docker.DockerClient(base_url=socket_path)
+            client = docker.DockerClient(base_url=f'unix://{socket_path}')
             client.ping()
             break
         except Exception as e:
+            last_error = str(e)
             client = None
             continue
 
@@ -489,13 +491,14 @@ def get_container_status(request):
             "ram_percent": 0,
             "ram_usage_mb": 0,
             "ram_limit_mb": 0,
-            "error": "Could not connect to Docker. Make sure Docker is running and socket is accessible."
+            "error": f"Could not connect to Docker socket. Error: {last_error or 'Unknown'}. Check if Docker is running and socket permissions."
         }]
 
     try:
         jir_containers = ['jir_django', 'jir_postgres', 'jir_postfix', 'jir_dovecot', 'jir_redis', 'jir_celery', 'jir_celery_beat']
+        all_containers = client.containers.list(all=True)
 
-        for container in client.containers.list():
+        for container in all_containers:
             if any(c in container.name for c in jir_containers):
                 try:
                     container.reload()
@@ -503,10 +506,10 @@ def get_container_status(request):
                     is_running = state == 'running'
 
                     stats = container.stats(stream=False) if is_running else None
-                    cpu_percent = 0
-                    mem_usage = 0
-                    mem_limit = 0
-                    mem_percent = 0
+                    cpu_percent = 0.0
+                    mem_usage = 0.0
+                    mem_limit = 0.0
+                    mem_percent = 0.0
 
                     if stats:
                         cpu_delta = stats['cpu_stats']['cpu_usage']['total_usage'] - stats['precpu_stats']['cpu_usage']['total_usage']
@@ -688,6 +691,7 @@ def update_postfix_vmail(email, action="add"):
 
 
 @router.post("/create-account", summary="Yeni Mail Hesabı Oluştur")
+@csrf_exempt
 def create_mail_account(request, data: MailAccountSchema):
     config = SystemConfig.objects.first()
 

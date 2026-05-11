@@ -1,71 +1,91 @@
-<!DOCTYPE html>
-<html lang="tr" x-data="{ step: 1, totalSteps: 5 }" class="dark">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Jîr-Mail Kurulum Sihirbazı</title>
-    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-        tailwind.config = {
-            darkMode: 'class',
-            theme: {
-                extend: {
-                    colors: {
-                        meso: { 500: '#22c55e', 600: '#16a34a', 900: '#14532d' }
-                    }
-                }
-            }
-        }
-    </script>
-    <style>
-        [x-cloak] { display: none !important; }
-        .step-transition { transition: all 0.3s ease-in-out; }
-    </style>
-</head>
-<body class="bg-gray-950 text-gray-100 min-h-screen flex items-center justify-center p-6">
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Kurulum — Jîr-Mail{% endblock %}
+
+{% block sidebar %}{% endblock %}
+
+{% block extra_head %}
+<style>
+    body { display: block !important; overflow: auto !important; height: auto !important; }
+    #content-area { overflow: visible !important; height: auto !important; }
+    .step-transition { transition: all 0.3s ease-in-out; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="bg-slate-950 text-white min-h-screen flex items-center justify-center p-6">
 
     <div class="w-full max-w-xl" x-data="setupWizard()">
 
         <!-- Logo & Header -->
         <div class="text-center mb-8">
-            <h1 class="text-3xl font-bold text-emerald-400 mb-2">Jîr-Mail</h1>
-            <p class="text-gray-500">Kurulum Sihirbazı</p>
+            <div class="w-16 h-16 bg-gradient-to-br from-primary-500 to-primary-700 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg shadow-primary-500/20">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
+                </svg>
+            </div>
+            <h1 class="text-3xl font-bold text-white mb-2">Jîr-Mail</h1>
+            <p class="text-slate-500">Kurulum Sihirbazı</p>
         </div>
 
-        <!-- Progress Bar -->
-        <div class="mb-8">
-            <div class="flex items-center justify-between mb-2">
-                <span class="text-xs text-gray-500">Adım <span x-text="step">1</span> / <span x-text="totalSteps">5</span></span>
-                <span class="text-xs text-emerald-400" x-text="stepLabels[step - 1]"></span>
-            </div>
-            <div class="w-full h-2 bg-gray-800 rounded-full overflow-hidden">
-                <div class="h-full bg-emerald-600 rounded-full transition-all duration-500"
-                     :style="'width: ' + ((step / totalSteps) * 100) + '%'"></div>
-            </div>
-            <div class="flex justify-between mt-2">
-                <template x-for="i in totalSteps" :key="i">
-                    <div class="w-2 h-2 rounded-full"
-                         :class="i <= step ? 'bg-emerald-500' : 'bg-gray-700'"></div>
-                </template>
-            </div>
+        <!-- Stepper -->
+        <div class="flex items-center mb-8">
+            <template x-for="(label, index) in stepLabels" :key="index">
+                <div class="flex items-center" :class="index < stepLabels.length - 1 ? 'flex-1' : ''">
+                    <div class="flex flex-col items-center">
+                        <div class="w-9 h-9 rounded-full flex items-center justify-center border-2 transition-all duration-200"
+                             :class="{
+                               'bg-primary-500 border-primary-500 text-white': index + 1 === step,
+                               'bg-primary-600 border-primary-600 text-white': index + 1 < step,
+                               'bg-transparent border-slate-600 text-slate-400': index + 1 > step
+                             }">
+                            <template x-if="index + 1 < step">
+                                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/></svg>
+                            </template>
+                            <template x-if="index + 1 >= step">
+                                <span class="text-xs font-bold" x-text="index + 1"></span>
+                            </template>
+                        </div>
+                        <span class="text-xs mt-1 hidden sm:block font-medium"
+                              :class="index + 1 <= step ? 'text-primary-400' : 'text-slate-500'"
+                              x-text="label"></span>
+                    </div>
+                    <div x-show="index < stepLabels.length - 1"
+                         class="flex-1 h-0.5 mx-2 mb-4 transition-all duration-300"
+                         :class="index + 1 < step ? 'bg-primary-500' : 'bg-slate-700'"></div>
+                </div>
+            </template>
         </div>
 
         <!-- Main Card -->
-        <div class="bg-gray-900 border border-gray-800 rounded-2xl p-8 shadow-2xl">
+        <div class="card bg-slate-900/80 border border-slate-700 p-8">
 
             <!-- Step 1: Domain -->
             <div x-show="step === 1" x-transition:enter="step-transition" x-transition:enter-start="opacity-0 translate-x-4" x-transition:enter-end="opacity-100 translate-x-0">
                 <h2 class="text-xl font-semibold text-white mb-2">Domain Ayarı</h2>
-                <p class="text-gray-400 text-sm mb-6">Mail sunucunun ana domain adresini belirle</p>
+                <p class="text-slate-500 text-sm mb-6">Mail sunucunun ana domain adresini belirle</p>
 
                 <div class="space-y-4">
                     <div>
-                        <label class="block text-sm text-gray-400 mb-2">Ana Domain</label>
-                        <input type="text" x-model="domain" placeholder="jircode.com"
-                               class="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-white text-lg focus:outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-600/20"
-                               @keydown.enter="nextStep()">
-                        <p class="text-xs text-gray-500 mt-2">Örn: jircode.com, firma.com.tr</p>
+                        <label for="domain-input" class="block text-sm text-slate-400 mb-2">Ana Domain</label>
+                        <input id="domain-input"
+                               type="text"
+                               x-model="domain"
+                               placeholder="jircode.com"
+                               class="input"
+                               @keydown.enter="nextStep()"
+                               aria-required="true"
+                               :aria-invalid="domain !== '' && !domain.includes('.')">
+                        <p class="text-xs text-slate-600 mt-2">Örn: jircode.com, firma.com.tr</p>
+                        <div x-show="domain !== '' && !domain.includes('.')"
+                             role="alert"
+                             class="flex items-center gap-2 text-danger-400 text-sm mt-2">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+                            </svg>
+                            Geçerli bir domain girin (örn: jircode.com)
+                        </div>
                     </div>
                 </div>
             </div>
@@ -73,87 +93,106 @@
             <!-- Step 2: Admin -->
             <div x-show="step === 2" x-transition:enter="step-transition" x-transition:enter-start="opacity-0 translate-x-4" x-transition:enter-end="opacity-100 translate-x-0">
                 <h2 class="text-xl font-semibold text-white mb-2">Admin Hesabı</h2>
-                <p class="text-gray-400 text-sm mb-6">Sınırsız güce sahip ilk admin hesabını oluştur</p>
+                <p class="text-slate-500 text-sm mb-6">Sınırsız güce sahip ilk admin hesabını oluştur</p>
 
                 <div class="space-y-4">
                     <div>
-                        <label class="block text-sm text-gray-400 mb-2">Admin E-posta</label>
-                        <input type="email" x-model="adminEmail" :placeholder="'admin@' + (domain || 'domain.com')"
-                               class="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-emerald-600">
+                        <label for="admin-email" class="block text-sm text-slate-400 mb-2">Admin E-posta</label>
+                        <input id="admin-email"
+                               type="email"
+                               x-model="adminEmail"
+                               :placeholder="'admin@' + (domain || 'domain.com')"
+                               autocomplete="username"
+                               class="input"
+                               aria-required="true">
                     </div>
                     <div>
-                        <label class="block text-sm text-gray-400 mb-2">Şifre</label>
-                        <input type="password" x-model="adminPassword" placeholder="••••••••••••"
-                               class="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-emerald-600">
+                        <label for="admin-password" class="block text-sm text-slate-400 mb-2">Şifre</label>
+                        <input id="admin-password"
+                               type="password"
+                               x-model="adminPassword"
+                               placeholder="••••••••••••"
+                               autocomplete="new-password"
+                               class="input"
+                               aria-required="true">
+                        <div x-show="adminPassword !== '' && adminPassword.length < 8"
+                             role="alert"
+                             class="flex items-center gap-2 text-danger-400 text-sm mt-2">
+                            Şifre en az 8 karakter olmalıdır
+                        </div>
                     </div>
                     <div>
-                        <label class="block text-sm text-gray-400 mb-2">Şifre Tekrar</label>
-                        <input type="password" x-model="adminPassword2" placeholder="••••••••••••"
-                               class="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-emerald-600"
-                               @keydown.enter="nextStep()">
-                    </div>
-                    <template x-if="adminPassword && adminPassword2 && adminPassword !== adminPassword2">
-                        <div class="flex items-center gap-2 text-red-400 text-sm">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                            </svg>
+                        <label for="admin-password2" class="block text-sm text-slate-400 mb-2">Şifre Tekrar</label>
+                        <input id="admin-password2"
+                               type="password"
+                               x-model="adminPassword2"
+                               placeholder="••••••••••••"
+                               autocomplete="new-password"
+                               class="input"
+                               @keydown.enter="nextStep()"
+                               aria-required="true">
+                        <div x-show="adminPassword && adminPassword2 && adminPassword !== adminPassword2"
+                             role="alert"
+                             class="flex items-center gap-2 text-danger-400 text-sm mt-2">
                             Şifreler eşleşmiyor
                         </div>
-                    </template>
+                    </div>
                 </div>
             </div>
 
             <!-- Step 3: Handshake -->
             <div x-show="step === 3" x-transition:enter="step-transition" x-transition:enter-start="opacity-0 translate-x-4" x-transition:enter-end="opacity-100 translate-x-0">
                 <h2 class="text-xl font-semibold text-white mb-2">Güvenlik Yapılandırması</h2>
-                <p class="text-gray-400 text-sm mb-6">Sistem kimliği ve API anahtarı otomatik oluşturuldu</p>
+                <p class="text-slate-500 text-sm mb-6">Sistem kimliği ve API anahtarı otomatik oluşturuldu</p>
 
                 <div class="space-y-4">
-                    <div class="bg-gray-950 rounded-xl p-4 border border-gray-800">
-                        <label class="block text-xs text-gray-500 mb-1">INSTANCE ID</label>
-                        <code class="text-emerald-400 font-mono text-sm" x-text="instanceId"></code>
+                    <div class="bg-slate-800 rounded-xl p-4 border border-slate-700">
+                        <label class="block text-xs text-slate-500 mb-1">INSTANCE ID</label>
+                        <code class="text-primary-400 font-mono text-sm" x-text="instanceId"></code>
                     </div>
-                    <div class="bg-gray-950 rounded-xl p-4 border border-gray-800">
-                        <label class="block text-xs text-gray-500 mb-1">JIR LOCAL KEY</label>
-                        <code class="text-emerald-400 font-mono text-sm" x-text="jirKey"></code>
+                    <div class="bg-slate-800 rounded-xl p-4 border border-slate-700">
+                        <label class="block text-xs text-slate-500 mb-1">JIR LOCAL KEY</label>
+                        <code class="text-primary-400 font-mono text-sm" x-text="jirKey"></code>
                     </div>
-                    <div class="bg-amber-900/20 border border-amber-800/50 rounded-xl p-4">
+                    <div class="bg-warning-500/10 border border-warning-500/20 rounded-xl p-4">
                         <div class="flex items-start gap-3">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-amber-400 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-warning-400 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
                             </svg>
                             <div>
-                                <p class="text-amber-400 text-sm font-medium">Bu bilgileri güvenli bir yere kaydet</p>
-                                <p class="text-amber-400/70 text-xs mt-1">API erişimi ve sistem kimliği için gerekli.</p>
+                                <p class="text-warning-400 text-sm font-medium">Bu bilgileri güvenli bir yere kaydet</p>
+                                <p class="text-warning-400/70 text-xs mt-1">API erişimi ve sistem kimliği için gerekli.</p>
                             </div>
                         </div>
                     </div>
                 </div>
             </div>
 
-            <!-- Step 4: Database Configuration -->
+            <!-- Step 4: Database -->
             <div x-show="step === 4" x-transition:enter="step-transition" x-transition:enter-start="opacity-0 translate-x-4" x-transition:enter-end="opacity-100 translate-x-0">
                 <h2 class="text-xl font-semibold text-white mb-2">Veritabanı Yapılandırması</h2>
-                <p class="text-gray-400 text-sm mb-6">PostgreSQL veya SQLite arasında seçim yap</p>
+                <p class="text-slate-500 text-sm mb-6">PostgreSQL veya SQLite arasında seçim yap</p>
 
                 <div class="space-y-4">
                     <div>
-                        <label class="block text-sm text-gray-400 mb-2">Veritabanı Türü</label>
+                        <label class="block text-sm text-slate-400 mb-2">Veritabanı Türü</label>
                         <div class="grid grid-cols-2 gap-4">
                             <button @click="dbType = 'postgresql'"
-                                    :class="dbType === 'postgresql' ? 'bg-emerald-900/50 border-emerald-600 text-emerald-400' : 'bg-gray-800 border-gray-700 text-gray-400'"
-                                    class="p-4 rounded-xl border text-center transition-colors">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8 mx-auto mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4" />
+                                    :class="dbType === 'postgresql' ? 'bg-primary-900/50 border-primary-600 text-primary-400' : 'bg-slate-800 border-slate-700 text-slate-400'"
+                                    class="p-4 rounded-xl border text-center transition-colors"
+                                    :aria-pressed="dbType === 'postgresql'">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8 mx-auto mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4"/>
                                 </svg>
                                 <span class="font-medium">PostgreSQL</span>
                                 <p class="text-xs mt-1 opacity-70">Önerilen</p>
                             </button>
                             <button @click="dbType = 'sqlite'"
-                                    :class="dbType === 'sqlite' ? 'bg-emerald-900/50 border-emerald-600 text-emerald-400' : 'bg-gray-800 border-gray-700 text-gray-400'"
-                                    class="p-4 rounded-xl border text-center transition-colors">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8 mx-auto mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2" />
+                                    :class="dbType === 'sqlite' ? 'bg-primary-900/50 border-primary-600 text-primary-400' : 'bg-slate-800 border-slate-700 text-slate-400'"
+                                    class="p-4 rounded-xl border text-center transition-colors"
+                                    :aria-pressed="dbType === 'sqlite'">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8 mx-auto mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2"/>
                                 </svg>
                                 <span class="font-medium">SQLite</span>
                                 <p class="text-xs mt-1 opacity-70">Hızlı kurulum</p>
@@ -161,64 +200,57 @@
                         </div>
                     </div>
 
-                    <template x-if="dbType === 'postgresql'">
-                        <div class="space-y-4 mt-4">
-                            <div class="grid grid-cols-2 gap-4">
-                                <div>
-                                    <label class="block text-sm text-gray-400 mb-1">Host</label>
-                                    <input type="text" x-model="dbHost" placeholder="localhost"
-                                           class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-emerald-600">
-                                </div>
-                                <div>
-                                    <label class="block text-sm text-gray-400 mb-1">Port</label>
-                                    <input type="text" x-model="dbPort" placeholder="5432"
-                                           class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-emerald-600">
-                                </div>
+                    <div x-show="dbType === 'postgresql'" class="space-y-4 mt-4">
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <label for="db-host" class="block text-sm text-slate-400 mb-1">Host</label>
+                                <input id="db-host" type="text" x-model="dbHost" placeholder="localhost" class="input">
                             </div>
                             <div>
-                                <label class="block text-sm text-gray-400 mb-1">Veritabanı Adı</label>
-                                <input type="text" x-model="dbName" placeholder="jir_mail_prod"
-                                       class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-emerald-600">
-                            </div>
-                            <div class="grid grid-cols-2 gap-4">
-                                <div>
-                                    <label class="block text-sm text-gray-400 mb-1">Kullanıcı</label>
-                                    <input type="text" x-model="dbUser" placeholder="postgres"
-                                           class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-emerald-600">
-                                </div>
-                                <div>
-                                    <label class="block text-sm text-gray-400 mb-1">Şifre</label>
-                                    <input type="password" x-model="dbPass" placeholder="••••••••"
-                                           class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-emerald-600">
-                                </div>
+                                <label for="db-port" class="block text-sm text-slate-400 mb-1">Port</label>
+                                <input id="db-port" type="text" x-model="dbPort" placeholder="5432" class="input">
                             </div>
                         </div>
-                    </template>
+                        <div>
+                            <label for="db-name" class="block text-sm text-slate-400 mb-1">Veritabanı Adı</label>
+                            <input id="db-name" type="text" x-model="dbName" placeholder="jir_mail_prod" class="input">
+                        </div>
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <label for="db-user" class="block text-sm text-slate-400 mb-1">Kullanıcı</label>
+                                <input id="db-user" type="text" x-model="dbUser" placeholder="postgres" class="input">
+                            </div>
+                            <div>
+                                <label for="db-pass" class="block text-sm text-slate-400 mb-1">Şifre</label>
+                                <input id="db-pass" type="password" x-model="dbPass" placeholder="••••••••" class="input">
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
 
             <!-- Step 5: Test & Deploy -->
             <div x-show="step === 5" x-transition:enter="step-transition" x-transition:enter-start="opacity-0 translate-x-4" x-transition:enter-end="opacity-100 translate-x-0">
                 <h2 class="text-xl font-semibold text-white mb-2">Test ve Kurulum</h2>
-                <p class="text-gray-400 text-sm mb-6">Yapılandırmayı test et ve sistemi kur</p>
+                <p class="text-slate-500 text-sm mb-6">Yapılandırmayı test et ve sistemi kur</p>
 
-                <div class="bg-gray-950 rounded-xl p-4 border border-gray-800 mb-4">
+                <div class="bg-slate-800 rounded-xl p-4 border border-slate-700 mb-4">
                     <div class="grid grid-cols-2 gap-4 text-sm">
                         <div>
-                            <span class="text-gray-500">Domain</span>
+                            <span class="text-slate-500">Domain</span>
                             <p class="text-white font-medium" x-text="domain || '-'"></p>
                         </div>
                         <div>
-                            <span class="text-gray-500">Admin</span>
+                            <span class="text-slate-500">Admin</span>
                             <p class="text-white font-medium" x-text="adminEmail || '-'"></p>
                         </div>
                         <div>
-                            <span class="text-gray-500">DB Türü</span>
-                            <p class="text-emerald-400 font-medium" x-text="dbType === 'postgresql' ? 'PostgreSQL' : 'SQLite'"></p>
+                            <span class="text-slate-500">DB Türü</span>
+                            <p class="text-primary-400 font-medium" x-text="dbType === 'postgresql' ? 'PostgreSQL' : 'SQLite'"></p>
                         </div>
                         <div>
-                            <span class="text-gray-500">Instance</span>
-                            <p class="text-emerald-400 font-mono text-xs truncate" x-text="instanceId.slice(0, 8) + '...'"></p>
+                            <span class="text-slate-500">Instance</span>
+                            <p class="text-primary-400 font-mono text-xs truncate" x-text="instanceId.slice(0, 8) + '...'"></p>
                         </div>
                     </div>
                 </div>
@@ -227,98 +259,72 @@
                 <template x-if="testStatus === 'testing'">
                     <div class="flex items-center justify-center py-8">
                         <div class="text-center">
-                            <svg class="animate-spin h-10 w-10 text-emerald-500 mx-auto mb-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                            <svg class="animate-spin h-10 w-10 text-primary-500 mx-auto mb-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" aria-hidden="true">
                                 <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
                                 <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                             </svg>
-                            <p class="text-gray-400">Bağlantı test ediliyor...</p>
+                            <p class="text-slate-500">Bağlantı test ediliyor...</p>
                         </div>
                     </div>
                 </template>
 
                 <template x-if="testStatus === 'success'">
                     <div class="space-y-3">
-                        <!-- System Status -->
                         <template x-if="systemReqs">
-                            <div class="bg-gray-950 rounded-xl p-4 border border-gray-800">
+                            <div class="bg-slate-800 rounded-xl p-4 border border-slate-700">
                                 <h3 class="text-white font-medium mb-3">Sistem Gereksinimleri</h3>
                                 <div class="grid grid-cols-2 gap-4 text-sm">
                                     <div class="flex items-center gap-2">
                                         <template x-if="systemReqs.ram_ok">
-                                            <svg class="h-4 w-4 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+                                            <svg class="h-4 w-4 text-primary-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
                                         </template>
                                         <template x-if="!systemReqs.ram_ok">
-                                            <svg class="h-4 w-4 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                                            <svg class="h-4 w-4 text-danger-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
                                         </template>
-                                        <span class="text-gray-400">RAM:</span>
+                                        <span class="text-slate-400">RAM:</span>
                                         <span class="text-white" x-text="systemReqs.ram_total_gb + ' GB'"></span>
-                                        <span class="text-gray-500 text-xs">(min: <span x-text="systemReqs.ram_required_gb + ' GB'></span>)</span>
                                     </div>
                                     <div class="flex items-center gap-2">
                                         <template x-if="systemReqs.disk_ok">
-                                            <svg class="h-4 w-4 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+                                            <svg class="h-4 w-4 text-primary-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
                                         </template>
                                         <template x-if="!systemReqs.disk_ok">
-                                            <svg class="h-4 w-4 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                                            <svg class="h-4 w-4 text-danger-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
                                         </template>
-                                        <span class="text-gray-400">Disk:</span>
+                                        <span class="text-slate-400">Disk:</span>
                                         <span class="text-white" x-text="systemReqs.disk_free_gb + ' GB boş'"></span>
-                                        <span class="text-gray-500 text-xs">(min: <span x-text="systemReqs.disk_required_gb + ' GB'></span>)</span>
                                     </div>
                                 </div>
-                                <div class="mt-3 pt-3 border-t border-gray-800">
-                                    <span class="text-gray-400 text-xs">Servisler:</span>
+                                <div class="mt-3 pt-3 border-t border-slate-700">
+                                    <span class="text-slate-500 text-xs">Servisler:</span>
                                     <div class="flex flex-wrap gap-2 mt-2">
                                         <template x-for="svc in systemReqs.services" :key="svc.name">
                                             <span class="px-2 py-1 rounded text-xs"
-                                                  :class="svc.status === 'running' ? 'bg-emerald-900/50 text-emerald-400' : 'bg-gray-800 text-gray-400'"
-                                                  x-text="svc.name + ' (' + svc.status + ')'">
-                                            </span>
-                                        </template>
-                                    </div>
-                                </div>
-                                <div class="mt-3 pt-3 border-t border-gray-800">
-                                    <span class="text-gray-400 text-xs">Portlar:</span>
-                                    <div class="flex flex-wrap gap-2 mt-2">
-                                        <template x-for="port in [25, 465, 587, 993, 143]" :key="port">
-                                            <span class="px-2 py-1 rounded text-xs font-mono"
-                                                  :class="systemReqs.ports_blocked.includes(port) ? 'bg-red-900/50 text-red-400' : 'bg-emerald-900/50 text-emerald-400'"
-                                                  x-text="port">
-                                            </span>
+                                                  :class="svc.status === 'running' ? 'bg-primary-900/50 text-primary-400' : 'bg-slate-800 text-slate-400'"
+                                                  x-text="svc.name + ' (' + svc.status + ')'"></span>
                                         </template>
                                     </div>
                                 </div>
                             </div>
                         </template>
-                        <div class="flex items-center gap-3 text-emerald-400">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                        <div class="flex items-center gap-3 text-primary-400">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
                             </svg>
                             <span class="text-sm">Veritabanı bağlantısı başarılı</span>
-                        </div>
-                        <div class="bg-emerald-900/20 border border-emerald-800/50 rounded-xl p-4 mt-4">
-                            <div class="flex items-center gap-3">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-                                </svg>
-                                <div>
-                                    <p class="text-emerald-400 text-sm font-medium">Sistemi Mühürle</p>
-                                    <p class="text-emerald-400/70 text-xs">Kurulum tamamlandığında bu ayarlar değiştirilemez</p>
-                                </div>
-                            </div>
                         </div>
                     </div>
                 </template>
 
                 <template x-if="testStatus === 'error'">
-                    <div class="bg-red-900/30 border border-red-800/50 rounded-xl p-4">
+                    <div class="bg-danger-500/10 border border-danger-500/20 rounded-xl p-4" role="alert">
                         <div class="flex items-start gap-3">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-red-400 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-danger-400 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
                             </svg>
                             <div>
-                                <p class="text-red-400 text-sm font-medium">Hata Oluştu</p>
-                                <pre class="text-red-400/70 text-xs mt-2 font-mono whitespace-pre-wrap" x-text="testError"></pre>
+                                <p class="text-danger-400 text-sm font-medium">Hata Oluştu</p>
+                                <pre class="text-danger-400/70 text-xs mt-2 font-mono whitespace-pre-wrap" x-text="testError"></pre>
                             </div>
                         </div>
                     </div>
@@ -327,197 +333,201 @@
 
             <!-- Navigation -->
             <div class="flex justify-between mt-8">
-                <button x-show="step > 1 && step < 5" @click="step--"
-                        class="px-6 py-3 rounded-xl text-gray-400 hover:text-white hover:bg-gray-800 transition-colors flex items-center gap-2">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
+                <button x-show="step > 1 && step < 5"
+                        @click="step--"
+                        class="btn btn-secondary">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
                     </svg>
                     Geri
                 </button>
                 <div x-show="step === 1"></div>
 
-                <button x-show="step < 4" @click="nextStep()"
+                <button x-show="step < 4"
+                        @click="nextStep()"
                         :disabled="!canProceed()"
-                        :class="canProceed() ? 'bg-emerald-600 hover:bg-emerald-500 text-white' : 'bg-gray-700 text-gray-500 cursor-not-allowed'"
-                        class="px-6 py-3 rounded-xl font-medium transition-colors flex items-center gap-2 ml-auto">
+                        class="btn btn-primary"
+                        :class="!canProceed() ? 'opacity-50 cursor-not-allowed' : ''"
+                        :aria-disabled="!canProceed()">
                     İlerle
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
                     </svg>
                 </button>
 
-                <button x-show="step === 4" @click="testConnection()"
-                        class="px-6 py-3 rounded-xl font-medium transition-colors flex items-center gap-2 ml-auto bg-blue-600 hover:bg-blue-500 text-white">
+                <button x-show="step === 4"
+                        @click="testConnection()"
+                        class="btn btn-primary">
                     Bağlantıyı Test Et
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
                     </svg>
                 </button>
 
-                <button x-show="step === 5 && testStatus === 'success'" @click="completeSetup()"
+                <button x-show="step === 5 && testStatus === 'success'"
+                        @click="completeSetup()"
                         :disabled="isLoading"
-                        :class="isLoading ? 'bg-gray-700 text-gray-500' : 'bg-emerald-600 hover:bg-emerald-500 text-white'"
-                        class="px-8 py-3 rounded-xl font-medium transition-colors flex items-center gap-2">
+                        class="btn btn-primary"
+                        :class="isLoading ? 'opacity-50' : ''">
                     <template x-if="isLoading">
-                        <svg class="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <svg class="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" aria-hidden="true">
                             <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
                             <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                         </svg>
                     </template>
                     <span x-text="isLoading ? 'Kuruluyor...' : 'Sistemi Mühürle'"></span>
-                    <svg x-show="!isLoading" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                    </svg>
                 </button>
             </div>
 
             <!-- Error Message -->
-            <template x-if="errorMessage">
-                <div class="mt-4 bg-red-900/30 border border-red-800/50 rounded-xl p-4 flex items-center gap-3">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                    <span class="text-red-400 text-sm" x-text="errorMessage"></span>
-                </div>
-            </template>
+            <div x-show="errorMessage"
+                 role="alert"
+                 class="mt-4 bg-danger-500/10 border border-danger-500/20 rounded-xl p-4 flex items-center gap-3">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-danger-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                </svg>
+                <span class="text-danger-400 text-sm" x-text="errorMessage"></span>
+            </div>
         </div>
 
         <!-- Footer -->
-        <p class="text-center text-gray-600 text-xs mt-6">Jîr-Mail Command Center v1.0</p>
+        <p class="text-center text-slate-600 text-xs mt-6">Jîr-Mail Command Center v1.0</p>
     </div>
+</div>
+{% endblock %}
 
-    <script>
-        function setupWizard() {
-            return {
-                step: 1,
-                totalSteps: 5,
-                stepLabels: ['Domain', 'Admin', 'Güvenlik', 'Veritabanı', 'Kur'],
-                domain: '',
-                adminEmail: '',
-                adminPassword: '',
-                adminPassword2: '',
-                instanceId: '',
-                jirKey: '',
-                dbType: 'postgresql',
-                dbHost: 'localhost',
-                dbPort: '5432',
-                dbName: 'jir_mail_prod',
-                dbUser: 'postgres',
-                dbPass: '',
-                testStatus: '',
-                testError: '',
-                isLoading: false,
-                errorMessage: '',
-                systemReqs: null,
+{% block extra_scripts %}
+<script>
+function setupWizard() {
+    return {
+        step: 1,
+        totalSteps: 5,
+        stepLabels: ['Domain', 'Admin', 'Güvenlik', 'Veritabanı', 'Kur'],
+        domain: '',
+        adminEmail: '',
+        adminPassword: '',
+        adminPassword2: '',
+        instanceId: '',
+        jirKey: '',
+        dbType: 'postgresql',
+        dbHost: 'localhost',
+        dbPort: '5432',
+        dbName: 'jir_mail_prod',
+        dbUser: 'postgres',
+        dbPass: '',
+        testStatus: '',
+        testError: '',
+        isLoading: false,
+        errorMessage: '',
+        systemReqs: null,
 
-                init() {
-                    this.instanceId = this.generateUUID();
-                    this.jirKey = this.generateKey();
-                },
+        init() {
+            this.instanceId = this.generateUUID();
+            this.jirKey = this.generateKey();
+        },
 
-                generateUUID() {
-                    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
-                        const r = Math.random() * 16 | 0;
-                        const v = c === 'x' ? r : (r & 0x3 | 0x8);
-                        return v.toString(16);
-                    });
-                },
+        generateUUID() {
+            return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+                const r = Math.random() * 16 | 0;
+                const v = c === 'x' ? r : (r & 0x3 | 0x8);
+                return v.toString(16);
+            });
+        },
 
-                generateKey() {
-                    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-                    let result = 'MESO-';
-                    for (let i = 0; i < 4; i++) result += chars.charAt(Math.floor(Math.random() * chars.length)) + '-';
-                    for (let i = 0; i < 4; i++) result += chars.charAt(Math.floor(Math.random() * chars.length));
-                    return result;
-                },
+        generateKey() {
+            const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+            let result = 'MESO-';
+            for (let i = 0; i < 4; i++) result += chars.charAt(Math.floor(Math.random() * chars.length)) + '-';
+            for (let i = 0; i < 4; i++) result += chars.charAt(Math.floor(Math.random() * chars.length));
+            return result;
+        },
 
-                canProceed() {
-                    if (this.step === 1) return this.domain && this.domain.includes('.');
-                    if (this.step === 2) return this.adminEmail && this.adminPassword && this.adminPassword === this.adminPassword2 && this.adminPassword.length >= 8;
-                    return true;
-                },
+        canProceed() {
+            if (this.step === 1) return this.domain && this.domain.includes('.');
+            if (this.step === 2) return this.adminEmail && this.adminPassword && this.adminPassword === this.adminPassword2 && this.adminPassword.length >= 8;
+            return true;
+        },
 
-                nextStep() {
-                    if (this.canProceed()) this.step++;
-                },
+        nextStep() {
+            if (this.canProceed()) this.step++;
+        },
 
-                async testConnection() {
-                    this.step = 5;
-                    this.testStatus = 'testing';
-                    this.testError = '';
+        async testConnection() {
+            this.step = 5;
+            this.testStatus = 'testing';
+            this.testError = '';
 
-                    try {
-                        const [dbRes, sysRes] = await Promise.all([
-                            fetch('/api/management/test-db', {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({
-                                    db_type: this.dbType,
-                                    db_host: this.dbHost,
-                                    db_port: this.dbPort || 5432,
-                                    db_name: this.dbName,
-                                    db_user: this.dbUser,
-                                    db_pass: this.dbPass
-                                })
-                            }),
-                            fetch('/api/management/system-requirements')
-                        ]);
+            try {
+                const [dbRes, sysRes] = await Promise.all([
+                    fetch('/api/management/test-db', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            db_type: this.dbType,
+                            db_host: this.dbHost,
+                            db_port: this.dbPort || 5432,
+                            db_name: this.dbName,
+                            db_user: this.dbUser,
+                            db_pass: this.dbPass
+                        })
+                    }),
+                    fetch('/api/management/system-requirements')
+                ]);
 
-                        const dbData = await dbRes.json();
-                        const sysData = await sysRes.json();
+                const dbData = await dbRes.json();
+                const sysData = await sysRes.json();
 
-                        this.systemReqs = sysData;
+                this.systemReqs = sysData;
 
-                        if (dbData.status === 'success') {
-                            this.testStatus = 'success';
-                        } else {
-                            this.testStatus = 'error';
-                            this.testError = dbData.message + '\n\nSyntax:\n' + dbData.syntax;
-                        }
-                    } catch (e) {
-                        this.testStatus = 'error';
-                        this.testError = 'Bağlantı hatası: ' + e.message;
-                    }
-                },
-
-                async completeSetup() {
-                    this.isLoading = true;
-                    this.errorMessage = '';
-
-                    try {
-                        const res = await fetch('/api/management/setup-complete', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({
-                                domain: this.domain,
-                                admin_email: this.adminEmail,
-                                admin_password: this.adminPassword,
-                                instance_id: this.instanceId,
-                                jir_local_key: this.jirKey,
-                                db_type: this.dbType,
-                                db_host: this.dbHost,
-                                db_port: this.dbPort || 5432,
-                                db_name: this.dbName,
-                                db_user: this.dbUser,
-                                db_pass: this.dbPass
-                            })
-                        });
-
-                        const data = await res.json();
-
-                        if (data.status === 'success') {
-                            window.location.href = '/dashboard/';
-                        } else {
-                            this.errorMessage = data.message || 'Kurulum başarısız oldu.';
-                        }
-                    } catch (e) {
-                        this.errorMessage = 'Bağlantı hatası: ' + e.message;
-                    } finally {
-                        this.isLoading = false;
-                    }
+                if (dbData.status === 'success') {
+                    this.testStatus = 'success';
+                } else {
+                    this.testStatus = 'error';
+                    this.testError = dbData.message + '\n\nSyntax:\n' + dbData.syntax;
                 }
-            };
+            } catch (e) {
+                this.testStatus = 'error';
+                this.testError = 'Bağlantı hatası: ' + e.message;
+            }
+        },
+
+        async completeSetup() {
+            this.isLoading = true;
+            this.errorMessage = '';
+
+            try {
+                const res = await fetch('/api/management/setup-complete', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        domain: this.domain,
+                        admin_email: this.adminEmail,
+                        admin_password: this.adminPassword,
+                        instance_id: this.instanceId,
+                        jir_local_key: this.jirKey,
+                        db_type: this.dbType,
+                        db_host: this.dbHost,
+                        db_port: this.dbPort || 5432,
+                        db_name: this.dbName,
+                        db_user: this.dbUser,
+                        db_pass: this.dbPass
+                    })
+                });
+
+                const data = await res.json();
+
+                if (data.status === 'success') {
+                    window.location.href = '/dashboard/';
+                } else {
+                    this.errorMessage = data.message || 'Kurulum başarısız oldu.';
+                }
+            } catch (e) {
+                this.errorMessage = 'Bağlantı hatası: ' + e.message;
+            } finally {
+                this.isLoading = false;
+            }
         }
-    </script>
-</body>
-</html>
+    };
+}
+</script>
+{% endblock %}

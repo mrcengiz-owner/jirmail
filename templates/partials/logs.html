@@ -1,0 +1,71 @@
+<!-- templates/partials/logs.html -->
+<div class="p-8 fade-in htmx-fade" id="logs-content" x-data="logsApp()">
+    <div class="flex items-center justify-between mb-8">
+        <div>
+            <h2 class="text-3xl font-bold tracking-tight text-white">System Logs</h2>
+            <p class="text-slate-400 mt-1">Real-time system events and application logs</p>
+        </div>
+        <div class="flex gap-3">
+            <select x-model="logFilter" @change="fetchLogs()" class="bg-white dark:bg-slate-800/50 border border-gray-200 dark:border-slate-700 rounded-xl px-4 py-2.5 text-sm text-slate-300 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none transition-colors">
+                <option value="">All Logs</option>
+                <option value="error">Errors</option>
+                <option value="warning">Warnings</option>
+                <option value="info">Info</option>
+            </select>
+            <button @click="fetchLogs()" class="px-4 py-2.5 bg-white dark:bg-slate-800 hover:bg-gray-50 dark:hover:bg-slate-700 text-slate-300 rounded-xl text-sm font-medium flex items-center gap-2 border border-gray-200 dark:border-slate-700 shadow-sm transition-colors">
+                <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+                Refresh
+            </button>
+        </div>
+    </div>
+
+    <div class="bg-white dark:bg-slate-800/50 border border-gray-200 dark:border-slate-700 rounded-2xl overflow-hidden backdrop-blur-md">
+        <div class="h-[600px] overflow-y-auto font-mono text-sm">
+            <template x-for="(log, index) in logs" :key="index">
+                <div class="px-6 py-3 border-b border-gray-100 dark:border-slate-800/50 hover:bg-gray-50 dark:hover:bg-slate-800/30 transition-colors flex gap-4">
+                    <div class="mt-1">
+                        <span class="w-2.5 h-2.5 rounded-full inline-block shadow-sm" :class="{
+                            'bg-danger-500 shadow-danger-500/50': log.type === 'error',
+                            'bg-warning-500 shadow-warning-500/50': log.type === 'warning',
+                            'bg-blue-500 shadow-blue-500/50': log.type === 'info',
+                            'bg-success-500 shadow-success-500/50': log.type === 'success'
+                        }"></span>
+                    </div>
+                    <div class="flex-1">
+                        <div class="flex items-center gap-3 mb-1">
+                            <span class="text-xs text-slate-500" x-text="new Date(log.timestamp).toLocaleString()"></span>
+                            <span class="text-xs font-semibold px-2 py-0.5 rounded bg-gray-100 dark:bg-slate-800 text-slate-300" x-text="log.source"></span>
+                        </div>
+                        <p class="text-slate-300 leading-relaxed" x-text="log.message"></p>
+                    </div>
+                </div>
+            </template>
+            <template x-if="logs.length === 0">
+                <div class="flex flex-col items-center justify-center h-full text-slate-500">
+                    <svg class="w-12 h-12 mb-4 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+                    <span>No logs matching your criteria.</span>
+                </div>
+            </template>
+        </div>
+    </div>
+</div>
+
+<script>
+    document.addEventListener('alpine:init', () => {
+        Alpine.data('logsApp', () => ({
+            logs: [],
+            logFilter: '',
+            init() {
+                this.fetchLogs();
+            },
+            async fetchLogs() {
+                try {
+                    const res = await fetch(`/api/management/logs?filter=${this.logFilter}`);
+                    if(res.ok) this.logs = await res.json();
+                } catch(e) { console.error(e); }
+            }
+        }));
+    });
+</script>

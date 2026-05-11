@@ -1,38 +1,61 @@
 from django.shortcuts import render, redirect
 from django.conf import settings
-from django.http import JsonResponse
+from django.http import JsonResponse, HttpResponseForbidden
+from django.contrib.auth.decorators import login_required
+from django.views.decorators.http import require_http_methods
+from django.views.decorators.csrf import csrf_exempt, csrf_protect
+from django.contrib.auth import logout as django_logout
 import os
 
-INSTALLED_FLAG = '/app/config/.installed'
+INSTALLED_FLAG = os.path.join(settings.BASE_DIR, 'config', '.installed')
+
 
 def is_installed():
     """
-    Check installation status from multiple sources:
-    1. /app/config/.installed flag file (persists across redeploys)
-    2. SystemConfig database (primary source)
-    3. DATABASE_URL env variable (means PostgreSQL is configured)
-    4. .env INSTALLED variable (fallback/backup)
-    This ensures the system doesn't loop to setup after redeploy.
+    Check installation status:
+    Primary source: SystemConfig database (highest truth)
+    Secondary: .installed flag file
     """
-    if os.path.exists(INSTALLED_FLAG):
-        return True
-
     try:
         from saas.models import SystemConfig
         config = SystemConfig.objects.first()
-        if config and config.is_installed:
-            return True
+        if config:
+            return config.is_installed
     except Exception:
         pass
 
-    if os.getenv('DATABASE_URL'):
-        return True
-
-    env_installed = os.getenv('INSTALLED', '').lower()
-    if env_installed in ('true', '1', 'yes'):
+    if os.path.exists(INSTALLED_FLAG):
         return True
 
     return False
+
+
+def require_installation(view_func):
+    """Decorator that redirects to setup if system is not installed."""
+    def wrapper(request, *args, **kwargs):
+        if not is_installed():
+            return redirect('setup')
+        return view_func(request, *args, **kwargs)
+    return wrapper
+
+
+def require_session(view_func):
+    """Decorator that checks if user has valid session."""
+    def wrapper(request, *args, **kwargs):
+        if not request.session.get('is_logged_in'):
+            return redirect('login')
+        return view_func(request, *args, **kwargs)
+    return wrapper
+
+
+def require_full_access(view_func):
+    """Decorator that checks if user has FULL role."""
+    def wrapper(request, *args, **kwargs):
+        if request.session.get('role') != 'FULL':
+            return redirect('mail_panel')
+        return view_func(request, *args, **kwargs)
+    return wrapper
+
 
 def get_jir_key():
     try:
@@ -42,7 +65,8 @@ def get_jir_key():
             return config.jir_local_key
     except Exception:
         pass
-    return 'JirCode_Alpha_2026_Secure_Key_v1'
+    return getattr(settings, 'JIR_LOCAL_KEY', 'JirCode_Alpha_2026_Secure_Key_v1')
+
 
 def get_instance_info():
     try:
@@ -57,9 +81,12 @@ def get_instance_info():
         pass
     return {'instance_id': 'N/A', 'tier': 'FREE'}
 
+
 def dashboard(request):
     if not is_installed():
         return redirect('setup')
+    if not request.session.get('is_logged_in'):
+        return redirect('login')
 
     instance_info = get_instance_info()
     return render(request, 'master_panel.html', {
@@ -68,21 +95,33 @@ def dashboard(request):
         'tier': instance_info['tier'],
     })
 
+
 def setup(request):
     if is_installed():
         return redirect('dashboard')
     return render(request, 'setup.html')
 
+
 def login(request):
     if not is_installed():
         return redirect('setup')
+
+    if request.session.get('is_logged_in'):
+        role = request.session.get('role')
+        if role == 'FULL':
+            return redirect('master_panel')
+        return redirect('mail_panel')
+
     return render(request, 'login.html')
 
+
+@require_http_methods(["GET"])
 def master_panel(request):
     """Admin Panel - System Specs, Domain Control, User Logs, Backup"""
     if not is_installed():
         return redirect('setup')
-
+    if not request.session.get('is_logged_in'):
+        return redirect('login')
     if request.session.get('role') != 'FULL':
         return redirect('mail_panel')
 
@@ -93,16 +132,23 @@ def master_panel(request):
         'tier': instance_info['tier'],
     })
 
+
+@require_http_methods(["GET"])
 def mail_panel(request):
     """User Panel - Gmail style 3-column"""
     if not is_installed():
         return redirect('setup')
+    if not request.session.get('is_logged_in'):
+        return redirect('login')
 
     email = request.session.get('email', 'user@example.com')
     return render(request, 'mail_panel.html', {
         'email': email,
     })
 
+
+@require_http_methods(["POST"])
+@csrf_exempt
 def login_success(request):
     """
     Login sonrası role bazlı yönlendirme.
@@ -110,9 +156,16 @@ def login_success(request):
     Diğerleri = Mail Panel (User)
     """
     import json
-    data = json.loads(request.body)
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({'status': 'error', 'message': 'Invalid JSON', 'redirect_url': None})
+
     email = data.get('email')
     password = data.get('password')
+
+    if not email or not password:
+        return JsonResponse({'status': 'error', 'message': 'Email and password required', 'redirect_url': None})
 
     try:
         import bcrypt
@@ -127,6 +180,8 @@ def login_success(request):
 
         if not account.is_active:
             return JsonResponse({'status': 'error', 'message': 'Account inactive', 'redirect_url': None})
+
+        request.session.flush()
 
         request.session['email'] = account.email
         request.session['role'] = account.role
@@ -153,11 +208,18 @@ def login_success(request):
         })
 
     except Exception as e:
+        import traceback
         return JsonResponse({'status': 'error', 'message': str(e), 'redirect_url': None})
 
 
+@require_http_methods(["GET", "POST"])
 def logout_view(request):
+    django_logout(request)
     request.session.flush()
+
     response = redirect('login')
-    response['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+    response['Cache-Control'] = 'no-cache, no-store, must-revalidate, no-transform'
+    response['Pragma'] = 'no-cache'
+    response['Expires'] = '0'
+    response['X-Accel-Buffering'] = 'no'
     return response

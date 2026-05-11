@@ -4,20 +4,18 @@ Django settings for Jîr-Mail project.
 Single Source of Truth: SystemConfig model (veritabanı)
 """
 
+import dotenv
 from pathlib import Path
 import os
 
 BASE_DIR = Path(__file__).resolve().parent.parent
+dotenv.load_dotenv(BASE_DIR / '.env')
 
 SECRET_KEY = os.getenv('SECRET_KEY', 'django-insecure-r%36n))g&hrl-di8^5$ni9(j5y@ovwju!(1q)ql*^%#9emwh_w')
 
 DEBUG = os.getenv('DEBUG', 'False').lower() in ('true', '1', 'yes')
 
 ALLOWED_HOSTS = ['*']
-
-if DEBUG:
-    import dotenv
-    dotenv.load_dotenv(BASE_DIR / '.env')
 
 def _get_installation_status():
     """
@@ -133,6 +131,8 @@ WSGI_APPLICATION = 'config.wsgi.application'
 import tempfile
 import os
 
+DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
 _db_config = None
 
 def _get_db_path():
@@ -209,6 +209,7 @@ USE_I18N = True
 USE_TZ = True
 
 STATIC_URL = 'static/'
+STATICFILES_DIRS = [BASE_DIR / 'static']
 STATIC_ROOT = BASE_DIR / 'staticfiles'
 
 def get_jir_path(path_type='mail_data'):
