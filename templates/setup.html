@@ -201,10 +201,15 @@
                     </div>
 
                     <div x-show="dbType === 'postgresql'" class="space-y-4 mt-4">
+                        <!-- Bilgi kutusu -->
+                        <div class="bg-blue-500/10 border border-blue-500/20 rounded-xl p-3 text-xs text-blue-400">
+                            <strong>Docker kullanıyorsanız:</strong> Host alanına <code class="bg-blue-500/20 px-1 rounded">postgres</code> yazın.<br>
+                            <strong>Uzak sunucu kullanıyorsanız:</strong> Sunucunun IP adresini veya hostname'ini yazın.
+                        </div>
                         <div class="grid grid-cols-2 gap-4">
                             <div>
                                 <label for="db-host" class="block text-sm text-slate-400 mb-1">Host</label>
-                                <input id="db-host" type="text" x-model="dbHost" placeholder="localhost" class="input">
+                                <input id="db-host" type="text" x-model="dbHost" placeholder="postgres veya IP adresi" class="input">
                             </div>
                             <div>
                                 <label for="db-port" class="block text-sm text-slate-400 mb-1">Port</label>
@@ -414,7 +419,7 @@ function setupWizard() {
         instanceId: '',
         jirKey: '',
         dbType: 'postgresql',
-        dbHost: 'localhost',
+        dbHost: window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' ? 'localhost' : 'postgres',
         dbPort: '5432',
         dbName: 'jir_mail_prod',
         dbUser: 'postgres',
