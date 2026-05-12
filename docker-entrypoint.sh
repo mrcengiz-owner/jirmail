@@ -4,14 +4,12 @@ set -e
 CONFIG_FILE="/app/config/db_config.json"
 INSTALLED_FLAG="/app/config/.installed"
 
+# DB config varsa yükle
 if [ -f "$CONFIG_FILE" ]; then
     echo "=== Loading persisted database config ==="
     python manage.py shell << 'EOF'
 import json
-import django
-django.setup()
 from django.conf import settings
-
 with open('/app/config/db_config.json') as f:
     db_conf = json.load(f)
     settings.DATABASES['default'] = db_conf
@@ -20,17 +18,20 @@ EOF
 fi
 
 echo "=== Running migrations ==="
+python manage.py makemigrations --noinput 2>/dev/null || true
 python manage.py migrate --noinput
 
+echo "=== Collecting static files ==="
+mkdir -p /app/staticfiles
+python manage.py collectstatic --noinput --clear
+
+# Kurulum durumunu kontrol et
 if [ -f "$INSTALLED_FLAG" ]; then
     echo "✓ System already installed (cached flag found)"
 else
     echo "=== Checking database installation status ==="
     python manage.py shell << 'EOF'
-import django
-django.setup()
 from saas.models import SystemConfig
-
 config = SystemConfig.objects.first()
 if config and config.is_installed:
     print(f"✓ System already installed (Instance: {config.instance_id})")
@@ -41,13 +42,5 @@ else:
 EOF
 fi
 
-echo "=== Collecting static files ==="
-mkdir -p /app/staticfiles
-python manage.py collectstatic --noinput --clear
-# docker-entrypoint.sh içeriği
-python manage.py migrate --noinput
-python manage.py collectstatic --noinput
-# Eğer ilk kurulumsa admin hesabı oluştur
-python manage.py setup_system_defaults
-
+echo "=== Starting application ==="
 exec "$@"
