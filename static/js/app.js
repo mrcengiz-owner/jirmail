@@ -553,22 +553,36 @@
                 composeBody: '',
                 composeType: 'new',
                 sendingMail: false,
+                loadingMails: false,
 
                 init: function() {
-                    this.mails = [
-                        {
-                            id: 1,
-                            from: 'system@jircode.com',
-                            subject: 'Welcome to Jîr-Mail',
-                            preview: 'Your mail server is up and running successfully.',
-                            date: new Date().toISOString(),
-                            body: '<h1>Welcome!</h1><p>Your mail server has been successfully provisioned.</p>',
-                            unread: true,
-                            folder: 'inbox',
-                            starred: false
-                        }
-                    ];
-                    this.updateUnread();
+                    this.fetchMails();
+                },
+
+                fetchMails: async function() {
+                    this.loadingMails = true;
+                    try {
+                        // IMAP entegrasyonu hazır olduğunda gerçek endpoint kullanılacak.
+                        // Şimdilik hoş geldiniz mesajı gösteriyoruz.
+                        this.mails = [
+                            {
+                                id: 1,
+                                from: 'system@jircode.com',
+                                subject: 'Jîr-Mail\'e Hoş Geldiniz',
+                                preview: 'Mail sunucunuz başarıyla yapılandırıldı.',
+                                date: new Date().toISOString(),
+                                body: '<h2>Hoş Geldiniz!</h2><p>Mail sunucunuz başarıyla yapılandırıldı ve kullanıma hazır.</p>',
+                                unread: true,
+                                folder: 'inbox',
+                                starred: false
+                            }
+                        ];
+                        this.updateUnread();
+                    } catch(e) {
+                        console.error('Mail fetch error:', e);
+                    } finally {
+                        this.loadingMails = false;
+                    }
                 },
 
                 get filteredMails() {
@@ -606,26 +620,22 @@
                     return date.toLocaleString('tr-TR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
                 },
 
-                formatBody: function(html) {
-                    return html;
-                },
+                formatBody: function(html) { return html; },
 
-                toggleStar: function(mail) {
-                    mail.starred = !mail.starred;
-                },
+                toggleStar: function(mail) { mail.starred = !mail.starred; },
 
                 deleteMail: function(mail) {
                     mail.folder = 'trash';
                     if (this.selectedMail && this.selectedMail.id === mail.id) {
                         this.selectedMail = null;
                     }
-                    window.showToast('Message moved to trash.', 'info');
+                    window.showToast('Mesaj çöp kutusuna taşındı.', 'info');
                 },
 
                 replyTo: function(mail) {
                     this.composeTo = mail.from;
                     this.composeSubject = 'Re: ' + mail.subject;
-                    this.composeBody = '\n\n--- Original Message ---\nFrom: ' + mail.from + '\nDate: ' + this.formatDateTime(mail.date) + '\n\n' + mail.body;
+                    this.composeBody = '\n\n--- Orijinal Mesaj ---\nGönderen: ' + mail.from + '\nTarih: ' + this.formatDateTime(mail.date) + '\n\n' + mail.body;
                     this.composeType = 'reply';
                     this.selectedMail = null;
                     this.showCompose = true;
@@ -634,7 +644,7 @@
                 forwardMail: function(mail) {
                     this.composeTo = '';
                     this.composeSubject = 'Fwd: ' + mail.subject;
-                    this.composeBody = '\n\n--- Forwarded Message ---\nFrom: ' + mail.from + '\nDate: ' + this.formatDateTime(mail.date) + '\n\n' + mail.body;
+                    this.composeBody = '\n\n--- İletilen Mesaj ---\nGönderen: ' + mail.from + '\nTarih: ' + this.formatDateTime(mail.date) + '\n\n' + mail.body;
                     this.composeType = 'forward';
                     this.selectedMail = null;
                     this.showCompose = true;
@@ -648,22 +658,51 @@
                 },
 
                 saveDraft: function() {
-                    window.showToast('Draft saved successfully.', 'success');
+                    window.showToast('Taslak kaydedildi.', 'success');
                     this.closeCompose();
                 },
 
-                sendMail: function() {
+                sendMail: async function() {
                     if (!this.composeTo || !this.composeSubject) {
-                        window.showToast('Please fill in recipient and subject.', 'warning');
+                        window.showToast('Alıcı ve konu alanları zorunludur.', 'warning');
                         return;
                     }
-                    var self = this;
                     this.sendingMail = true;
-                    setTimeout(function() {
-                        self.sendingMail = false;
-                        window.showToast('Message sent successfully!', 'success');
-                        self.closeCompose();
-                    }, 1000);
+                    try {
+                        var csrfToken = document.querySelector('meta[name="csrf-token"]') ?
+                            document.querySelector('meta[name="csrf-token"]').content : '';
+                        var res = await fetch('/api/core/send-mail', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'X-CSRFToken': csrfToken
+                            },
+                            body: JSON.stringify({
+                                to: this.composeTo,
+                                subject: this.composeSubject,
+                                body: this.composeBody
+                            })
+                        });
+                        if (res.ok) {
+                            var data = await res.json();
+                            if (data.status === 'success') {
+                                window.showToast('Mesaj başarıyla gönderildi.', 'success');
+                                this.closeCompose();
+                            } else {
+                                window.showToast(data.message || 'Gönderme başarısız.', 'error');
+                            }
+                        } else if (res.status === 404) {
+                            // Endpoint henüz implement edilmedi
+                            window.showToast('Mail gönderme özelliği yakında aktif olacak.', 'info');
+                            this.closeCompose();
+                        } else {
+                            window.showToast('Gönderme sırasında hata oluştu.', 'error');
+                        }
+                    } catch(e) {
+                        window.showToast('Bağlantı hatası. Lütfen tekrar deneyin.', 'error');
+                    } finally {
+                        this.sendingMail = false;
+                    }
                 }
             };
         });

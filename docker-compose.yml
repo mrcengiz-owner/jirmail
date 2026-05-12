@@ -6,7 +6,6 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: jir_django
-    user: "999:999"
     restart: unless-stopped
     entrypoint: ["./docker-entrypoint.sh"]
     command: ["gunicorn", "--bind", "0.0.0.0:8000", "--workers", "4", "--timeout", "60", "config.wsgi:application"]
@@ -24,6 +23,8 @@ services:
       - postfix_data:/etc/postfix
       - dovecot_data:/etc/dovecot
       - /var/run/docker.sock:/var/run/docker.sock
+    group_add:
+      - "docker"
     expose:
       - "8000"
     depends_on:
@@ -45,7 +46,7 @@ services:
       dockerfile: Dockerfile
     container_name: jir_celery
     restart: unless-stopped
-    command: ["celery", "-A", "jir_mail.celery", "worker", "--loglevel=info"]
+    command: ["celery", "-A", "config", "worker", "--loglevel=info", "--concurrency=2"]
     environment:
       - DATABASE_URL=${DATABASE_URL}
       - JIR_LOCAL_KEY=${JIR_LOCAL_KEY}
@@ -68,8 +69,9 @@ services:
       dockerfile: Dockerfile
     container_name: jir_celery_beat
     restart: unless-stopped
-    command: ["celery", "-A", "jir_mail.celery", "beat", "--loglevel=info"]
+    command: ["celery", "-A", "config", "beat", "--loglevel=info", "--scheduler=django_celery_beat.schedulers:DatabaseScheduler"]
     environment:
+      - DATABASE_URL=${DATABASE_URL}
       - CELERY_BROKER_URL=redis://redis:6379/0
       - CELERY_RESULT_BACKEND=redis://redis:6379/0
     depends_on:

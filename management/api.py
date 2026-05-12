@@ -651,6 +651,54 @@ class MailAccountSchema(Schema):
     password: str
 
 
+@router.post("/restart-container/{container_name}", summary="Container Yeniden Başlat")
+def restart_container(request, container_name: str):
+    """Belirtilen Docker container'ını yeniden başlatır."""
+    # Sadece izin verilen container'lar yeniden başlatılabilir
+    allowed_containers = [
+        'jir_django', 'jir_postgres', 'jir_postfix',
+        'jir_dovecot', 'jir_redis', 'jir_celery', 'jir_celery_beat'
+    ]
+
+    if container_name not in allowed_containers:
+        return {"status": "error", "message": f"Container '{container_name}' izin listesinde değil."}
+
+    socket_paths = ['/var/run/docker.sock', '/run/docker.sock']
+    client = None
+
+    for socket_path in socket_paths:
+        if not os.path.exists(socket_path):
+            continue
+        try:
+            import docker
+            client = docker.DockerClient(base_url=f'unix://{socket_path}')
+            client.ping()
+            break
+        except Exception:
+            client = None
+
+    if not client:
+        return {"status": "error", "message": "Docker socket'e bağlanılamadı."}
+
+    try:
+        container = client.containers.get(container_name)
+        container.restart(timeout=10)
+        client.close()
+        return {
+            "status": "success",
+            "message": f"'{container_name}' container'ı yeniden başlatıldı.",
+            "container": container_name
+        }
+    except Exception as e:
+        return {"status": "error", "message": f"Yeniden başlatma hatası: {str(e)}"}
+
+
+
+    username: str
+    domain: str
+    password: str
+
+
 def update_postfix_vmail(email, action="add"):
     vmail_path = getattr(settings, 'POSTFIX_VMAIL_PATH', '/etc/postfix/vmail_accounts')
     try:
