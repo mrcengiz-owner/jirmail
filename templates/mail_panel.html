@@ -1,5 +1,9 @@
 {% extends "base.html" %}
 
+{% block toast %}
+{% include "partials/toast.html" %}
+{% endblock %}
+
 {% block content %}
 <div class="mail-layout" x-data="mailApp()">
 

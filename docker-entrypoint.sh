@@ -42,6 +42,7 @@ EOF
 fi
 
 echo "=== Collecting static files ==="
+mkdir -p /app/staticfiles
 python manage.py collectstatic --noinput --clear
 
 exec "$@"

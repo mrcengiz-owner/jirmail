@@ -11,6 +11,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
+RUN mkdir -p /app/staticfiles && chmod -R 755 /app/static /app/staticfiles
+
 RUN chmod +x manage.py
 RUN chmod +x docker-entrypoint.sh
 
