@@ -165,3 +165,9 @@ volumes:
 networks:
   jir_network:
     driver: bridge
+docker-proxy:
+  image: tecnativa/docker-socket-proxy
+  volumes:
+    - /var/run/docker.sock:/var/run/docker.sock:ro # Sadece okuma yetkisi (Güvenli)
+  environment:
+    - CONTAINERS=1 # Sadece konteyner listesini görmeye izin ver

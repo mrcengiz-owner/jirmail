@@ -16,6 +16,7 @@ SECRET_KEY = os.getenv('SECRET_KEY', 'django-insecure-r%36n))g&hrl-di8^5$ni9(j5y
 DEBUG = os.getenv('DEBUG', 'False').lower() in ('true', '1', 'yes')
 
 ALLOWED_HOSTS = ['*']
+REDIS_HOST = os.getenv('REDIS_HOST', 'redis' if IN_DOCKER else '127.0.0.1')
 
 def _get_installation_status():
     """
