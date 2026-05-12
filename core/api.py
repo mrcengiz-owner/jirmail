@@ -94,10 +94,21 @@ def get_api_key():
     return getattr(settings, 'JIR_LOCAL_KEY', None)
 
 
+def check_auth(request, key: str = None) -> bool:
+    """Key veya session ile yetki kontrolü."""
+    # Session'dan giriş yapmış kullanıcı her zaman yetkili
+    if hasattr(request, 'session') and request.session.get('is_logged_in'):
+        return True
+    # Key kontrolü
+    expected = get_api_key()
+    if expected and key == expected:
+        return True
+    return False
+
+
 @router.get("/list-accounts", summary="Tüm Mail Hesaplarını Listele")
-def list_mail_accounts(request, key: str):
-    expected_key = get_api_key()
-    if key != expected_key:
+def list_mail_accounts(request, key: str = None):
+    if not check_auth(request, key):
         return {"status": "error", "message": "Yetkisiz erişim!"}
 
     accounts = MailAccount.objects.select_related('domain').all()
@@ -128,9 +139,8 @@ def list_mail_accounts(request, key: str):
 
 
 @router.patch("/toggle-account/{email}", summary="Hesabı Aktif/Pasif Yap")
-def toggle_account(request, email: str, key: str):
-    expected_key = get_api_key()
-    if key != expected_key:
+def toggle_account(request, email: str, key: str = None):
+    if not check_auth(request, key):
         return {"status": "error", "message": "Yetkisiz erişim!"}
 
     try:
@@ -145,9 +155,8 @@ def toggle_account(request, email: str, key: str):
 
 
 @router.patch("/update-quota/{email}", summary="Hesap Kota Güncelle")
-def update_quota(request, email: str, key: str, data: QuotaUpdateSchema):
-    expected_key = get_api_key()
-    if key != expected_key:
+def update_quota(request, email: str, key: str = None, data: QuotaUpdateSchema = None):
+    if not check_auth(request, key):
         return {"status": "error", "message": "Yetkisiz erişim!"}
 
     try:
@@ -163,9 +172,8 @@ def update_quota(request, email: str, key: str, data: QuotaUpdateSchema):
 
 
 @router.patch("/update-role/{email}", summary="Hesap Rol Güncelle")
-def update_role(request, email: str, key: str, data: RoleUpdateSchema):
-    expected_key = get_api_key()
-    if key != expected_key:
+def update_role(request, email: str, key: str = None, data: RoleUpdateSchema = None):
+    if not check_auth(request, key):
         return {"status": "error", "message": "Yetkisiz erişim!"}
 
     valid_roles = [choice[0] for choice in MailRole.choices]
@@ -183,9 +191,8 @@ def update_role(request, email: str, key: str, data: RoleUpdateSchema):
 
 
 @router.patch("/update-settings/{email}", summary="Hesap Email Ayarlarını Güncelle")
-def update_email_settings(request, email: str, key: str, data: EmailSettingsSchema):
-    expected_key = get_api_key()
-    if key != expected_key:
+def update_email_settings(request, email: str, key: str = None, data: EmailSettingsSchema = None):
+    if not check_auth(request, key):
         return {"status": "error", "message": "Yetkisiz erişim!"}
 
     try:
@@ -218,9 +225,8 @@ def update_email_settings(request, email: str, key: str, data: EmailSettingsSche
 
 
 @router.get("/account-settings/{email}", summary="Hesap Email Ayarlarını Getir")
-def get_email_settings(request, email: str, key: str):
-    expected_key = get_api_key()
-    if key != expected_key:
+def get_email_settings(request, email: str, key: str = None):
+    if not check_auth(request, key):
         return {"status": "error", "message": "Yetkisiz erişim!"}
 
     try:
@@ -244,9 +250,8 @@ def get_email_settings(request, email: str, key: str):
 
 
 @router.patch("/update-account/{email}", summary="Hesap Güncelle")
-def update_account(request, email: str, key: str, data: AccountUpdateSchema):
-    expected_key = get_api_key()
-    if key != expected_key:
+def update_account(request, email: str, key: str = None, data: AccountUpdateSchema = None):
+    if not check_auth(request, key):
         return {"status": "error", "message": "Yetkisiz erişim!"}
 
     try:
@@ -280,9 +285,8 @@ def update_account(request, email: str, key: str, data: AccountUpdateSchema):
 
 
 @router.delete("/delete-account/{email}", summary="Hesap Sil")
-def delete_account(request, email: str, key: str):
-    expected_key = get_api_key()
-    if key != expected_key:
+def delete_account(request, email: str, key: str = None):
+    if not check_auth(request, key):
         return {"status": "error", "message": "Yetkisiz erişim!"}
 
     try:
@@ -296,9 +300,8 @@ def delete_account(request, email: str, key: str):
 
 
 @router.get("/account-details/{email}", summary="Hesap Detayları")
-def get_account_details(request, email: str, key: str):
-    expected_key = get_api_key()
-    if key != expected_key:
+def get_account_details(request, email: str, key: str = None):
+    if not check_auth(request, key):
         return {"status": "error", "message": "Yetkisiz erişim!"}
 
     try:
@@ -360,9 +363,8 @@ def create_mail_account(request, data: MailAccountSchema):
 
 
 @router.post("/generate-dns-records/{domain}", summary="DNS Kayıtları Oluştur")
-def generate_dns_records(request, domain: str, key: str):
-    expected_key = get_api_key()
-    if key != expected_key:
+def generate_dns_records(request, domain: str, key: str = None):
+    if not check_auth(request, key):
         return {"status": "error", "message": "Yetkisiz erişim!"}
 
     try:
@@ -397,9 +399,8 @@ def generate_dns_records(request, domain: str, key: str):
 
 
 @router.get("/list-domains", summary="Domain Listesi")
-def list_domains(request, key: str):
-    expected_key = get_api_key()
-    if key != expected_key:
+def list_domains(request, key: str = None):
+    if not check_auth(request, key):
         return {"status": "error", "message": "Yetkisiz erişim!"}
 
     domains = MailDomain.objects.all()
@@ -424,9 +425,8 @@ def list_domains(request, key: str):
 
 
 @router.post("/verify-domain/{domain}", summary="Domain Doğrulama")
-def verify_domain(request, domain: str, key: str):
-    expected_key = get_api_key()
-    if key != expected_key:
+def verify_domain(request, domain: str, key: str = None):
+    if not check_auth(request, key):
         return {"status": "error", "message": "Yetkisiz erişim!"}
 
     try:
@@ -470,9 +470,8 @@ class DomainDetailsSchema(Schema):
 
 
 @router.post("/add-domain", summary="Yeni Domain Ekle")
-def add_domain(request, data: AddDomainSchema, key: str):
-    expected_key = get_api_key()
-    if key != expected_key:
+def add_domain(request, data: AddDomainSchema, key: str = None):
+    if not check_auth(request, key):
         return {"status": "error", "message": "Yetkisiz erişim!"}
 
     try:
@@ -501,9 +500,8 @@ def add_domain(request, data: AddDomainSchema, key: str):
 
 
 @router.get("/domain-details/{domain}", summary="Domain Detayları")
-def get_domain_details(request, domain: str, key: str):
-    expected_key = get_api_key()
-    if key != expected_key:
+def get_domain_details(request, domain: str, key: str = None):
+    if not check_auth(request, key):
         return {"status": "error", "message": "Yetkisiz erişim!"}
 
     try:
@@ -536,9 +534,8 @@ def get_domain_details(request, domain: str, key: str):
 
 
 @router.delete("/delete-domain/{domain}", summary="Domain Sil")
-def delete_domain(request, domain: str, key: str):
-    expected_key = get_api_key()
-    if key != expected_key:
+def delete_domain(request, domain: str, key: str = None):
+    if not check_auth(request, key):
         return {"status": "error", "message": "Yetkisiz erişim!"}
 
     try:
@@ -559,9 +556,8 @@ def delete_domain(request, domain: str, key: str):
 
 
 @router.patch("/toggle-domain/{domain}", summary="Domain Aktif/Pasif")
-def toggle_domain(request, domain: str, key: str):
-    expected_key = get_api_key()
-    if key != expected_key:
+def toggle_domain(request, domain: str, key: str = None):
+    if not check_auth(request, key):
         return {"status": "error", "message": "Yetkisiz erişim!"}
 
     try:

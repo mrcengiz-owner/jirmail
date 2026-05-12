@@ -108,9 +108,14 @@
                 <template x-for="service in services" :key="service.name">
                     <div class="flex items-center justify-between p-3 bg-slate-900/50 rounded-xl border border-slate-800">
                         <span class="text-sm font-medium text-slate-300" x-text="service.name"></span>
-                        <span class="badge"
-                              :class="service.status === 'running' ? 'badge-success' : 'badge-danger'"
-                              x-text="service.status"></span>
+                        <span class="px-2 py-0.5 rounded-full text-xs font-semibold border"
+                              :class="{
+                                  'bg-success-500/10 text-success-400 border-success-500/20': service.status === 'running',
+                                  'bg-danger-500/10 text-danger-400 border-danger-500/20': service.status === 'stopped',
+                                  'bg-warning-500/10 text-warning-400 border-warning-500/20': service.status === 'checking' || service.status === 'unknown'
+                              }"
+                              x-text="service.status === 'running' ? '● online' : service.status === 'stopped' ? '● offline' : '○ checking'">
+                        </span>
                     </div>
                 </template>
             </div>

@@ -1,11 +1,101 @@
 <!-- templates/partials/accounts.html -->
-<div class="p-8 fade-in htmx-fade" id="accounts-content">
+<div class="p-8 fade-in htmx-fade" id="accounts-content" x-data="{
+    accounts: [],
+    searchQuery: '',
+    showAddModal: false,
+    adding: false,
+    addError: null,
+    newAccount: { username: '', domain: '', password: '' },
+    domains: {{ domains_json|default:'[]'|safe }},
+    get filteredAccounts() {
+        if (!this.searchQuery) return this.accounts;
+        var q = this.searchQuery.toLowerCase();
+        return this.accounts.filter(function(a) {
+            return a.email.toLowerCase().indexOf(q) !== -1 || (a.username && a.username.toLowerCase().indexOf(q) !== -1);
+        });
+    },
+    getKey() { return window.JIR_KEY || '{{ JIR_LOCAL_KEY }}'; },
+    async init() {
+        await this.fetchAccounts();
+        if (this.domains.length === 0) await this.fetchDomains();
+        if (this.domains.length > 0 && !this.newAccount.domain) {
+            this.newAccount.domain = this.domains[0];
+        }
+    },
+    async fetchAccounts() {
+        try {
+            var res = await fetch('/api/core/list-accounts?key=' + this.getKey());
+            if (res.ok) { var d = await res.json(); this.accounts = d.status === 'success' ? (d.accounts || []) : []; }
+        } catch(e) { console.error(e); }
+    },
+    async fetchDomains() {
+        try {
+            var res = await fetch('/api/core/list-domains?key=' + this.getKey());
+            if (res.ok) {
+                var d = await res.json();
+                if (d.status === 'success') {
+                    this.domains = (d.domains || []).map(function(dom) { return dom.name; });
+                }
+            }
+        } catch(e) { console.error(e); }
+    },
+    openAddModal() {
+        this.newAccount = { username: '', domain: this.domains.length ? this.domains[0] : '', password: '' };
+        this.addError = null;
+        this.showAddModal = true;
+        this.$nextTick(function() { var el = document.getElementById('acc-username'); if(el) el.focus(); });
+    },
+    async addAccount() {
+        if (!this.newAccount.username || !this.newAccount.password || !this.newAccount.domain) {
+            this.addError = 'Tüm alanlar zorunludur.'; return;
+        }
+        if (this.newAccount.password.length < 8) { this.addError = 'Şifre en az 8 karakter olmalıdır.'; return; }
+        this.adding = true; this.addError = null;
+        try {
+            var csrf = (document.querySelector('meta[name=csrf-token]') || {}).content || '';
+            var res = await fetch('/api/core/create-account', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf },
+                body: JSON.stringify({ username: this.newAccount.username, domain: this.newAccount.domain, password: this.newAccount.password })
+            });
+            var d = await res.json();
+            if (d.status === 'success') {
+                window.showToast(d.email + ' hesabı oluşturuldu.', 'success');
+                this.showAddModal = false;
+                await this.fetchAccounts();
+            } else { this.addError = d.message || 'Hesap oluşturulamadı.'; }
+        } catch(e) { this.addError = 'Bağlantı hatası.'; } finally { this.adding = false; }
+    },
+    async toggleAccount(email) {
+        try {
+            var csrf = (document.querySelector('meta[name=csrf-token]') || {}).content || '';
+            var res = await fetch('/api/core/toggle-account/' + encodeURIComponent(email) + '?key=' + this.getKey(), { method: 'PATCH', headers: { 'X-CSRFToken': csrf } });
+            var d = await res.json();
+            if (d.status === 'success') { await this.fetchAccounts(); window.showToast('Hesap güncellendi.', 'success'); }
+            else { window.showToast(d.message || 'Hata.', 'error'); }
+        } catch(e) { window.showToast('Bağlantı hatası.', 'error'); }
+    },
+    async deleteAccount(account) {
+        if (!confirm(account.email + ' silinsin mi?')) return;
+        try {
+            var csrf = (document.querySelector('meta[name=csrf-token]') || {}).content || '';
+            var res = await fetch('/api/core/delete-account/' + encodeURIComponent(account.email) + '?key=' + this.getKey(), { method: 'DELETE', headers: { 'X-CSRFToken': csrf } });
+            var d = await res.json();
+            if (d.status === 'success') { window.showToast('Hesap silindi.', 'success'); await this.fetchAccounts(); }
+            else { window.showToast(d.message || 'Silinemedi.', 'error'); }
+        } catch(e) { window.showToast('Bağlantı hatası.', 'error'); }
+    },
+    getRoleLabel(role) {
+        var labels = { 'FULL': 'Full Access', 'SEND': 'Send Only', 'RECV': 'Receive Only', 'BLOCK': 'Internal' };
+        return labels[role] || role;
+    }
+}">
     
     <div class="flex items-center justify-between mb-8">
         <div>
-            <h2 class="text-3xl font-bold tracking-tight text-white">Mail Accounts</h2>
-            <p class="text-slate-400 mt-1">
-                <span class="text-primary-400 font-semibold" x-text="accounts.length">0</span> total mail accounts registered
+            <h2 class="text-3xl font-bold tracking-tight text-gray-900 dark:text-white">Mail Accounts</h2>
+            <p class="text-gray-500 dark:text-slate-400 mt-1">
+                <span class="text-primary-500 font-semibold" x-text="accounts.length">0</span> total mail accounts registered
             </p>
         </div>
         <div class="flex items-center gap-3">
@@ -13,8 +103,8 @@
                    x-model="searchQuery"
                    aria-label="Hesap ara"
                    placeholder="Search accounts..."
-                   class="px-4 py-2 bg-white dark:bg-slate-800/50 border border-gray-200 dark:border-slate-700 rounded-xl text-sm text-slate-300 placeholder-slate-500 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none transition-colors" />
-            <button @click="showAddModal = true" class="px-5 py-2.5 bg-primary-600 hover:bg-primary-500 text-white rounded-xl text-sm font-medium flex items-center gap-2 shadow-lg shadow-primary-500/20 transition-all active:scale-95">
+                   class="px-4 py-2 bg-white dark:bg-slate-800/50 border border-gray-200 dark:border-slate-700 rounded-xl text-sm text-gray-700 dark:text-slate-300 placeholder-gray-400 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none transition-colors" />
+            <button @click="openAddModal()" class="px-5 py-2.5 bg-primary-600 hover:bg-primary-500 text-white rounded-xl text-sm font-medium flex items-center gap-2 shadow-lg shadow-primary-500/20 transition-all active:scale-95">
                 <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
                 </svg>
@@ -82,18 +172,76 @@
                     </tr>
                 </template>
                 <template x-if="filteredAccounts.length === 0 && accounts.length > 0">
-                    <tr><td colspan="5" class="px-6 py-20 text-center text-slate-500">
+                    <tr><td colspan="5" class="px-6 py-20 text-center text-gray-400 dark:text-slate-500">
                         <svg class="w-12 h-12 mx-auto mb-4 opacity-30" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
                         Sonuç bulunamadı.
                     </td></tr>
                 </template>
                 <template x-if="accounts.length === 0">
-                    <tr><td colspan="5" class="px-6 py-20 text-center text-slate-500">
+                    <tr><td colspan="5" class="px-6 py-20 text-center text-gray-400 dark:text-slate-500">
                         <svg class="w-12 h-12 mx-auto mb-4 opacity-30" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>
                         No mail accounts found.
                     </td></tr>
                 </template>
             </tbody>
         </table>
+    </div>
+
+    <!-- ADD ACCOUNT MODAL -->
+    <div x-show="showAddModal" x-cloak
+         class="fixed inset-0 z-50 flex items-center justify-center p-4"
+         @keydown.escape.window="showAddModal = false">
+        <div class="absolute inset-0 bg-black/60 backdrop-blur-sm" @click="showAddModal = false"></div>
+        <div class="relative bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded-2xl p-8 w-full max-w-md shadow-2xl" @click.stop>
+            <h3 class="text-xl font-bold text-gray-900 dark:text-white mb-6">New Mail Account</h3>
+            <form @submit.prevent="addAccount()">
+                <div class="space-y-4">
+                    <div>
+                        <label for="acc-username" class="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-2">Username</label>
+                        <input id="acc-username" type="text" x-model="newAccount.username"
+                               placeholder="john" autocomplete="off" required
+                               class="w-full bg-gray-50 dark:bg-slate-800 border border-gray-300 dark:border-slate-700 rounded-xl px-4 py-3 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 transition-all">
+                    </div>
+                    <div>
+                        <label for="acc-domain" class="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-2">Domain</label>
+                        <select id="acc-domain" x-model="newAccount.domain" required
+                                class="w-full bg-gray-50 dark:bg-slate-800 border border-gray-300 dark:border-slate-700 rounded-xl px-4 py-3 text-gray-900 dark:text-white focus:outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 transition-all">
+                            <template x-for="d in domains" :key="d">
+                                <option :value="d" x-text="d"></option>
+                            </template>
+                            <template x-if="domains.length === 0">
+                                <option value="" disabled>Önce domain ekleyin</option>
+                            </template>
+                        </select>
+                        <p class="text-xs text-gray-400 mt-1">
+                            E-posta: <span class="text-primary-500" x-text="(newAccount.username || 'username') + '@' + (newAccount.domain || 'domain.com')"></span>
+                        </p>
+                    </div>
+                    <div>
+                        <label for="acc-password" class="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-2">Password</label>
+                        <input id="acc-password" type="password" x-model="newAccount.password"
+                               placeholder="Min. 8 karakter" autocomplete="new-password" required
+                               class="w-full bg-gray-50 dark:bg-slate-800 border border-gray-300 dark:border-slate-700 rounded-xl px-4 py-3 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 transition-all">
+                    </div>
+                    <div x-show="addError" role="alert"
+                         class="bg-danger-500/10 border border-danger-500/30 rounded-xl p-3 text-danger-400 text-sm"
+                         x-text="addError"></div>
+                </div>
+                <div class="flex gap-3 mt-6">
+                    <button type="button" @click="showAddModal = false"
+                            class="flex-1 px-4 py-3 bg-gray-100 dark:bg-slate-800 hover:bg-gray-200 dark:hover:bg-slate-700 text-gray-700 dark:text-slate-300 rounded-xl font-medium transition-all">
+                        Cancel
+                    </button>
+                    <button type="submit" :disabled="adding"
+                            class="flex-1 px-4 py-3 bg-primary-600 hover:bg-primary-500 disabled:opacity-60 text-white rounded-xl font-medium transition-all flex items-center justify-center gap-2">
+                        <svg x-show="adding" class="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                        </svg>
+                        <span x-text="adding ? 'Creating...' : 'Create Account'"></span>
+                    </button>
+                </div>
+            </form>
+        </div>
     </div>
 </div>

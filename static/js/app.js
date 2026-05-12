@@ -484,33 +484,52 @@
         Alpine.data('backupApp', function() {
             return {
                 backups: [],
+                loading: false,
+                creating: false,
+                error: null,
 
                 init: function() { this.fetchBackups(); },
 
                 fetchBackups: function() {
                     var self = this;
-                    fetch('/api/backup/list')
+                    self.loading = true;
+                    fetch('/api/backup/list-backups')
                         .then(function(res) { return res.json(); })
                         .then(function(data) { self.backups = data || []; })
-                        .catch(function(e) { console.error(e); });
+                        .catch(function(e) { console.error(e); })
+                        .finally(function() { self.loading = false; });
                 },
 
                 createBackup: function() {
-                    window.showToast('Creating backup...', 'info');
-                    var csrfToken = (document.querySelector('meta[name="csrf-token"]') || {}).content || '';
                     var self = this;
-                    fetch('/api/backup/create', {
+                    self.creating = true;
+                    self.error = null;
+                    window.showToast('Yedekleme başlatılıyor...', 'info');
+                    var csrfToken = (document.querySelector('meta[name="csrf-token"]') || {}).content || '';
+                    fetch('/api/backup/create-backup', {
                         method: 'POST',
-                        headers: { 'X-CSRFToken': csrfToken }
+                        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
+                        body: JSON.stringify({
+                            backup_type: 'full',
+                            include_database: true,
+                            include_configs: true,
+                            include_emails: false
+                        })
                     })
                     .then(function(res) { return res.json(); })
                     .then(function(data) {
-                        window.showToast('Backup created successfully!', 'success');
-                        self.fetchBackups();
+                        if (data.status === 'success') {
+                            window.showToast('Yedekleme başarıyla oluşturuldu!', 'success');
+                            self.fetchBackups();
+                        } else {
+                            self.error = data.message || 'Yedekleme başarısız.';
+                            window.showToast(self.error, 'error');
+                        }
                     })
                     .catch(function(e) {
-                        window.showToast('Error creating backup', 'error');
-                    });
+                        window.showToast('Bağlantı hatası.', 'error');
+                    })
+                    .finally(function() { self.creating = false; });
                 }
             };
         });
@@ -713,10 +732,10 @@
         Alpine.data('servicesStatus', function() {
             return {
                 services: [
-                    { name: 'PostgreSQL', status: 'stopped', port: 5432 },
-                    { name: 'Postfix', status: 'stopped', port: 25 },
-                    { name: 'Dovecot', status: 'stopped', port: 993 },
-                    { name: 'Redis', status: 'stopped', port: 6379 }
+                    { name: 'Database', status: 'checking', icon: 'db' },
+                    { name: 'Postfix',  status: 'checking', icon: 'mail' },
+                    { name: 'Dovecot', status: 'checking', icon: 'inbox' },
+                    { name: 'Redis',   status: 'checking', icon: 'cache' }
                 ],
 
                 init: function() {
@@ -727,17 +746,38 @@
 
                 fetchServiceStatus: function() {
                     var self = this;
+                    // /health endpoint'i database, postfix, dovecot'u doğrudan kontrol eder
+                    fetch('/api/management/health')
+                        .then(function(res) { return res.json(); })
+                        .then(function(data) {
+                            self.services[0].status = data.database ? 'running' : 'stopped';
+                            self.services[1].status = data.postfix   ? 'running' : 'stopped';
+                            self.services[2].status = data.dovecot   ? 'running' : 'stopped';
+                        })
+                        .catch(function(e) {
+                            console.error('Health check error:', e);
+                            self.services.forEach(function(s) { s.status = 'unknown'; });
+                        });
+
+                    // Redis için ayrıca system-requirements endpoint'inden kontrol et
                     fetch('/api/management/system-requirements')
                         .then(function(res) { return res.json(); })
                         .then(function(data) {
                             if (data.services) {
-                                data.services.forEach(function(svc) {
-                                    var service = self.services.find(function(s) { return s.name === svc.name; });
-                                    if (service) service.status = svc.status;
+                                var redisSvc = data.services.find(function(s) {
+                                    return s.name && s.name.toLowerCase().includes('redis');
                                 });
+                                if (redisSvc) {
+                                    self.services[3].status = redisSvc.status;
+                                } else {
+                                    // Redis process bulunamazsa port 6379'u kontrol et
+                                    // ports_blocked listesinde 6379 yoksa çalışıyor demektir
+                                    var blocked = data.ports_blocked || [];
+                                    self.services[3].status = blocked.includes(6379) ? 'stopped' : 'running';
+                                }
                             }
                         })
-                        .catch(function(e) { console.error(e); });
+                        .catch(function(e) { /* Redis durumu bilinmiyor */ });
                 }
             };
         });

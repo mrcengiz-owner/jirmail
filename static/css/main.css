@@ -1,315 +1,64 @@
-/* Jîr-Mail Industrial Dark Theme
-   Version: 1.0.0
-   Description: Industrial Dark Glassmorphism Design System
-*/
+/*
+ * Jîr-Mail — Custom CSS
+ * Tailwind CDN utility sınıflarını tamamlayan custom stiller
+ * NOT: Bu dosya npm run build ile Tailwind utility sınıflarıyla değiştirilecek
+ */
 
-/* ==========================================================================
-   CSS CUSTOM PROPERTIES (Design Tokens)
-   ========================================================================== */
-:root {
-    /* Primary - Emerald */
-    --primary-50: #ecfdf5;
-    --primary-100: #d1fae5;
-    --primary-200: #a7f3d0;
-    --primary-300: #6ee7b7;
-    --primary-400: #34d399;
-    --primary-500: #10b981;
-    --primary-600: #059669;
-    --primary-700: #047857;
-    --primary-800: #065f46;
-    --primary-900: #064e3b;
-    --primary-950: #022c22;
-
-    /* Neutral - Slate */
-    --slate-50: #f8fafc;
-    --slate-100: #f1f5f9;
-    --slate-200: #e2e8f0;
-    --slate-300: #cbd5e1;
-    --slate-400: #94a3b8;
-    --slate-500: #64748b;
-    --slate-600: #475569;
-    --slate-700: #334155;
-    --slate-800: #1e293b;
-    --slate-900: #0f172a;
-    --slate-950: #020617;
-
-    /* Status Colors */
-    --success-500: #22c55e;
-    --success-600: #16a34a;
-    --warning-500: #f59e0b;
-    --warning-600: #d97706;
-    --danger-500: #ef4444;
-    --danger-600: #dc2626;
-    --info-500: #3b82f6;
-    --info-600: #2563eb;
-
-    /* Typography */
-    --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
-    --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
-
-    /* Shadows */
-    --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
-    --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
-    --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
-    --shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
-    --shadow-glow-primary: 0 0 20px -5px rgba(16, 185, 129, 0.3);
-    --shadow-glow-blue: 0 0 20px -5px rgba(59, 130, 246, 0.3);
-    --shadow-glow-danger: 0 0 20px -5px rgba(239, 68, 68, 0.3);
-
-    /* Borders */
-    --border-color: rgba(51, 65, 85, 0.5);
-    --border-color-light: rgba(148, 163, 184, 0.2);
-
-    /* Background */
-    --bg-primary: #020617;
-    --bg-secondary: #0f172a;
-    --bg-card: rgba(30, 41, 59, 0.5);
-    --bg-glass: rgba(15, 23, 42, 0.8);
-}
-
-/* ==========================================================================
-   RESET & BASE
-   ========================================================================== */
-*, *::before, *::after {
-    box-sizing: border-box;
-}
-
-html {
-    font-size: 16px;
-    -webkit-font-smoothing: antialiased;
-    -moz-osx-font-smoothing: grayscale;
-}
-
-body {
-    margin: 0;
-    padding: 0;
-    font-family: var(--font-sans);
-    background: var(--bg-primary);
-    color: #f8fafc;
-    line-height: 1.6;
-    min-height: 100vh;
-}
-
-/* ==========================================================================
-   SCROLLBARS (Custom)
-   ========================================================================== */
-::-webkit-scrollbar {
-    width: 6px;
-    height: 6px;
-}
-
-::-webkit-scrollbar-track {
-    background: var(--slate-900);
-}
-
-::-webkit-scrollbar-thumb {
-    background: var(--slate-700);
-    border-radius: 10px;
-}
-
-::-webkit-scrollbar-thumb:hover {
-    background: var(--slate-600);
-}
-
-/* Firefox */
-* {
-    scrollbar-width: thin;
-    scrollbar-color: var(--slate-700) var(--slate-900);
-}
-
-/* ==========================================================================
-   UTILITY CLASSES
-   ========================================================================== */
+/* x-cloak: Alpine.js başlamadan önce elementleri gizle */
 [x-cloak] { display: none !important; }
 
-.animate-spin {
-    animation: spin 1s linear infinite;
-}
+/* Custom scrollbar */
+.custom-scrollbar::-webkit-scrollbar { width: 4px; }
+.custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+.custom-scrollbar::-webkit-scrollbar-thumb { background: #334155; border-radius: 2px; }
+.custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #475569; }
 
-@keyframes spin {
-    from { transform: rotate(0deg); }
-    to { transform: rotate(360deg); }
-}
+/* HTMX indicator — istek sırasında görünür */
+.htmx-indicator { display: none; }
+.htmx-request .htmx-indicator { display: inline-block; }
+.htmx-request.htmx-indicator { display: inline-block; }
+.htmx-indicator-hide { display: inline-block; }
+.htmx-request .htmx-indicator-hide { display: none; }
 
-.animate-pulse {
-    animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
-}
-
-@keyframes pulse {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.5; }
-}
-
-.fade-in {
-    animation: fadeIn 0.3s ease-out forwards;
-}
-
-@keyframes fadeIn {
-    from { opacity: 0; transform: translateY(10px); }
-    to { opacity: 1; transform: translateY(0); }
-}
-
-.htmx-fade {
-    animation: htmxFade 0.3s ease-out forwards;
-}
-
-@keyframes htmxFade {
-    from { opacity: 0; transform: translateY(10px); }
-    to { opacity: 1; transform: translateY(0); }
-}
-
-/* ==========================================================================
-   TYPOGRAPHY
-   ========================================================================== */
-h1, h2, h3, h4, h5, h6 {
-    font-weight: 600;
-    line-height: 1.2;
-    margin: 0;
-}
-
-h1 { font-size: 2rem; }
-h2 { font-size: 1.5rem; }
-h3 { font-size: 1.25rem; }
-h4 { font-size: 1rem; }
-
-code, pre {
-    font-family: var(--font-mono);
-}
-
-/* ==========================================================================
-   LAYOUT - Sidebar + Content Pattern
-   ========================================================================== */
-.app-layout {
-    display: flex;
-    height: 100vh;
-    overflow: hidden;
-}
-
-.app-sidebar {
-    width: 256px;
-    flex-shrink: 0;
-    background: var(--bg-glass);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
-    border-right: 1px solid var(--border-color);
-    display: flex;
-    flex-direction: column;
-    height: 100vh;
-    position: fixed;
-    left: 0;
-    top: 0;
-    z-index: 50;
-    transition: transform 0.3s ease;
-}
-
-.app-content {
-    flex: 1;
-    margin-left: 256px;
-    overflow-y: auto;
-    height: 100vh;
-}
-
-/* Mobile responsive */
-@media (max-width: 768px) {
-    .app-sidebar {
-        transform: translateX(-100%);
-    }
-
-    .app-sidebar.open {
-        transform: translateX(0);
-    }
-
-    .app-content {
-        margin-left: 0;
-    }
-}
-
-/* ==========================================================================
-   BENTO GRID SYSTEM
-   ========================================================================== */
-.bento-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-    gap: 1.5rem;
-    padding: 1.5rem;
-}
-
+/* Bento card */
 .bento-card {
-    background: var(--bg-card);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
-    border: 1px solid var(--border-color);
-    border-radius: 1.25rem;
+    background: rgba(30, 41, 59, 0.5);
+    border: 1px solid rgba(51, 65, 85, 0.5);
+    border-radius: 1rem;
     padding: 1.5rem;
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     position: relative;
     overflow: hidden;
 }
 
-.bento-card:hover {
-    transform: translateY(-2px);
-    border-color: rgba(16, 185, 129, 0.4);
-    box-shadow: var(--shadow-lg), var(--shadow-glow-primary);
-}
-
-.bento-card::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 2px;
-    background: linear-gradient(90deg, transparent, rgba(16, 185, 129, 0.5), transparent);
-    opacity: 0;
-    transition: opacity 0.3s ease;
-}
-
-.bento-card:hover::before {
-    opacity: 1;
-}
-
-/* ==========================================================================
-   PROGRESS BARS
-   ========================================================================== */
+/* Progress bar */
 .progress-bar-container {
     width: 100%;
-    background-color: var(--slate-700);
+    height: 6px;
+    background: rgba(51, 65, 85, 0.5);
     border-radius: 9999px;
-    height: 0.5rem;
     overflow: hidden;
-    position: relative;
 }
-
 .progress-bar-fill {
     height: 100%;
     border-radius: 9999px;
-    transition: width 0.5s ease-in-out;
-    position: relative;
+    transition: width 0.5s ease;
 }
 
-/* ==========================================================================
-   HTMX STYLES
-   ========================================================================== */
-.htmx-indicator {
-    display: none;
+/* Badge */
+.badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.125rem 0.625rem;
+    border-radius: 9999px;
+    font-size: 0.75rem;
+    font-weight: 600;
 }
+.badge-success { background: rgba(34, 197, 94, 0.1); color: #4ade80; }
+.badge-danger  { background: rgba(239, 68, 68, 0.1);  color: #f87171; }
+.badge-warning { background: rgba(245, 158, 11, 0.1); color: #fbbf24; }
+.badge-info    { background: rgba(59, 130, 246, 0.1);  color: #60a5fa; }
 
-.htmx-request .htmx-indicator,
-.htmx-request.htmx-indicator {
-    display: inline-block;
-}
-
-.htmx-indicator-hide {
-    display: inline-block;
-}
-
-.htmx-request .htmx-indicator-hide {
-    display: none;
-}
-
-/* ==========================================================================
-   BUTTONS
-   ========================================================================== */
+/* Button variants */
 .btn {
     display: inline-flex;
     align-items: center;
@@ -317,463 +66,61 @@ code, pre {
     gap: 0.5rem;
     padding: 0.625rem 1.25rem;
     border-radius: 0.75rem;
-    font-weight: 500;
     font-size: 0.875rem;
-    transition: all 0.2s ease;
+    font-weight: 500;
+    transition: all 0.15s;
     cursor: pointer;
-    border: 1px solid transparent;
-    text-decoration: none;
 }
+.btn-primary   { background: #059669; color: white; }
+.btn-primary:hover { background: #10b981; }
+.btn-secondary { background: rgba(30, 41, 59, 0.8); color: #94a3b8; border: 1px solid #334155; }
+.btn-secondary:hover { background: rgba(51, 65, 85, 0.8); }
+.btn-danger    { background: #dc2626; color: white; }
+.btn-danger:hover { background: #ef4444; }
 
-.btn:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-}
-
-.btn-primary {
-    background: var(--primary-600);
-    color: white;
-    box-shadow: var(--shadow-glow-primary);
-}
-
-.btn-primary:hover:not(:disabled) {
-    background: var(--primary-500);
-    transform: translateY(-1px);
-}
-
-.btn-secondary {
-    background: var(--slate-700);
-    color: var(--slate-200);
-    border-color: var(--slate-600);
-}
-
-.btn-secondary:hover:not(:disabled) {
-    background: var(--slate-600);
-}
-
-.btn-danger {
-    background: var(--danger-600);
-    color: white;
-}
-
-.btn-danger:hover:not(:disabled) {
-    background: var(--danger-500);
-}
-
-/* ==========================================================================
-   FORM ELEMENTS
-   ========================================================================== */
-.input {
-    width: 100%;
-    padding: 0.75rem 1rem;
-    background: var(--slate-900);
-    border: 1px solid var(--slate-700);
-    border-radius: 0.75rem;
-    color: white;
-    font-size: 0.875rem;
-    transition: all 0.2s ease;
-}
-
-.input:focus {
-    outline: none;
-    border-color: var(--primary-500);
-    box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.1);
-}
-
-.input::placeholder {
-    color: var(--slate-500);
-}
-
-.input-error {
-    border-color: var(--danger-500);
-}
-
-/* ==========================================================================
-   CARDS
-   ========================================================================== */
-.card {
-    background: var(--bg-card);
-    backdrop-filter: blur(12px);
-    border: 1px solid var(--border-color);
-    border-radius: 1rem;
-    padding: 1.5rem;
-}
-
-.card-glass {
-    background: rgba(30, 41, 59, 0.4);
-    backdrop-filter: blur(16px);
-    border: 1px solid rgba(51, 65, 85, 0.5);
-}
-
-/* ==========================================================================
-   STATUS BADGES
-   ========================================================================== */
-.badge {
-    display: inline-flex;
-    align-items: center;
-    padding: 0.25rem 0.75rem;
-    border-radius: 9999px;
-    font-size: 0.75rem;
-    font-weight: 500;
-}
-
-.badge-success {
-    background: rgba(34, 197, 94, 0.1);
-    color: var(--success-500);
-    border: 1px solid rgba(34, 197, 94, 0.2);
-}
-
-.badge-warning {
-    background: rgba(245, 158, 11, 0.1);
-    color: var(--warning-500);
-    border: 1px solid rgba(245, 158, 11, 0.2);
-}
-
-.badge-danger {
-    background: rgba(239, 68, 68, 0.1);
-    color: var(--danger-500);
-    border: 1px solid rgba(239, 68, 68, 0.2);
-}
-
-.badge-info {
-    background: rgba(59, 130, 246, 0.1);
-    color: var(--info-500);
-    border: 1px solid rgba(59, 130, 246, 0.2);
-}
-
-/* ==========================================================================
-   MAIL PANEL (3 Column Layout)
-   ========================================================================== */
-.mail-layout {
-    display: flex;
-    height: 100vh;
-    width: 100%;
-    background: var(--bg-primary);
-}
-
-.mail-folder-panel {
-    width: 256px;
-    background: var(--bg-glass);
-    backdrop-filter: blur(12px);
-    border-right: 1px solid var(--border-color);
-    display: flex;
-    flex-direction: column;
-    flex-shrink: 0;
-}
-
-.mail-list-panel {
-    width: 320px;
-    background: var(--slate-900);
-    border-right: 1px solid var(--border-color);
-    display: flex;
-    flex-direction: column;
-    flex-shrink: 0;
-}
-
-.mail-detail-panel {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    min-width: 0;
-}
-
-/* Mobile: Hide panels by default, show based on view state */
-@media (max-width: 768px) {
-    .mail-folder-panel,
-    .mail-list-panel,
-    .mail-detail-panel {
-        width: 100%;
-        position: absolute;
-        inset: 0;
-        transform: translateX(100%);
-        transition: transform 0.3s ease;
-    }
-
-    .mail-folder-panel.active,
-    .mail-list-panel.active,
-    .mail-detail-panel.active {
-        transform: translateX(0);
-    }
-}
-
-/* ==========================================================================
-   TOAST NOTIFICATIONS
-   ========================================================================== */
+/* Toast container */
 .toast-container {
     position: fixed;
-    top: 1rem;
+    bottom: 1rem;
     right: 1rem;
     z-index: 9999;
     display: flex;
-    flex-direction: column;
+    flex-direction: column-reverse;
     gap: 0.5rem;
     pointer-events: none;
 }
-
 .toast {
-    padding: 1rem 1.5rem;
-    border-radius: 0.75rem;
-    backdrop-filter: blur(12px);
-    pointer-events: auto;
-    animation: toastIn 0.3s ease-out;
     display: flex;
     align-items: center;
     gap: 0.75rem;
+    padding: 0.75rem 1rem;
+    border-radius: 0.75rem;
+    box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5);
+    border: 1px solid;
     min-width: 280px;
     max-width: 400px;
-}
-
-.toast-success {
-    background: rgba(34, 197, 94, 0.1);
-    border: 1px solid rgba(34, 197, 94, 0.3);
-    color: var(--success-500);
-}
-
-.toast-error {
-    background: rgba(239, 68, 68, 0.1);
-    border: 1px solid rgba(239, 68, 68, 0.3);
-    color: var(--danger-500);
-}
-
-.toast-warning {
-    background: rgba(245, 158, 11, 0.1);
-    border: 1px solid rgba(245, 158, 11, 0.3);
-    color: var(--warning-500);
-}
-
-.toast-info {
-    background: rgba(59, 130, 246, 0.1);
-    border: 1px solid rgba(59, 130, 246, 0.3);
-    color: var(--info-500);
-}
-
-@keyframes toastIn {
-    from {
-        opacity: 0;
-        transform: translateX(100%);
-    }
-    to {
-        opacity: 1;
-        transform: translateX(0);
-    }
-}
-
-/* ==========================================================================
-   TABLES
-   ========================================================================== */
-.table-container {
-    overflow-x: auto;
-}
-
-.table {
-    width: 100%;
-    border-collapse: collapse;
-}
-
-.table th,
-.table td {
-    padding: 0.75rem 1rem;
-    text-align: left;
-    border-bottom: 1px solid var(--border-color);
-}
-
-.table th {
-    font-size: 0.75rem;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    color: var(--slate-400);
-    background: var(--slate-900);
-}
-
-.table tbody tr:hover {
-    background: var(--slate-800);
-}
-
-/* ==========================================================================
-   MODAL / DIALOG
-   ========================================================================== */
-.modal-overlay {
-    position: fixed;
-    inset: 0;
-    background: rgba(0, 0, 0, 0.6);
-    backdrop-filter: blur(4px);
-    z-index: 100;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 1rem;
-}
-
-.modal-content {
-    background: var(--slate-900);
-    border: 1px solid var(--border-color);
-    border-radius: 1.25rem;
-    padding: 1.5rem;
-    max-width: 500px;
-    width: 100%;
-    max-height: 90vh;
-    overflow-y: auto;
-}
-
-/* ==========================================================================
-   CONTAINER STATUS CARDS
-   ========================================================================== */
-.container-card {
-    background: var(--bg-card);
-    border: 1px solid var(--border-color);
-    border-radius: 1rem;
-    padding: 1rem;
-    display: flex;
-    align-items: center;
-    gap: 1rem;
-}
-
-.container-status-dot {
-    width: 10px;
-    height: 10px;
-    border-radius: 50%;
-    flex-shrink: 0;
-}
-
-.container-status-dot.running {
-    background: var(--success-500);
-    box-shadow: 0 0 8px var(--success-500);
-}
-
-.container-status-dot.stopped {
-    background: var(--danger-500);
-}
-
-.container-status-dot.paused {
-    background: var(--warning-500);
-}
-
-/* ==========================================================================
-   NAVIGATION
-   ========================================================================== */
-.nav-item {
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-    padding: 0.75rem 1rem;
-    border-radius: 0.75rem;
-    color: var(--slate-400);
-    font-weight: 500;
     font-size: 0.875rem;
-    transition: all 0.2s ease;
-    cursor: pointer;
-    border: none;
-    background: none;
-    width: 100%;
-    text-align: left;
-}
-
-.nav-item:hover {
-    background: var(--slate-800);
-    color: white;
-}
-
-.nav-item.active {
-    background: rgba(16, 185, 129, 0.1);
-    color: var(--primary-400);
-}
-
-/* ==========================================================================
-   LOADING STATES
-   ========================================================================== */
-.skeleton {
-    background: linear-gradient(
-        90deg,
-        var(--slate-800) 25%,
-        var(--slate-700) 50%,
-        var(--slate-800) 75%
-    );
-    background-size: 200% 100%;
-    animation: skeleton 1.5s ease-in-out infinite;
-    border-radius: 0.5rem;
-}
-
-@keyframes skeleton {
-    0% { background-position: 200% 0; }
-    100% { background-position: -200% 0; }
-}
-
-/* ==========================================================================
-   LOGIN & SETUP PAGES
-   ========================================================================== */
-.auth-container {
-    min-height: 100vh;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 1rem;
-    background: var(--bg-primary);
-}
-
-.auth-card {
-    width: 100%;
-    max-width: 420px;
-    background: var(--bg-card);
+    font-weight: 500;
+    pointer-events: auto;
     backdrop-filter: blur(12px);
-    border: 1px solid var(--border-color);
-    border-radius: 1.5rem;
-    padding: 2rem;
+}
+.toast-success { background: rgba(15, 23, 42, 0.95); border-color: rgba(16, 185, 129, 0.3); color: #34d399; }
+.toast-error   { background: rgba(15, 23, 42, 0.95); border-color: rgba(239, 68, 68, 0.3);  color: #f87171; }
+.toast-warning { background: rgba(15, 23, 42, 0.95); border-color: rgba(245, 158, 11, 0.3); color: #fbbf24; }
+.toast-info    { background: rgba(15, 23, 42, 0.95); border-color: rgba(59, 130, 246, 0.3);  color: #60a5fa; }
+
+/* Fade-in animation */
+.fade-in { animation: fadeIn 0.3s ease-out; }
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(4px); }
+    to   { opacity: 1; transform: translateY(0); }
 }
 
-.auth-logo {
-    width: 64px;
-    height: 64px;
-    background: linear-gradient(135deg, var(--primary-500), var(--primary-700));
-    border-radius: 1rem;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    margin: 0 auto 1.5rem;
-}
-
-/* ==========================================================================
-   DARK MODE SPECIFIC (Light mode overrides)
-   ========================================================================== */
-.light {
-    --bg-primary: #f8fafc;
-    --bg-secondary: #f1f5f9;
-    --bg-card: rgba(255, 255, 255, 0.9);
-    --bg-glass: rgba(255, 255, 255, 0.95);
-    --border-color: rgba(203, 213, 225, 0.5);
-    color: #0f172a;
-}
-
-.light .bento-card,
-.light .card {
-    background: white;
-    border-color: #e2e8f0;
-}
-
-.light .nav-item {
-    color: #475569;
-}
-
-.light .nav-item:hover {
-    background: #f1f5f9;
-}
-
-.light .nav-item.active {
-    background: var(--primary-50);
-    color: var(--primary-700);
-}
-
-/* ==========================================================================
-   PRINT STYLES
-   ========================================================================== */
-@media print {
-    .app-sidebar,
-    .toast-container,
-    .btn {
-        display: none !important;
-    }
-
-    .app-content {
-        margin-left: 0;
+/* Reduced motion */
+@media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
     }
 }

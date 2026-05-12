@@ -9,6 +9,14 @@
 {% include "partials/toast.html" %}
 {% endblock %}
 
+{% block extra_head %}
+<script>
+    window.JIR_KEY = "{{ JIR_KEY|escapejs }}";
+    window.INSTANCE_ID = "{{ instance_id|escapejs }}";
+    window.TIER = "{{ tier|escapejs }}";
+</script>
+{% endblock %}
+
 {% block content %}
 <div class="flex h-full pt-14 md:pt-0">
     <!-- HTMX loading indicator -->

@@ -39,19 +39,38 @@ class BackupListSchema(Schema):
 
 
 def get_backup_directory():
-    backup_dir = getattr(settings, 'BACKUP_DIR', None)
+    # Önce SystemConfig'ten bak
+    backup_dir = None
+    try:
+        from saas.models import SystemConfig
+        config = SystemConfig.objects.first()
+        if config and config.backup_dir:
+            backup_dir = config.backup_dir
+    except Exception:
+        pass
+
+    # Settings'ten bak
     if not backup_dir:
-        try:
-            from saas.models import SystemConfig
-            config = SystemConfig.objects.first()
-            if config:
-                backup_dir = config.backup_dir
-        except Exception:
-            pass
-    if not backup_dir:
-        backup_dir = '/var/backups/jirmail'
-    os.makedirs(backup_dir, exist_ok=True)
-    return backup_dir
+        backup_dir = getattr(settings, 'BACKUP_DIR', None)
+
+    # Fallback: proje içinde backups/ klasörü (her zaman yazılabilir)
+    if not backup_dir or backup_dir == '/var/backups/jirmail':
+        backup_dir = str(settings.BASE_DIR / 'backups')
+
+    try:
+        os.makedirs(backup_dir, exist_ok=True)
+        # Yazma izni testi
+        test_file = os.path.join(backup_dir, '.write_test')
+        with open(test_file, 'w') as f:
+            f.write('ok')
+        os.remove(test_file)
+        return backup_dir
+    except (PermissionError, OSError):
+        # Son çare: sistem temp dizini
+        import tempfile
+        fallback = os.path.join(tempfile.gettempdir(), 'jirmail_backups')
+        os.makedirs(fallback, exist_ok=True)
+        return fallback
 
 
 def create_database_dump(backup_dir):

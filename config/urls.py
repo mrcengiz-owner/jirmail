@@ -26,6 +26,7 @@ def root_redirect(request):
 
 def content_partial(request, tab):
     from django.template import loader
+    from management.views import get_jir_key, get_instance_info
     template_map = {
         'domains': 'partials/domains.html',
         'accounts': 'partials/accounts.html',
@@ -37,18 +38,37 @@ def content_partial(request, tab):
     template_name = template_map.get(tab, 'partials/dashboard.html')
     try:
         template = loader.get_template(template_name)
-        context = {}
+        jir_key = get_jir_key()
+        context = {'JIR_LOCAL_KEY': jir_key}
+
         if tab == 'dashboard':
-            from management.views import get_jir_key, get_instance_info
             instance_info = get_instance_info()
-            context = {
-                'JIR_LOCAL_KEY': get_jir_key(),
+            context.update({
                 'instance_id': instance_info['instance_id'],
                 'tier': instance_info['tier'],
-            }
+            })
+
+        if tab == 'accounts':
+            # Domain listesini server-side'dan geç — API çağrısına gerek yok
+            try:
+                from core.models import MailDomain
+                domains = list(MailDomain.objects.filter(is_active=True).values('name'))
+                context['domains_json'] = [d['name'] for d in domains]
+            except Exception:
+                context['domains_json'] = []
+
         return HttpResponse(template.render(context, request))
     except Exception as e:
         return HttpResponse(f'<div class="p-6 text-red-400">Error loading {tab}: {str(e)}</div>', status=500)
+
+def favicon(request):
+    """Tarayıcının favicon isteğine boş SVG döndür — 404 loglarını önler."""
+    svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect width="32" height="32" rx="8" fill="#10b981"/><path d="M8 16l5 5 11-11" stroke="white" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>'
+    return HttpResponse(svg, content_type='image/svg+xml')
+
+def well_known(request, path=''):
+    """Chrome DevTools ve diğer .well-known isteklerini sessizce 204 ile yanıtla."""
+    return HttpResponse(status=204)
 
 urlpatterns = [
     path('admin/', admin.site.urls),
@@ -61,6 +81,8 @@ urlpatterns = [
     path('logout/', logout_view, name='logout'),
     path('master-panel/', master_panel, name='master_panel'),
     path('mail-panel/', mail_panel, name='mail_panel'),
+    path('favicon.ico', favicon),
+    path('.well-known/<path:path>', well_known),
     path('', root_redirect, name='root'),
 ]
 

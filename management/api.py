@@ -81,10 +81,28 @@ def health_check(request):
             checks['postfix'] = result.returncode == 0
         except Exception:
             pass
+    # postmap yoksa process kontrolüne düş
+    if not checks['postfix']:
+        try:
+            for proc in psutil.process_iter(['name']):
+                if 'postfix' in proc.info['name'].lower() or 'master' in proc.info['name'].lower():
+                    checks['postfix'] = True
+                    break
+        except Exception:
+            pass
 
     dovecot_socket = '/var/run/dovecot/auth-login'
     if os.path.exists(dovecot_socket) or os.path.exists('/var/run/dovecot'):
         checks['dovecot'] = True
+    # socket yoksa process kontrolüne düş
+    if not checks['dovecot']:
+        try:
+            for proc in psutil.process_iter(['name']):
+                if 'dovecot' in proc.info['name'].lower():
+                    checks['dovecot'] = True
+                    break
+        except Exception:
+            pass
 
     all_healthy = all(checks.values())
 
@@ -548,8 +566,20 @@ class LogEntrySchema(Schema):
 
 
 @router.get("/logs", summary="Mail Loglarını Getir")
-def get_logs(request, key: str, lines: int = 50, filter_type: str = None):
-    if key != getattr(settings, 'JIR_LOCAL_KEY', None):
+def get_logs(request, key: str = None, lines: int = 100, filter_type: str = None):
+    # Key doğrulama: settings, DB veya session'dan kontrol et
+    valid_key = getattr(settings, 'JIR_LOCAL_KEY', None)
+    try:
+        config = SystemConfig.objects.first()
+        if config and config.jir_local_key:
+            valid_key = config.jir_local_key
+    except Exception:
+        pass
+
+    # Session'dan giriş yapmış kullanıcı da erişebilir
+    session_logged_in = getattr(request, 'session', {}).get('is_logged_in', False)
+
+    if not session_logged_in and key != valid_key:
         return [
             {'timestamp': datetime.now().isoformat(), 'type': 'error', 'message': 'Yetkisiz erişim! Geçersiz anahtar.', 'source': 'system'}
         ]
@@ -562,15 +592,31 @@ def get_logs(request, key: str, lines: int = 50, filter_type: str = None):
 
     logs = []
 
-    missing_files = []
-    for log_file in log_files:
-        if not os.path.exists(log_file):
-            missing_files.append(log_file)
+    missing_files = [f for f in log_files if not os.path.exists(f)]
 
-    if missing_files:
-        return [
-            {'timestamp': datetime.now().isoformat(), 'type': 'info', 'message': f'Log files not found: {", ".join(missing_files)}. Mail services may not be configured yet.', 'source': 'system'}
-        ]
+    if len(missing_files) == len(log_files):
+        # Hiçbir log dosyası yok — Django uygulama loglarını göster
+        django_logs = []
+        try:
+            import logging
+            # Son Django log kayıtlarını simüle et
+            django_logs.append({
+                'timestamp': datetime.now().isoformat(),
+                'type': 'info',
+                'message': 'Mail log dosyaları bulunamadı (/var/log/mail.log, /var/log/syslog, /var/log/dovecot.log). '
+                           'Bu dosyalar Postfix ve Dovecot servisleri çalıştığında oluşur.',
+                'source': 'system'
+            })
+            django_logs.append({
+                'timestamp': datetime.now().isoformat(),
+                'type': 'info',
+                'message': f'Django sunucusu çalışıyor. DEBUG={settings.DEBUG}. '
+                           f'Veritabanı: {settings.DATABASES["default"]["ENGINE"].split(".")[-1]}',
+                'source': 'django'
+            })
+        except Exception:
+            pass
+        return django_logs
 
     for log_file in log_files:
         if os.path.exists(log_file):
