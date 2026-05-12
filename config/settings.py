@@ -217,14 +217,14 @@ STATICFILES_FINDERS = [
     'django.contrib.staticfiles.finders.AppDirectoriesFinder',
 ]
 
-STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
-
 if DEBUG:
     STATICFILES_DIRS = [BASE_DIR / 'static']
-    import mimetypes
+    STATICFILES_STORAGE = 'django.contrib.staticfiles.storage.StaticFilesStorage'
     import mimetypes
     mimetypes.add_type("text/css", ".css", True)
     mimetypes.add_type("application/javascript", ".js", True)
+else:
+    STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 
 def get_jir_path(path_type='mail_data'):
     """

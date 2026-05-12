@@ -31,3 +31,61 @@
     scroll-behavior: auto !important;
   }
 }
+
+/* HTMX indicator — spinner gizli, istek sırasında görünür */
+.htmx-indicator { display: none; }
+.htmx-request .htmx-indicator { display: inline-block; }
+.htmx-request.htmx-indicator { display: inline-block; }
+
+/* HTMX indicator-hide — normal görünür, istek sırasında gizlenir */
+.htmx-indicator-hide { display: inline-block; }
+.htmx-request .htmx-indicator-hide { display: none; }
+
+/* Bento card */
+.bento-card {
+  @apply bg-slate-800/50 border border-slate-700 rounded-2xl p-6 backdrop-blur-sm;
+}
+
+/* Progress bar */
+.progress-bar-container {
+  @apply w-full h-1.5 bg-slate-700 rounded-full overflow-hidden;
+}
+.progress-bar-fill {
+  @apply h-full rounded-full transition-all duration-500;
+}
+
+/* Badge */
+.badge {
+  @apply px-2 py-0.5 rounded-full text-xs font-semibold;
+}
+.badge-success { @apply bg-success-500/10 text-success-400; }
+.badge-danger  { @apply bg-danger-500/10  text-danger-400;  }
+.badge-warning { @apply bg-warning-500/10 text-warning-400; }
+.badge-info    { @apply bg-blue-500/10    text-blue-400;    }
+
+/* Button variants */
+.btn {
+  @apply px-4 py-2 rounded-xl font-medium text-sm transition-all active:scale-95;
+}
+.btn-primary   { @apply bg-primary-600 hover:bg-primary-500 text-white; }
+.btn-secondary { @apply bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700; }
+.btn-danger    { @apply bg-danger-600 hover:bg-danger-500 text-white; }
+
+/* Fade-in animation */
+.fade-in { animation: fadeIn 0.3s ease-out; }
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Toast container */
+.toast-container {
+  @apply fixed bottom-4 right-4 z-[9999] flex flex-col-reverse gap-2 pointer-events-none;
+}
+.toast {
+  @apply flex items-center gap-3 px-4 py-3 rounded-xl shadow-2xl border min-w-[280px] max-w-[400px] text-sm font-medium;
+}
+.toast-success { @apply bg-slate-900/95 border-primary-500/30 text-primary-400; }
+.toast-error   { @apply bg-slate-900/95 border-danger-500/30  text-danger-400;  }
+.toast-warning { @apply bg-slate-900/95 border-warning-500/30 text-warning-400; }
+.toast-info    { @apply bg-slate-900/95 border-blue-500/30    text-blue-400;    }

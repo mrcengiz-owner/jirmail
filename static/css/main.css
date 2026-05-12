@@ -291,13 +291,16 @@ code, pre {
    HTMX STYLES
    ========================================================================== */
 .htmx-indicator {
-    opacity: 0;
-    transition: opacity 200ms ease-in;
+    display: none;
 }
 
 .htmx-request .htmx-indicator,
 .htmx-request.htmx-indicator {
-    opacity: 1;
+    display: inline-block;
+}
+
+.htmx-indicator-hide {
+    display: inline-block;
 }
 
 .htmx-request .htmx-indicator-hide {
