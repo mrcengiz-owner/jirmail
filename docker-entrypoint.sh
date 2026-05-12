@@ -44,5 +44,10 @@ fi
 echo "=== Collecting static files ==="
 mkdir -p /app/staticfiles
 python manage.py collectstatic --noinput --clear
+# docker-entrypoint.sh içeriği
+python manage.py migrate --noinput
+python manage.py collectstatic --noinput
+# Eğer ilk kurulumsa admin hesabı oluştur
+python manage.py setup_system_defaults
 
 exec "$@"

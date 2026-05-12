@@ -15,6 +15,9 @@ SECRET_KEY = os.getenv('SECRET_KEY', 'django-insecure-r%36n))g&hrl-di8^5$ni9(j5y
 
 DEBUG = os.getenv('DEBUG', 'False').lower() in ('true', '1', 'yes')
 
+# Docker ortamı tespiti — /.dockerenv dosyası veya DOCKER_CONTAINER env var
+IN_DOCKER = os.path.exists('/.dockerenv') or os.getenv('DOCKER_CONTAINER', '') == 'true'
+
 ALLOWED_HOSTS = ['*']
 REDIS_HOST = os.getenv('REDIS_HOST', 'redis' if IN_DOCKER else '127.0.0.1')
 
@@ -205,8 +208,8 @@ AUTH_PASSWORD_VALIDATORS = [
     {'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator'},
 ]
 
-LANGUAGE_CODE = 'en-us'
-TIME_ZONE = 'UTC'
+LANGUAGE_CODE = 'TR-tr'
+TIME_ZONE = 'Europe/Istanbul'
 USE_I18N = True
 USE_TZ = True
 
@@ -260,8 +263,8 @@ POSTFIX_VMAIL_PATH = get_jir_path('postfix_vmail')
 DOVECOT_PASSDB_PATH = get_jir_path('dovecot_passdb')
 BACKUP_DIR = get_jir_path('backup')
 
-CELERY_BROKER_URL = os.getenv('CELERY_BROKER_URL', 'redis://localhost:6379/0')
-CELERY_RESULT_BACKEND = os.getenv('CELERY_RESULT_BACKEND', 'redis://localhost:6379/0')
+CELERY_BROKER_URL = os.getenv('CELERY_BROKER_URL', f'redis://{REDIS_HOST}:6379/0')
+CELERY_RESULT_BACKEND = os.getenv('CELERY_RESULT_BACKEND', f'redis://{REDIS_HOST}:6379/0')
 
 SESSION_COOKIE_AGE = 86400
 SESSION_COOKIE_SECURE = not DEBUG
