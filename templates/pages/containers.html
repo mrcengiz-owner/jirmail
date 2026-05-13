@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Containers - Jîr-Mail{% endblock %}
+
+{% block extra_head %}
+<script>
+    window.JIR_KEY = "{{ JIR_LOCAL_KEY|escapejs }}";
+</script>
+{% endblock %}
+
+{% block content %}
+<div class="p-6" x-data="containersApp()" x-init="init()">
+    <div class="flex items-center justify-between mb-8">
+        <div>
+            <h2 class="text-3xl font-bold tracking-tight text-white">Docker Containers</h2>
+            <p class="text-slate-500 mt-1">Monitor and manage containers</p>
+        </div>
+        <button @click="fetchContainers()"
+                class="btn btn-secondary flex items-center gap-2">
+            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+            </svg>
+            Refresh
+        </button>
+    </div>
+
+    <!-- Containers Grid -->
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <template x-for="container in containers" :key="container.container_id">
+            <div class="bento-card">
+                <div class="flex items-center justify-between mb-4">
+                    <div class="flex items-center gap-3">
+                        <div class="w-10 h-10 rounded-lg bg-slate-800 flex items-center justify-center">
+                            <svg class="w-5 h-5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/>
+                            </svg>
+                        </div>
+                        <div>
+                            <h4 class="text-white font-semibold" x-text="container.container_name"></h4>
+                            <span class="text-xs text-slate-500" x-text="container.container_id.substring(0, 12)"></span>
+                        </div>
+                    </div>
+                    <span class="px-2 py-1 rounded-full text-xs font-semibold"
+                          :class="container.status === 'running' ? 'bg-success-500/10 text-success-400 border border-success-500/20' : 'bg-danger-500/10 text-danger-400 border border-danger-500/20'"
+                          x-text="container.status === 'running' ? '● Running' : '○ Stopped'">
+                    </span>
+                </div>
+                <div class="grid grid-cols-2 gap-4 text-sm">
+                    <div>
+                        <span class="text-slate-500">CPU</span>
+                        <div class="text-white font-semibold" x-text="container.cpu_percent.toFixed(1) + '%'">0%</div>
+                    </div>
+                    <div>
+                        <span class="text-slate-500">Memory</span>
+                        <div class="text-white font-semibold" x-text="container.ram_usage_mb.toFixed(0) + ' MB'">0 MB</div>
+                    </div>
+                </div>
+                <div class="mt-4 flex gap-2">
+                    <button x-show="container.status === 'running'"
+                            @click="toggleContainer(container, 'stop')"
+                            class="flex-1 px-3 py-2 rounded-lg bg-danger-500/10 text-danger-400 hover:bg-danger-500/20 border border-danger-500/20 text-sm font-medium transition-colors">
+                        Stop
+                    </button>
+                    <button x-show="container.status !== 'running'"
+                            @click="toggleContainer(container, 'start')"
+                            class="flex-1 px-3 py-2 rounded-lg bg-success-500/10 text-success-400 hover:bg-success-500/20 border border-success-500/20 text-sm font-medium transition-colors">
+                        Start
+                    </button>
+                </div>
+            </div>
+        </template>
+    </div>
+
+    <!-- Loading State -->
+    <div x-show="containers.length === 0" class="text-center py-12">
+        <svg class="animate-spin h-8 w-8 text-emerald-500 mx-auto mb-4" fill="none" viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+        </svg>
+        <p class="text-slate-500">Loading containers...</p>
+    </div>
+</div>
+{% endblock %}

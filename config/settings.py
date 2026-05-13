@@ -2,11 +2,13 @@
 Django settings for Jîr-Mail project.
 
 Single Source of Truth: SystemConfig model (veritabanı)
+Dynamic Service Discovery: Docker servis adları otomatik tespit edilir.
 """
 
 import dotenv
 from pathlib import Path
 import os
+import socket
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 dotenv.load_dotenv(BASE_DIR / '.env')
@@ -15,11 +17,26 @@ SECRET_KEY = os.getenv('SECRET_KEY', 'django-insecure-r%36n))g&hrl-di8^5$ni9(j5y
 
 DEBUG = os.getenv('DEBUG', 'False').lower() in ('true', '1', 'yes')
 
-# Docker ortamı tespiti — /.dockerenv dosyası veya DOCKER_CONTAINER env var
+# ─── Dynamic Service Discovery ────────────────────────────────────────────────
+# Docker içinde /.dockerenv dosyası bulunur; servis adları hostname olarak çözülür
 IN_DOCKER = os.path.exists('/.dockerenv') or os.getenv('DOCKER_CONTAINER', '') == 'true'
 
+def _resolve_service(docker_name: str, local_fallback: str) -> str:
+    """Docker servis adını DNS ile çöz; başarısız olursa local fallback kullan."""
+    if IN_DOCKER:
+        try:
+            socket.getaddrinfo(docker_name, None)
+            return docker_name
+        except socket.gaierror:
+            pass
+    return os.getenv(docker_name.upper() + '_HOST', local_fallback)
+
+# Servis hostname'leri — Docker'da otomatik çözülür, lokalde env var veya fallback
+REDIS_HOST    = os.getenv('REDIS_HOST',    _resolve_service('redis',    '127.0.0.1'))
+POSTGRES_HOST = os.getenv('POSTGRES_HOST', _resolve_service('postgres', '127.0.0.1'))
+# ──────────────────────────────────────────────────────────────────────────────
+
 ALLOWED_HOSTS = ['*']
-REDIS_HOST = os.getenv('REDIS_HOST', 'redis' if IN_DOCKER else '127.0.0.1')
 
 def _get_installation_status():
     """

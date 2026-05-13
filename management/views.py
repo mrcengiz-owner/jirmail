@@ -89,10 +89,25 @@ def dashboard(request):
         return redirect('login')
 
     instance_info = get_instance_info()
-    return render(request, 'master_panel.html', {
+
+    try:
+        from core.models import MailAccount, MailDomain
+        active_domains = MailDomain.objects.filter(is_active=True).count()
+        active_accounts = MailAccount.objects.filter(is_active=True).count()
+        inactive_accounts = MailAccount.objects.filter(is_active=False).count()
+    except Exception:
+        active_domains = 0
+        active_accounts = 0
+        inactive_accounts = 0
+
+    return render(request, 'pages/dashboard.html', {
         'JIR_LOCAL_KEY': get_jir_key(),
         'instance_id': instance_info['instance_id'],
         'tier': instance_info['tier'],
+        'current_page': 'dashboard',
+        'active_domains': active_domains,
+        'active_accounts': active_accounts,
+        'inactive_accounts': inactive_accounts,
     })
 
 
@@ -223,3 +238,100 @@ def logout_view(request):
     response['Expires'] = '0'
     response['X-Accel-Buffering'] = 'no'
     return response
+
+
+def domains_view(request):
+    """Domains Management Page"""
+    if not is_installed():
+        return redirect('setup')
+    if not request.session.get('is_logged_in'):
+        return redirect('login')
+    if request.session.get('role') != 'FULL':
+        return redirect('mail_panel')
+
+    try:
+        from core.models import MailDomain
+        domains = list(MailDomain.objects.all().values('name', 'is_active'))
+    except Exception:
+        domains = []
+
+    return render(request, 'pages/domains.html', {
+        'JIR_LOCAL_KEY': get_jir_key(),
+        'domains': domains,
+        'current_page': 'domains',
+    })
+
+
+def accounts_view(request):
+    """Accounts Management Page"""
+    if not is_installed():
+        return redirect('setup')
+    if not request.session.get('is_logged_in'):
+        return redirect('login')
+    if request.session.get('role') != 'FULL':
+        return redirect('mail_panel')
+
+    try:
+        from core.models import MailDomain
+        domains = list(MailDomain.objects.filter(is_active=True).values('name'))
+        domains_json = [d['name'] for d in domains]
+    except Exception:
+        domains_json = []
+
+    try:
+        from core.models import MailAccount
+        accounts = list(MailAccount.objects.all().values('email', 'username', 'domain__name', 'is_active', 'role'))
+    except Exception:
+        accounts = []
+
+    return render(request, 'pages/accounts.html', {
+        'JIR_LOCAL_KEY': get_jir_key(),
+        'domains_json': domains_json,
+        'accounts': accounts,
+        'current_page': 'accounts',
+    })
+
+
+def containers_view(request):
+    """Containers Management Page"""
+    if not is_installed():
+        return redirect('setup')
+    if not request.session.get('is_logged_in'):
+        return redirect('login')
+    if request.session.get('role') != 'FULL':
+        return redirect('mail_panel')
+
+    return render(request, 'pages/containers.html', {
+        'JIR_LOCAL_KEY': get_jir_key(),
+        'current_page': 'containers',
+    })
+
+
+def backups_view(request):
+    """Backups Management Page"""
+    if not is_installed():
+        return redirect('setup')
+    if not request.session.get('is_logged_in'):
+        return redirect('login')
+    if request.session.get('role') != 'FULL':
+        return redirect('mail_panel')
+
+    return render(request, 'pages/backups.html', {
+        'JIR_LOCAL_KEY': get_jir_key(),
+        'current_page': 'backups',
+    })
+
+
+def logs_view(request):
+    """System Logs Page"""
+    if not is_installed():
+        return redirect('setup')
+    if not request.session.get('is_logged_in'):
+        return redirect('login')
+    if request.session.get('role') != 'FULL':
+        return redirect('mail_panel')
+
+    return render(request, 'pages/logs.html', {
+        'JIR_LOCAL_KEY': get_jir_key(),
+        'current_page': 'logs',
+    })

@@ -20,4 +20,9 @@ app.conf.beat_schedule = {
         'task': 'alerts.tasks.cleanup_resolved_alerts',
         'schedule': 86400.0,
     },
+    # DNS Auto-Check — her 6 saatte bir tüm domainleri kontrol et
+    'check-all-domains-dns-every-6-hours': {
+        'task': 'alerts.tasks.check_all_domains_dns',
+        'schedule': 21600.0,
+    },
 }

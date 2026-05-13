@@ -1,6 +1,24 @@
 version: '3.8'
 
 services:
+
+  # ─── Docker Socket Proxy (Güvenli Docker API erişimi) ─────────────────────
+  docker-proxy:
+    image: tecnativa/docker-socket-proxy:latest
+    container_name: jir_docker_proxy
+    restart: unless-stopped
+    environment:
+      - CONTAINERS=1   # container listesi
+      - INFO=1         # sistem bilgisi
+      - PING=1         # health check
+      - STATS=1        # istatistikler
+      - POST=0         # yazma işlemleri kapalı (güvenlik)
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - jir_network
+    privileged: true
+
   django:
     build:
       context: .
@@ -18,13 +36,12 @@ services:
       - DOVECOT_PASSDB_PATH=/etc/dovecot/userdb
       - PYTHONUNBUFFERED=1
       - DEBUG=False
+      # Docker Socket Proxy URL — doğrudan socket yerine proxy kullan
+      - DOCKER_HOST=tcp://docker-proxy:2375
     volumes:
       - config_data:/app/config
       - postfix_data:/etc/postfix
       - dovecot_data:/etc/dovecot
-      - /var/run/docker.sock:/var/run/docker.sock
-    group_add:
-      - "docker"
     expose:
       - "8000"
     depends_on:
@@ -32,10 +49,12 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      docker-proxy:
+        condition: service_started
     networks:
       - jir_network
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health')"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/management/health')"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -69,7 +88,7 @@ services:
       dockerfile: Dockerfile
     container_name: jir_celery_beat
     restart: unless-stopped
-    command: ["celery", "-A", "config", "beat", "--loglevel=info", "--scheduler=django_celery_beat.schedulers:DatabaseScheduler"]
+    command: ["celery", "-A", "config", "beat", "--loglevel=info"]
     environment:
       - DATABASE_URL=${DATABASE_URL}
       - CELERY_BROKER_URL=redis://redis:6379/0
@@ -115,18 +134,18 @@ services:
       retries: 5
 
   postfix:
-    image: bmoon/postfix:v1
+    image: boky/postfix:latest
     container_name: jir_postfix
     restart: unless-stopped
     hostname: ${MAIL_HOSTNAME:-mail.jircode.com}
     environment:
-      - DOMAIN=${MAIL_DOMAIN:-jircode.com}
+      - ALLOWED_SENDER_DOMAINS=${MAIL_DOMAIN:-jircode.com}
     volumes:
       - postfix_data:/etc/postfix
       - mail_data:/var/mail
     ports:
-      - "${POSTFIX_PORT_25:-25}:587"
-      - "${POSTFIX_PORT_465:-465}:465"
+      - "${POSTFIX_PORT_25:-25}:25"
+      - "${POSTFIX_PORT_587:-587}:587"
     networks:
       - jir_network
 
@@ -165,9 +184,3 @@ volumes:
 networks:
   jir_network:
     driver: bridge
-docker-proxy:
-  image: tecnativa/docker-socket-proxy
-  volumes:
-    - /var/run/docker.sock:/var/run/docker.sock:ro # Sadece okuma yetkisi (Güvenli)
-  environment:
-    - CONTAINERS=1 # Sadece konteyner listesini görmeye izin ver

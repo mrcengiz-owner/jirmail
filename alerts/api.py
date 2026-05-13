@@ -345,3 +345,69 @@ def delete_threshold(request, threshold_id: int):
         return {"status": "error", "message": "Eşik bulunamadı"}
     except Exception as e:
         return {"status": "error", "message": str(e)}
+
+
+# ─── DNS Check Endpoints ──────────────────────────────────────────────────────
+
+@router.post("/dns-check/{domain_name}", summary="Domain DNS Kontrolü Başlat")
+def trigger_dns_check(request, domain_name: str):
+    """
+    Belirtilen domain için DNS kontrolünü Celery task olarak başlatır.
+    Sonuç asenkron olarak MailDomain.verification_status'a yazılır.
+    """
+    try:
+        from alerts.tasks import check_domain_dns
+        task = check_domain_dns.delay(domain_name)
+        return {
+            "status": "queued",
+            "domain": domain_name,
+            "task_id": str(task.id),
+            "message": f"DNS kontrolü başlatıldı. Task ID: {task.id}"
+        }
+    except Exception as e:
+        # Celery çalışmıyorsa senkron çalıştır
+        try:
+            from alerts.tasks import check_domain_dns
+            result = check_domain_dns(domain_name)
+            return {"status": "completed", "domain": domain_name, "result": result}
+        except Exception as e2:
+            return {"status": "error", "message": str(e2)}
+
+
+@router.post("/dns-check-all", summary="Tüm Domainlerin DNS Kontrolü")
+def trigger_all_dns_checks(request):
+    """Tüm aktif domainlerin DNS kontrolünü başlatır."""
+    try:
+        from alerts.tasks import check_all_domains_dns
+        task = check_all_domains_dns.delay()
+        return {
+            "status": "queued",
+            "task_id": str(task.id),
+            "message": "Tüm domainler için DNS kontrolü başlatıldı."
+        }
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+
+@router.get("/dns-status", summary="Tüm Domainlerin DNS Durumu")
+def get_dns_status(request):
+    """Tüm domainlerin mevcut DNS doğrulama durumunu döndürür."""
+    from core.models import MailDomain
+    domains = MailDomain.objects.filter(is_active=True).values(
+        'name', 'verification_status', 'verified_at',
+        'spf_record', 'dkim_record', 'dmarc_record'
+    )
+    return {
+        "status": "success",
+        "domains": [
+            {
+                "name": d['name'],
+                "verification_status": d['verification_status'] or 'pending',
+                "verified_at": d['verified_at'].isoformat() if d['verified_at'] else None,
+                "has_spf": bool(d['spf_record']),
+                "has_dkim": bool(d['dkim_record']),
+                "has_dmarc": bool(d['dmarc_record']),
+            }
+            for d in domains
+        ]
+    }

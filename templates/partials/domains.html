@@ -61,12 +61,17 @@
         this.generatingDNS = domain.name;
         try {
             const csrf = document.querySelector('meta[name=csrf-token]')?.content || '';
+            // 1. DKIM/SPF/DMARC kayıtlarını oluştur
             const res = await fetch('/api/core/generate-dns-records/' + domain.name + '?key=' + this.getKey(), { method: 'POST', headers: { 'X-CSRFToken': csrf } });
             const d = await res.json();
             if (d.status === 'success') {
                 domain.spf_record = d.spf_record; domain.dkim_record = d.dkim_record; domain.dmarc_record = d.dmarc_record;
                 if (this.selectedDomain && this.selectedDomain.name === domain.name) this.selectedDomain = Object.assign({}, this.selectedDomain, domain);
                 window.showToast('DNS kayıtları oluşturuldu.', 'success');
+                // 2. DNS durumunu otomatik kontrol et (Celery task)
+                try {
+                    await fetch('/api/alerts/dns-check/' + domain.name, { method: 'POST', headers: { 'X-CSRFToken': csrf } });
+                } catch(e) { /* DNS check arka planda çalışır */ }
             } else { window.showToast(d.message || 'DNS hatası.', 'error'); }
         } catch(e) { window.showToast('Bağlantı hatası.', 'error'); } finally { this.generatingDNS = null; }
     },

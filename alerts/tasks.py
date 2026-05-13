@@ -218,3 +218,110 @@ def _check_storage_quota():
     except Exception:
         pass
     return warnings
+
+
+# ─── DNS Auto-Check Task ──────────────────────────────────────────────────────
+
+@shared_task(bind=True, max_retries=2)
+def check_domain_dns(self, domain_name: str):
+    """
+    Belirtilen domain için DNS kayıtlarını (SPF, DKIM, DMARC, MX) kontrol eder.
+    Sonucu MailDomain.verification_status alanına yazar.
+    """
+    try:
+        import dns.resolver
+        from core.models import MailDomain
+        from django.utils import timezone
+
+        domain = MailDomain.objects.filter(name=domain_name).first()
+        if not domain:
+            return {"status": "error", "message": f"Domain bulunamadı: {domain_name}"}
+
+        results = {
+            "spf": False,
+            "dkim": False,
+            "dmarc": False,
+            "mx": False,
+        }
+        errors = []
+
+        resolver = dns.resolver.Resolver()
+        resolver.timeout = 5
+        resolver.lifetime = 10
+
+        # MX kontrolü
+        try:
+            mx_records = resolver.resolve(domain_name, 'MX')
+            results["mx"] = len(list(mx_records)) > 0
+        except Exception as e:
+            errors.append(f"MX: {str(e)}")
+
+        # SPF kontrolü (TXT @ kaydında v=spf1 içermeli)
+        try:
+            txt_records = resolver.resolve(domain_name, 'TXT')
+            for record in txt_records:
+                txt = record.to_text().strip('"')
+                if txt.startswith('v=spf1'):
+                    results["spf"] = True
+                    break
+        except Exception as e:
+            errors.append(f"SPF: {str(e)}")
+
+        # DMARC kontrolü (_dmarc.domain TXT kaydı)
+        try:
+            dmarc_records = resolver.resolve(f'_dmarc.{domain_name}', 'TXT')
+            for record in dmarc_records:
+                txt = record.to_text().strip('"')
+                if txt.startswith('v=DMARC1'):
+                    results["dmarc"] = True
+                    break
+        except Exception as e:
+            errors.append(f"DMARC: {str(e)}")
+
+        # DKIM kontrolü (mail._domainkey.domain TXT kaydı)
+        try:
+            dkim_records = resolver.resolve(f'mail._domainkey.{domain_name}', 'TXT')
+            for record in dkim_records:
+                txt = record.to_text().strip('"')
+                if 'v=DKIM1' in txt or 'p=' in txt:
+                    results["dkim"] = True
+                    break
+        except Exception as e:
+            errors.append(f"DKIM: {str(e)}")
+
+        # Genel durum: MX + SPF varsa "verified", yoksa "failed"
+        all_ok = results["mx"] and results["spf"]
+        domain.verification_status = 'verified' if all_ok else 'failed'
+        if all_ok:
+            domain.verified_at = timezone.now()
+        domain.save(update_fields=['verification_status', 'verified_at'])
+
+        return {
+            "domain": domain_name,
+            "status": "verified" if all_ok else "failed",
+            "checks": results,
+            "errors": errors,
+        }
+
+    except ImportError:
+        return {"status": "error", "message": "dnspython kurulu değil: pip install dnspython"}
+    except Exception as exc:
+        self.retry(exc=exc, countdown=60)
+
+
+@shared_task
+def check_all_domains_dns():
+    """
+    Tüm aktif domainlerin DNS durumunu kontrol eder.
+    Celery Beat tarafından periyodik olarak çalıştırılır.
+    """
+    from core.models import MailDomain
+
+    domains = MailDomain.objects.filter(is_active=True)
+    results = []
+
+    for domain in domains:
+        result = check_domain_dns.delay(domain.name)
+        results.append({"domain": domain.name, "task_id": str(result.id)})
+
+    return {"checked": len(results), "domains": results}

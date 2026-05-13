@@ -1,0 +1,146 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}System Logs - Jîr-Mail{% endblock %}
+
+{% block extra_head %}
+<script>
+    window.JIR_KEY = "{{ JIR_LOCAL_KEY|escapejs }}";
+</script>
+{% endblock %}
+
+{% block content %}
+<div class="p-6" x-data="logsApp()" x-init="init()">
+    <div class="flex items-center justify-between mb-8">
+        <div>
+            <h2 class="text-3xl font-bold tracking-tight text-white">System Logs</h2>
+            <p class="text-slate-500 mt-1">View system and mail logs</p>
+        </div>
+        <button @click="fetchLogs()"
+                class="btn btn-secondary flex items-center gap-2">
+            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+            </svg>
+            Refresh
+        </button>
+    </div>
+
+    <!-- Log Filters -->
+    <div class="flex gap-4 mb-6">
+        <button @click="filter = ''"
+                :class="filter === '' ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' : 'bg-slate-800 text-slate-400 border-slate-700'"
+                class="px-4 py-2 rounded-lg border text-sm font-medium transition-colors">
+            All
+        </button>
+        <button @click="filter = 'error'"
+                :class="filter === 'error' ? 'bg-red-500/20 text-red-400 border-red-500/30' : 'bg-slate-800 text-slate-400 border-slate-700'"
+                class="px-4 py-2 rounded-lg border text-sm font-medium transition-colors">
+            Errors
+        </button>
+        <button @click="filter = 'warning'"
+                :class="filter === 'warning' ? 'bg-amber-500/20 text-amber-400 border-amber-500/30' : 'bg-slate-800 text-slate-400 border-slate-700'"
+                class="px-4 py-2 rounded-lg border text-sm font-medium transition-colors">
+            Warnings
+        </button>
+    </div>
+
+    <!-- Logs List -->
+    <div class="bg-slate-900/50 rounded-xl border border-slate-800 overflow-hidden">
+        <div class="divide-y divide-slate-800">
+            <template x-for="log in filteredLogs" :key="log.timestamp">
+                <div class="p-4 hover:bg-slate-800/30 transition-colors">
+                    <div class="flex items-start gap-4">
+                        <div class="mt-1">
+                            <span x-show="log.type === 'error'" class="w-2 h-2 rounded-full bg-red-500 block"></span>
+                            <span x-show="log.type === 'warning'" class="w-2 h-2 rounded-full bg-amber-500 block"></span>
+                            <span x-show="log.type === 'info' || log.type === 'success'" class="w-2 h-2 rounded-full bg-emerald-500 block"></span>
+                        </div>
+                        <div class="flex-1">
+                            <div class="flex items-center justify-between mb-1">
+                                <span class="text-xs text-slate-500" x-text="log.timestamp"></span>
+                                <span class="px-2 py-0.5 rounded text-xs font-medium bg-slate-800 text-slate-400" x-text="log.source"></span>
+                            </div>
+                            <p class="text-sm text-white" x-text="log.message"></p>
+                        </div>
+                    </div>
+                </div>
+            </template>
+        </div>
+
+        <!-- Empty State -->
+        <div x-show="filteredLogs.length === 0" class="p-8 text-center">
+            <p class="text-slate-500">No logs to display</p>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('alpine:init', function() {
+    Alpine.data('logsApp', function() {
+        return {
+            logs: [],
+            filter: '',
+
+            init: function() {
+                this.fetchLogs();
+                setInterval(function() { self.fetchLogs(); }, 30000);
+            },
+
+            get filteredLogs() {
+                if (!this.filter) return this.logs;
+                return this.logs.filter(function(log) {
+                    return log.type === this.filter;
+                }.bind(this));
+            },
+
+            fetchLogs: function() {
+                var self = this;
+                fetch('/api/management/logs?key=' + window.JIR_KEY + '&lines=100')
+                    .then(function(res) { return res.json(); })
+                    .then(function(data) {
+                        self.logs = data || [];
+                    })
+                    .catch(function(e) { console.error(e); });
+            }
+        };
+    });
+
+    Alpine.data('backupApp', function() {
+        return {
+            backups: [],
+
+            init: function() {
+                this.fetchBackups();
+            },
+
+            fetchBackups: function() {
+                var self = this;
+                fetch('/api/backup/list')
+                    .then(function(res) { return res.json(); })
+                    .then(function(data) {
+                        self.backups = data || [];
+                    })
+                    .catch(function(e) { console.error(e); });
+            },
+
+            createBackup: function() {
+                window.showToast('Creating backup...', 'info');
+                var self = this;
+                fetch('/api/backup/create', {
+                    method: 'POST',
+                    headers: { 'X-CSRFToken': document.querySelector('meta[name="csrf-token"]').content }
+                })
+                .then(function(res) { return res.json(); })
+                .then(function(data) {
+                    window.showToast('Backup created successfully!', 'success');
+                    self.fetchBackups();
+                })
+                .catch(function(e) {
+                    window.showToast('Error creating backup', 'error');
+                });
+            }
+        };
+    });
+});
+</script>
+{% endblock %}

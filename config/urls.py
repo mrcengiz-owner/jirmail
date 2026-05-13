@@ -9,7 +9,10 @@ from management.api import router as management_router
 from core.api import router as core_router
 from backup.api import router as backup_router
 from alerts.api import router as alerts_router
-from management.views import dashboard, setup, login, master_panel, mail_panel, login_success, logout_view
+from management.views import (
+    dashboard, setup, login, master_panel, mail_panel, login_success, logout_view,
+    domains_view, accounts_view, containers_view, backups_view, logs_view
+)
 from management.views import is_installed as check_installed
 
 api = NinjaAPI(title="Jîr-Mail Command Center")
@@ -27,6 +30,7 @@ def root_redirect(request):
 def content_partial(request, tab):
     from django.template import loader
     from management.views import get_jir_key, get_instance_info
+    from core.models import MailAccount, MailDomain
     template_map = {
         'domains': 'partials/domains.html',
         'accounts': 'partials/accounts.html',
@@ -34,6 +38,7 @@ def content_partial(request, tab):
         'logs': 'partials/logs.html',
         'containers': 'partials/containers.html',
         'dashboard': 'partials/dashboard.html',
+        'navbar-stats': 'partials/navbar_stats.html',
     }
     template_name = template_map.get(tab, 'partials/dashboard.html')
     try:
@@ -49,32 +54,41 @@ def content_partial(request, tab):
             })
 
         if tab == 'accounts':
-            # Domain listesini server-side'dan geç — API çağrısına gerek yok
             try:
-                from core.models import MailDomain
                 domains = list(MailDomain.objects.filter(is_active=True).values('name'))
                 context['domains_json'] = [d['name'] for d in domains]
             except Exception:
                 context['domains_json'] = []
+
+        if tab == 'navbar-stats':
+            context['active_domains'] = MailDomain.objects.filter(is_active=True).count()
+            context['active_accounts'] = MailAccount.objects.filter(is_active=True).count()
+            context['inactive_accounts'] = MailAccount.objects.filter(is_active=False).count()
 
         return HttpResponse(template.render(context, request))
     except Exception as e:
         return HttpResponse(f'<div class="p-6 text-red-400">Error loading {tab}: {str(e)}</div>', status=500)
 
 def favicon(request):
-    """Tarayıcının favicon isteğine boş SVG döndür — 404 loglarını önler."""
     svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect width="32" height="32" rx="8" fill="#10b981"/><path d="M8 16l5 5 11-11" stroke="white" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>'
     return HttpResponse(svg, content_type='image/svg+xml')
 
 def well_known(request, path=''):
-    """Chrome DevTools ve diğer .well-known isteklerini sessizce 204 ile yanıtla."""
     return HttpResponse(status=204)
 
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/', api.urls, name='api'),
     path('api/content/<str:tab>/', content_partial, name='api_content'),
+
+    # Main pages (traditional multi-page, not HTMX SPA)
     path('dashboard/', dashboard, name='dashboard'),
+    path('domains/', domains_view, name='domains'),
+    path('accounts/', accounts_view, name='accounts'),
+    path('containers/', containers_view, name='containers'),
+    path('backups/', backups_view, name='backups'),
+    path('logs/', logs_view, name='logs'),
+
     path('setup/', setup, name='setup'),
     path('login/', login, name='login'),
     path('login-success/', login_success, name='login_success'),

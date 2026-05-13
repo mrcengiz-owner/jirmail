@@ -7,7 +7,8 @@
             <p class="text-slate-500 mt-1">Real-time system and container metrics</p>
         </div>
         <button hx-get="/api/content/dashboard/"
-                hx-target="#content-area"
+                hx-target="#content-inner"
+                hx-swap="innerHTML"
                 class="btn btn-secondary flex items-center gap-2">
             <svg class="htmx-indicator animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
                 <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
@@ -20,7 +21,7 @@
         </button>
     </div>
 
-    <!-- Bento Grid -->
+    <!-- Bento Grid - Using plain IDs for fallback JS -->
     <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6" x-data="systemMetrics()" x-init="init()">
 
         <!-- CPU Card -->
@@ -34,7 +35,7 @@
                 </div>
             </div>
             <div class="text-4xl font-bold text-white mb-4">
-                <span x-text="specs.cpu_percent.toFixed(1)">0</span><span class="text-xl text-slate-500">%</span>
+                <span x-text="specs.cpu_percent.toFixed(1)" id="cpu-value">0</span><span class="text-xl text-slate-500">%</span>
             </div>
             <div class="progress-bar-container">
                 <div class="progress-bar-fill bg-primary-500" :style="'width: ' + specs.cpu_percent + '%'"></div>
@@ -52,10 +53,10 @@
                 </div>
             </div>
             <div class="text-4xl font-bold text-white mb-2">
-                <span x-text="specs.ram_used_gb.toFixed(1)">0</span> <span class="text-xl text-slate-500">GB</span>
+                <span x-text="specs.ram_used_gb.toFixed(1)" id="ram-used">0</span> <span class="text-xl text-slate-500">GB</span>
             </div>
             <div class="text-sm text-slate-400 mb-2">
-                <span x-text="specs.ram_percent.toFixed(0)">0</span>% of <span x-text="specs.ram_total_gb.toFixed(1)">0</span> GB
+                <span x-text="specs.ram_percent.toFixed(0)" id="ram-percent">0</span>% of <span x-text="specs.ram_total_gb.toFixed(1)" id="ram-total">0</span> GB
             </div>
             <div class="progress-bar-container">
                 <div class="progress-bar-fill bg-info-500" :style="'width: ' + specs.ram_percent + '%'"></div>
@@ -73,10 +74,10 @@
                 </div>
             </div>
             <div class="text-4xl font-bold text-white mb-2">
-                <span x-text="specs.disk_used_gb.toFixed(1)">0</span> <span class="text-xl text-slate-500">GB</span>
+                <span x-text="specs.disk_used_gb.toFixed(1)" id="disk-used">0</span> <span class="text-xl text-slate-500">GB</span>
             </div>
             <div class="text-sm text-slate-400 mb-2">
-                <span x-text="specs.disk_percent.toFixed(0)">0</span>% of <span x-text="specs.disk_total_gb.toFixed(1)">0</span> GB
+                <span x-text="specs.disk_percent.toFixed(0)" id="disk-percent">0</span>% of <span x-text="specs.disk_total_gb.toFixed(1)" id="disk-total">0</span> GB
             </div>
             <div class="progress-bar-container">
                 <div class="progress-bar-fill bg-purple-500" :style="'width: ' + specs.disk_percent + '%'"></div>
@@ -94,7 +95,7 @@
                 </div>
             </div>
             <div class="text-4xl font-bold text-white mb-4">
-                <span x-text="specs.docker_containers ? specs.docker_containers.length : 0">0</span>
+                <span x-text="specs.docker_containers ? specs.docker_containers.length : 0" id="container-count">0</span>
             </div>
             <div class="flex items-center gap-2 text-sm">
                 <span class="text-success-500" x-text="(specs.docker_containers || []).filter(c => c.status === 'running').length + ' running'"></span>
@@ -102,20 +103,60 @@
         </div>
 
         <!-- Services Status -->
-        <div class="bento-card col-span-full md:col-span-2 lg:col-span-4" x-data="servicesStatus()">
-            <h3 class="text-lg font-semibold text-white mb-4">Service Status</h3>
-            <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div class="bento-card col-span-full md:col-span-2 lg:col-span-4"
+             x-data="servicesStatus()"
+             x-init="console.log('[Dashboard] servicesStatus x-data initialized'); init(); console.log('[Dashboard] Services:', services)"
+             @services-updated.window="console.log('[Dashboard] Services updated event:', services)">
+            <div class="flex items-center justify-between mb-4">
+                <h3 class="text-lg font-semibold text-white">Service Status</h3>
+                <div class="flex items-center gap-2">
+                    <!-- Debug: show services count -->
+                    <span class="text-xs text-slate-500" x-text="services.length + ' services'"></span>
+                    <button @click="console.log('[Dashboard] Manual refresh, services:', services); fetchServiceStatus()"
+                            class="text-xs text-slate-500 hover:text-white flex items-center gap-1 transition-colors">
+                        <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                        </svg>
+                        Yenile
+                    </button>
+                </div>
+            </div>
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-3" id="services-container">
                 <template x-for="service in services" :key="service.name">
-                    <div class="flex items-center justify-between p-3 bg-slate-900/50 rounded-xl border border-slate-800">
-                        <span class="text-sm font-medium text-slate-300" x-text="service.name"></span>
-                        <span class="px-2 py-0.5 rounded-full text-xs font-semibold border"
-                              :class="{
-                                  'bg-success-500/10 text-success-400 border-success-500/20': service.status === 'running',
-                                  'bg-danger-500/10 text-danger-400 border-danger-500/20': service.status === 'stopped',
-                                  'bg-warning-500/10 text-warning-400 border-warning-500/20': service.status === 'checking' || service.status === 'unknown'
-                              }"
-                              x-text="service.status === 'running' ? '● online' : service.status === 'stopped' ? '● offline' : '○ checking'">
-                        </span>
+                    <div class="flex flex-col p-3 bg-slate-900/50 rounded-xl border border-slate-800 hover:border-slate-700 transition-colors">
+                        <div class="flex items-center justify-between mb-2">
+                            <span class="text-sm font-medium text-slate-300" x-text="service.name"></span>
+                            <span class="px-2 py-0.5 rounded-full text-xs font-semibold border"
+                                  :class="{
+                                      'bg-success-500/10 text-success-400 border-success-500/20': service.status === 'running',
+                                      'bg-danger-500/10 text-danger-400 border-danger-500/20': service.status === 'stopped',
+                                      'bg-warning-500/10 text-warning-400 border-warning-500/20': service.status === 'checking' || service.status === 'unknown'
+                                  }"
+                                  x-text="service.status === 'running' ? '● online' : service.status === 'stopped' ? '● offline' : '○ checking'">
+                            </span>
+                        </div>
+                        <div class="flex items-center gap-2 mt-auto">
+                            <!-- Start Button (shown when stopped) -->
+                            <button x-show="service.status !== 'running'"
+                                    @click="toggleService(service)"
+                                    class="flex-1 flex items-center justify-center gap-1 px-2 py-1 rounded-lg bg-success-500/10 text-success-400 hover:bg-success-500/20 border border-success-500/20 transition-colors text-xs font-medium">
+                                <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/>
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                                </svg>
+                                Start
+                            </button>
+                            <!-- Stop Button (shown when running) -->
+                            <button x-show="service.status === 'running'"
+                                    @click="toggleService(service)"
+                                    class="flex-1 flex items-center justify-center gap-1 px-2 py-1 rounded-lg bg-danger-500/10 text-danger-400 hover:bg-danger-500/20 border border-danger-500/20 transition-colors text-xs font-medium">
+                                <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 10a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4z"/>
+                                </svg>
+                                Stop
+                            </button>
+                        </div>
                     </div>
                 </template>
             </div>
@@ -126,7 +167,8 @@
             <h3 class="text-lg font-semibold text-white mb-4">Quick Actions</h3>
             <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <button hx-get="/api/content/accounts/"
-                        hx-target="#content-area"
+                        hx-target="#content-inner"
+                        hx-swap="innerHTML"
                         class="flex flex-col items-center p-4 bg-slate-900/50 hover:bg-slate-800 rounded-xl transition-all border border-slate-800 hover:border-primary-500/50 group">
                     <div class="w-12 h-12 bg-success-500/10 rounded-full flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
                         <svg class="w-6 h-6 text-success-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -137,7 +179,8 @@
                 </button>
 
                 <button hx-get="/api/content/domains/"
-                        hx-target="#content-area"
+                        hx-target="#content-inner"
+                        hx-swap="innerHTML"
                         class="flex flex-col items-center p-4 bg-slate-900/50 hover:bg-slate-800 rounded-xl transition-all border border-slate-800 hover:border-blue-500/50 group">
                     <div class="w-12 h-12 bg-info-500/10 rounded-full flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
                         <svg class="w-6 h-6 text-info-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -148,7 +191,8 @@
                 </button>
 
                 <button hx-get="/api/content/backup/"
-                        hx-target="#content-area"
+                        hx-target="#content-inner"
+                        hx-swap="innerHTML"
                         class="flex flex-col items-center p-4 bg-slate-900/50 hover:bg-slate-800 rounded-xl transition-all border border-slate-800 hover:border-warning-500/50 group">
                     <div class="w-12 h-12 bg-warning-500/10 rounded-full flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
                         <svg class="w-6 h-6 text-warning-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -159,7 +203,8 @@
                 </button>
 
                 <button hx-get="/api/content/logs/"
-                        hx-target="#content-area"
+                        hx-target="#content-inner"
+                        hx-swap="innerHTML"
                         class="flex flex-col items-center p-4 bg-slate-900/50 hover:bg-slate-800 rounded-xl transition-all border border-slate-800 hover:border-danger-500/50 group">
                     <div class="w-12 h-12 bg-danger-500/10 rounded-full flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
                         <svg class="w-6 h-6 text-danger-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -172,3 +217,60 @@
         </div>
     </div>
 </div>
+
+<!-- Fallback JS: Direct DOM update in case Alpine fails -->
+<script>
+(function() {
+    // Fallback direct fetch for system metrics
+    function updateMetricsFallback() {
+        fetch('/api/management/system-specs')
+            .then(function(res) { return res.ok ? res.json() : null; })
+            .then(function(data) {
+                if (!data) return;
+                // Update CPU
+                var cpuEl = document.getElementById('cpu-value');
+                if (cpuEl) cpuEl.textContent = (data.cpu_percent || 0).toFixed(1);
+                // Update RAM
+                var ramUsedEl = document.getElementById('ram-used');
+                if (ramUsedEl) ramUsedEl.textContent = (data.ram_used_gb || 0).toFixed(1);
+                var ramTotalEl = document.getElementById('ram-total');
+                if (ramTotalEl) ramTotalEl.textContent = (data.ram_total_gb || 0).toFixed(1);
+                var ramPctEl = document.getElementById('ram-percent');
+                if (ramPctEl) ramPctEl.textContent = (data.ram_percent || 0).toFixed(0);
+                // Update Disk
+                var diskUsedEl = document.getElementById('disk-used');
+                if (diskUsedEl) diskUsedEl.textContent = (data.disk_used_gb || 0).toFixed(1);
+                var diskTotalEl = document.getElementById('disk-total');
+                if (diskTotalEl) diskTotalEl.textContent = (data.disk_total_gb || 0).toFixed(1);
+                var diskPctEl = document.getElementById('disk-percent');
+                if (diskPctEl) diskPctEl.textContent = (data.disk_percent || 0).toFixed(0);
+                // Update Containers
+                var containerCountEl = document.getElementById('container-count');
+                if (containerCountEl && data.docker_containers) {
+                    containerCountEl.textContent = data.docker_containers.length;
+                }
+                // Update progress bars directly
+                var bars = document.querySelectorAll('.progress-bar-fill');
+                bars.forEach(function(bar) {
+                    var container = bar.closest('.progress-bar-container');
+                    if (container) {
+                        var style = bar.getAttribute('style') || '';
+                        var match = style.match(/width:\s*([\d.]+)%/);
+                        if (match) {
+                            var percent = parseFloat(match[1]);
+                            // Find the right card and update its bar
+                        }
+                    }
+                });
+            })
+            .catch(function(e) {
+                console.warn('[Jîr-Mail] Fallback metrics fetch failed:', e);
+            });
+    }
+
+    // Run fallback after short delay to ensure Alpine has had a chance
+    setTimeout(updateMetricsFallback, 2000);
+    // Also run immediately if Alpine doesn't initialize
+    setTimeout(updateMetricsFallback, 500);
+})();
+</script>

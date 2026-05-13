@@ -324,21 +324,38 @@ class SystemRequirementsSchema(Schema):
     services: list
 
 
-def check_port_available(port):
+def check_port_listening(port, host='localhost'):
     import socket
     try:
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-            s.settimeout(1)
-            result = s.connect_ex(('localhost', port))
-            return result != 0
+            s.settimeout(2)
+            result = s.connect_ex((host, port))
+            return result == 0
     except:
         return False
 
 
-@router.get("/system-requirements", response={200: SystemRequirementsSchema}, summary="Sistem Gereksinimleri Kontrol")
-def check_system_requirements(request):
-    import socket
+def check_service_in_docker(container_name, docker_host=None):
+    """Docker içinde container çalışıyor mu kontrol et"""
+    try:
+        import docker
+        if docker_host and docker_host.startswith('tcp://'):
+            client = docker.DockerClient(base_url=docker_host, timeout=3)
+        else:
+            client = docker.DockerClient(base_url='unix://var/run/docker.sock', timeout=3)
 
+        for container in client.containers.list(all=True):
+            if container.name == container_name:
+                client.close()
+                return container.status == 'running'
+        client.close()
+        return False
+    except Exception:
+        return False
+
+
+@router.get("/system-requirements", response={200: dict}, summary="Sistem Gereksinimleri Kontrol")
+def check_system_requirements(request):
     ram = psutil.virtual_memory()
     disk = psutil.disk_usage('/')
 
@@ -347,28 +364,136 @@ def check_system_requirements(request):
     ports_blocked = []
 
     for port in required_ports:
-        if check_port_available(port):
+        if check_port_listening(port):
             ports_ok.append(port)
         else:
             ports_blocked.append(port)
 
     services = []
-    service_checks = {
-        'PostgreSQL': (5432, 'postgres'),
-        'Postfix': (25, 'postfix'),
-        'Dovecot': (993, 'dovecot'),
+    docker_services = {
+        'PostgreSQL': {'container': 'jir_postgres', 'port': 5432, 'docker_host': None},
+        'Postfix': {'container': 'jir_postfix', 'port': 25, 'docker_host': None},
+        'Dovecot': {'container': 'jir_dovecot', 'port': 993, 'docker_host': None},
+        'Redis': {'container': 'jir_redis', 'port': 6379, 'docker_host': None},
     }
 
-    for name, (port, proc_name) in service_checks.items():
-        try:
-            for proc in psutil.process_iter(['name']):
-                if proc_name in proc.info['name'].lower():
-                    services.append({"name": name, "status": "running", "port": port})
-                    break
-            else:
-                services.append({"name": name, "status": "stopped", "port": port})
-        except:
-            services.append({"name": name, "status": "unknown", "port": port})
+    docker_host = getattr(settings, 'DOCKER_HOST', None)
+
+    for name, info in docker_services.items():
+        container_name = info['container']
+        port = info['port']
+
+        # 1. Önce Docker container kontrolü (en güvenilir)
+        if check_service_in_docker(container_name, docker_host):
+            services.append({
+                "name": name,
+                "status": "running",
+                "port": port
+            })
+            continue
+
+        # 2. Docker başarısız veya container yoksa, port kontrolü
+        # Django Docker ağında ise service name ile kontrol et
+        is_listening = check_port_listening(port, host=name.lower())
+
+        if not is_listening:
+            # Fallback: localhost üzerinden de dene
+            is_listening = check_port_listening(port, host='localhost')
+
+        services.append({
+            "name": name,
+            "status": "running" if is_listening else "stopped",
+            "port": port
+        })
+
+    ram_required_gb = 2.0
+    disk_required_gb = 10.0
+
+    all_ok = (
+        ram.total / (1024**3) >= ram_required_gb and
+        disk.free / (1024**3) >= disk_required_gb and
+        len(ports_blocked) == 0
+    )
+
+    return {
+        "status": "ok" if all_ok else "warning",
+        "ram_ok": ram.total / (1024**3) >= ram_required_gb,
+        "ram_total_gb": round(ram.total / (1024**3), 2),
+        "ram_required_gb": ram_required_gb,
+        "disk_ok": disk.free / (1024**3) >= disk_required_gb,
+        "disk_free_gb": round(disk.free / (1024**3), 2),
+        "disk_required_gb": disk_required_gb,
+        "ports_ok": ports_ok,
+        "ports_blocked": ports_blocked,
+        "services": services
+    }
+    """Docker içinde container çalışıyor mu kontrol et"""
+    try:
+        import docker
+        if docker_host and docker_host.startswith('tcp://'):
+            client = docker.DockerClient(base_url=docker_host, timeout=3)
+        else:
+            client = docker.DockerClient(base_url='unix://var/run/docker.sock', timeout=3)
+
+        for container in client.containers.list(all=True):
+            if container.name == container_name:
+                client.close()
+                return container.status == 'running'
+        client.close()
+        return False
+    except Exception:
+        return False
+
+
+def check_port_listening(port, host='localhost'):
+    import socket
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.settimeout(2)
+            result = s.connect_ex((host, port))
+            return result == 0
+    except:
+        return False
+
+
+@router.get("/system-requirements", response={200: dict}, summary="Sistem Gereksinimleri Kontrol")
+def check_system_requirements(request):
+    ram = psutil.virtual_memory()
+    disk = psutil.disk_usage('/')
+
+    required_ports = [25, 465, 587, 993, 143]
+    ports_ok = []
+    ports_blocked = []
+
+    for port in required_ports:
+        if check_port_listening(port):
+            ports_ok.append(port)
+        else:
+            ports_blocked.append(port)
+
+    services = []
+    docker_services = {
+        'PostgreSQL': {'container': 'jir_postgres', 'port': 5432},
+        'Postfix': {'container': 'jir_postfix', 'port': 25},
+        'Dovecot': {'container': 'jir_dovecot', 'port': 993},
+        'Redis': {'container': 'jir_redis', 'port': 6379},
+    }
+
+    docker_host = getattr(settings, 'DOCKER_HOST', None)
+
+    for name, info in docker_services.items():
+        container_name = info['container']
+        port = info['port']
+
+        if check_service_in_docker(container_name, docker_host):
+            services.append({"name": name, "status": "running", "port": port})
+            continue
+
+        is_listening = check_port_listening(port, host=name.lower())
+        if not is_listening:
+            is_listening = check_port_listening(port, host='localhost')
+
+        services.append({"name": name, "status": "running" if is_listening else "stopped", "port": port})
 
     ram_required_gb = 2.0
     disk_required_gb = 10.0
@@ -405,10 +530,14 @@ def get_system_specs(request):
 
     try:
         import docker
-        client = docker.DockerClient(base_url='unix://var/run/docker.sock')
+        docker_host = getattr(settings, 'DOCKER_HOST', None)
+        if docker_host and docker_host.startswith('tcp://'):
+            client = docker.DockerClient(base_url=docker_host)
+        else:
+            client = docker.DockerClient(base_url='unix://var/run/docker.sock')
         jir_containers = ['jir_django', 'jir_postgres', 'jir_postfix', 'jir_dovecot', 'jir_redis', 'jir_celery', 'jir_celery_beat']
 
-        for container in client.containers.list():
+        for container in client.containers.list(all=True):
             if any(c in container.name for c in jir_containers):
                 try:
                     container.reload()
@@ -465,6 +594,27 @@ def get_system_specs(request):
     }
 
 
+class SystemStatsSchema(Schema):
+    active_domains: int
+    active_accounts: int
+    inactive_accounts: int
+
+
+@router.get("/system-stats", response={200: SystemStatsSchema}, summary="Navbar İstatistikleri")
+def get_system_stats(request):
+    from core.models import MailAccount, MailDomain
+
+    active_domains = MailDomain.objects.filter(is_active=True).count()
+    active_accounts = MailAccount.objects.filter(is_active=True).count()
+    inactive_accounts = MailAccount.objects.filter(is_active=False).count()
+
+    return {
+        "active_domains": active_domains,
+        "active_accounts": active_accounts,
+        "inactive_accounts": inactive_accounts
+    }
+
+
 class ContainerStatusSchema(Schema):
     container_id: str
     container_name: str
@@ -479,83 +629,196 @@ class ContainerStatusSchema(Schema):
 def get_container_status(request):
     containers = []
 
-    socket_paths = [
-        '/var/run/docker.sock',
-        '/run/docker.sock',
-    ]
+    docker_host = getattr(settings, 'DOCKER_HOST', None)
+    if docker_host and docker_host.startswith('tcp://'):
+        try:
+            import docker
+            client = docker.DockerClient(base_url=docker_host, timeout=5)
+            client.ping()
 
-    client = None
-    last_error = None
+            jir_containers = ['jir_django', 'jir_postgres', 'jir_postfix', 'jir_dovecot',
+                              'jir_redis', 'jir_celery', 'jir_celery_beat', 'jir_docker_proxy']
+            all_containers = client.containers.list(all=True)
 
+            for container in all_containers:
+                if any(c in container.name for c in jir_containers):
+                    try:
+                        container.reload()
+                        state = container.status
+                        is_running = state == 'running'
+
+                        cpu_percent = 0.0
+                        mem_usage = 0.0
+                        mem_limit = 0.0
+                        mem_percent = 0.0
+
+                        if is_running:
+                            try:
+                                stats = container.stats(stream=False)
+                                cpu_delta = stats['cpu_stats']['cpu_usage']['total_usage'] - \
+                                            stats['precpu_stats']['cpu_usage']['total_usage']
+                                system_delta = stats['cpu_stats'].get('system_cpu_usage', 0) - \
+                                               stats['precpu_stats'].get('system_cpu_usage', 0)
+                                cpu_count = stats['cpu_stats'].get('online_cpus', 1)
+                                if system_delta > 0:
+                                    cpu_percent = (cpu_delta / system_delta) * cpu_count * 100.0
+
+                                mem_usage = stats['memory_stats'].get('usage', 0) / (1024 * 1024)
+                                mem_limit = stats['memory_stats'].get('limit', 1) / (1024 * 1024)
+                                mem_percent = (mem_usage / mem_limit * 100) if mem_limit > 0 else 0
+                            except Exception:
+                                pass
+
+                        containers.append({
+                            "container_id": container.short_id,
+                            "container_name": container.name,
+                            "status": state,
+                            "cpu_percent": round(cpu_percent, 2),
+                            "ram_percent": round(mem_percent, 2),
+                            "ram_usage_mb": round(mem_usage, 2),
+                            "ram_limit_mb": round(mem_limit, 2),
+                        })
+                    except Exception:
+                        continue
+
+            client.close()
+            return containers
+        except Exception as e:
+            return [{
+                "container_id": "error",
+                "container_name": "Docker Proxy Error",
+                "status": "offline",
+                "cpu_percent": 0,
+                "ram_percent": 0,
+                "ram_usage_mb": 0,
+                "ram_limit_mb": 0,
+                "error": str(e)
+            }]
+
+    # Fallback: doğrudan socket (yerel geliştirme)
+    socket_paths = ['/var/run/docker.sock', '/run/docker.sock']
     for socket_path in socket_paths:
         if not os.path.exists(socket_path):
             continue
         try:
             import docker
-            client = docker.DockerClient(base_url=f'unix://{socket_path}')
+            client = docker.DockerClient(base_url=f'unix://{socket_path}', timeout=5)
             client.ping()
-            break
+
+            jir_containers = ['jir_django', 'jir_postgres', 'jir_postfix', 'jir_dovecot',
+                              'jir_redis', 'jir_celery', 'jir_celery_beat']
+            all_containers = client.containers.list(all=True)
+
+            for container in all_containers:
+                if any(c in container.name for c in jir_containers):
+                    try:
+                        container.reload()
+                        state = container.status
+                        is_running = state == 'running'
+
+                        stats = container.stats(stream=False) if is_running else None
+                        cpu_percent = 0.0
+                        mem_usage = 0.0
+                        mem_limit = 0.0
+                        mem_percent = 0.0
+
+                        if stats:
+                            cpu_delta = stats['cpu_stats']['cpu_usage']['total_usage'] - \
+                                        stats['precpu_stats']['cpu_usage']['total_usage']
+                            system_delta = stats['cpu_stats']['system_cpu_usage'] - \
+                                           stats['precpu_stats']['system_cpu_usage']
+                            cpu_count = stats['cpu_stats'].get('online_cpus', 1)
+                            cpu_percent = (cpu_delta / system_delta * cpu_count * 100.0) if system_delta > 0 else 0
+
+                            mem_usage = stats['memory_stats'].get('usage', 0) / (1024 * 1024)
+                            mem_limit = stats['memory_stats'].get('limit', 1) / (1024 * 1024)
+                            mem_percent = (mem_usage / mem_limit * 100) if mem_limit > 0 else 0
+
+                        containers.append({
+                            "container_id": container.short_id,
+                            "container_name": container.name,
+                            "status": state,
+                            "cpu_percent": round(cpu_percent, 2),
+                            "ram_percent": round(mem_percent, 2),
+                            "ram_usage_mb": round(mem_usage, 2),
+                            "ram_limit_mb": round(mem_limit, 2),
+                        })
+                    except Exception:
+                        continue
+
+            client.close()
+            return containers
         except Exception as e:
-            last_error = str(e)
-            client = None
             continue
 
-    if not client:
-        return [{
-            "container_id": "error",
-            "container_name": "Docker Connection Error",
-            "status": "offline",
-            "cpu_percent": 0,
-            "ram_percent": 0,
-            "ram_usage_mb": 0,
-            "ram_limit_mb": 0,
-            "error": f"Could not connect to Docker socket. Error: {last_error or 'Unknown'}. Check if Docker is running and socket permissions."
-        }]
+    return [{
+        "container_id": "unavailable",
+        "container_name": "Docker Unavailable",
+        "status": "offline",
+        "cpu_percent": 0,
+        "ram_percent": 0,
+        "ram_usage_mb": 0,
+        "ram_limit_mb": 0,
+        "error": "Docker socket not accessible. Ensure docker-proxy is running or docker.sock is mounted."
+    }]
+
+
+@router.post("/container/{container_name}/{action}", summary="Container Start/Stop/Restart")
+@csrf_exempt
+def container_action(request, container_name, action):
+    """Start, stop, or restart a Docker container"""
+    if action not in ['start', 'stop', 'restart']:
+        return {"status": "error", "message": "Invalid action. Use start, stop, or restart."}
+
+    container_map = {
+        'postgresql': 'jir_postgres',
+        'postgres': 'jir_postgres',
+        'postfix': 'jir_postfix',
+        'dovecot': 'jir_dovecot',
+        'redis': 'jir_redis',
+        'django': 'jir_django',
+        'celery': 'jir_celery',
+    }
+
+    actual_name = container_map.get(container_name.lower(), container_name)
+    if actual_name not in container_map.values():
+        actual_name = f'jir_{container_name}' if not container_name.startswith('jir_') else container_name
+
+    docker_host = getattr(settings, 'DOCKER_HOST', None)
+    client = None
 
     try:
-        jir_containers = ['jir_django', 'jir_postgres', 'jir_postfix', 'jir_dovecot', 'jir_redis', 'jir_celery', 'jir_celery_beat']
-        all_containers = client.containers.list(all=True)
+        import docker
+        if docker_host and docker_host.startswith('tcp://'):
+            client = docker.DockerClient(base_url=docker_host, timeout=10)
+        else:
+            client = docker.DockerClient(base_url='unix://var/run/docker.sock', timeout=10)
 
-        for container in all_containers:
-            if any(c in container.name for c in jir_containers):
-                try:
-                    container.reload()
-                    state = container.status
-                    is_running = state == 'running'
+        container = client.containers.get(actual_name)
 
-                    stats = container.stats(stream=False) if is_running else None
-                    cpu_percent = 0.0
-                    mem_usage = 0.0
-                    mem_limit = 0.0
-                    mem_percent = 0.0
+        if action == 'start':
+            container.start()
+            return {"status": "success", "message": f"{actual_name} started", "action": "start"}
+        elif action == 'stop':
+            container.stop(timeout=10)
+            return {"status": "success", "message": f"{actual_name} stopped", "action": "stop"}
+        elif action == 'restart':
+            container.restart(timeout=10)
+            return {"status": "success", "message": f"{actual_name} restarted", "action": "restart"}
 
-                    if stats:
-                        cpu_delta = stats['cpu_stats']['cpu_usage']['total_usage'] - stats['precpu_stats']['cpu_usage']['total_usage']
-                        system_delta = stats['cpu_stats']['system_cpu_usage'] - stats['precpu_stats']['system_cpu_usage']
-                        cpu_count = stats['cpu_stats'].get('online_cpus', 1)
-                        cpu_percent = (cpu_delta / system_delta * cpu_count * 100.0) if system_delta > 0 else 0
-
-                        mem_usage = stats['memory_stats'].get('usage', 0) / (1024 * 1024)
-                        mem_limit = stats['memory_stats'].get('limit', 1) / (1024 * 1024)
-                        mem_percent = (mem_usage / mem_limit * 100) if mem_limit > 0 else 0
-
-                    containers.append({
-                        "container_id": container.short_id,
-                        "container_name": container.name,
-                        "status": state,
-                        "cpu_percent": round(cpu_percent, 2),
-                        "ram_percent": round(mem_percent, 2),
-                        "ram_usage_mb": round(mem_usage, 2),
-                        "ram_limit_mb": round(mem_limit, 2),
-                    })
-                except Exception as e:
-                    continue
-
-        client.close()
+    except ImportError:
+        return {"status": "error", "message": "Docker module not installed. Install with: pip install docker"}
     except Exception as e:
-        pass
-
-    return containers
+        docker_error = str(e)
+        if 'NotFound' in docker_error or '404' in docker_error:
+            return {"status": "error", "message": f"Container {actual_name} not found"}
+        elif 'Permission' in docker_error or 'denied' in docker_error.lower():
+            return {"status": "error", "message": "Docker permission denied. Check socket access."}
+        else:
+            return {"status": "error", "message": docker_error}
+    finally:
+        if client:
+            client.close()
 
 
 class LogEntrySchema(Schema):
@@ -737,12 +1000,6 @@ def restart_container(request, container_name: str):
         }
     except Exception as e:
         return {"status": "error", "message": f"Yeniden başlatma hatası: {str(e)}"}
-
-
-
-    username: str
-    domain: str
-    password: str
 
 
 def update_postfix_vmail(email, action="add"):
