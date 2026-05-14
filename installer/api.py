@@ -1,6 +1,8 @@
 """Installer için django-ninja router.
 
 Endpoint'ler:
+    GET  /api/installer/bootstrap      Ortam DATABASE_URL ipucu + önerilen profil
+    POST /api/installer/test-db        PostgreSQL bağlantı testi (kurulum öncesi)
     POST /api/installer/start          Kurulum çalışmasını başlatır (run_id döner)
     GET  /api/installer/status         Mevcut run'ın durumu (polling fallback)
     GET  /api/installer/stream         SSE event stream (tarayıcıdan açılır)
@@ -8,6 +10,7 @@ Endpoint'ler:
     POST /api/installer/dns-apply      DNS kayıtlarını provider üzerinden uygula
     POST /api/installer/tls-request    Let's Encrypt sertifikası iste
 """
+import os
 import secrets
 import threading
 from typing import Any, Dict, Optional
@@ -18,11 +21,19 @@ from ninja import Router, Schema
 from pydantic import Field
 
 from .models import InstallationRun, InstallationStep
-from .orchestrator import run_installation
+from .orchestrator import _resolve_profile_and_client, run_installation
 from .sse import sse_response
 
 
 router = Router()
+
+
+class DbManualSchema(Schema):
+    host: str = ''
+    port: int = 5432
+    name: str = ''
+    user: str = ''
+    password: str = ''
 
 
 class StartInstallSchema(Schema):
@@ -37,6 +48,61 @@ class StartInstallSchema(Schema):
     mail_hostname: str = ''
     dns_provider: str = 'manual'
     dns_credentials: Dict[str, Any] = Field(default_factory=dict)
+    install_profile: str = 'docker_stack'
+    db_manual: Optional[DbManualSchema] = None
+
+
+class TestDbSchema(Schema):
+    host: str
+    port: int = 5432
+    name: str
+    user: str
+    password: str = ''
+
+
+@router.get('/bootstrap', summary='Kurulum sihirbazı ortam bilgisi')
+def installer_bootstrap(request: HttpRequest):
+    """DATABASE_URL var mı (maskeli ipucu) ve önerilen kurulum profili."""
+    url = os.getenv('DATABASE_URL', '').strip()
+    out: Dict[str, Any] = {
+        'has_database_url': bool(url),
+        'suggested_profile': 'platform_env' if url else 'docker_stack',
+    }
+    if url:
+        try:
+            from urllib.parse import urlparse
+
+            p = urlparse(url)
+            dbname = (p.path or '').lstrip('/') or ''
+            out['database_host_hint'] = p.hostname or ''
+            out['database_name_hint'] = (dbname[:24] + '...') if len(dbname) > 24 else dbname
+        except Exception:
+            out['database_host_hint'] = ''
+            out['database_name_hint'] = ''
+    return out
+
+
+@router.post('/test-db', summary='PostgreSQL bağlantı testi')
+@csrf_exempt
+def test_db_connection(request: HttpRequest, data: TestDbSchema):
+    try:
+        import psycopg2
+
+        conn = psycopg2.connect(
+            host=data.host,
+            port=data.port or 5432,
+            dbname=data.name,
+            user=data.user,
+            password=data.password or '',
+            connect_timeout=10,
+        )
+        cur = conn.cursor()
+        cur.execute('SELECT 1')
+        cur.close()
+        conn.close()
+        return {'success': True, 'message': 'Bağlantı başarılı.'}
+    except Exception as exc:
+        return {'success': False, 'message': str(exc)}
 
 
 @router.post('/start', summary='Kurulumu başlat')
@@ -50,6 +116,22 @@ def start_install(request: HttpRequest, data: StartInstallSchema):
             'message': 'Aktif bir kurulum çalışması zaten var.',
             'run_id': str(active.run_id),
         }
+
+    db_manual_dict: Dict[str, Any] = {}
+    if data.db_manual is not None:
+        if hasattr(data.db_manual, 'model_dump'):
+            db_manual_dict = data.db_manual.model_dump(exclude_none=True)
+        else:
+            db_manual_dict = data.db_manual.dict(exclude_none=True)
+
+    pre_cfg = {
+        'install_profile': data.install_profile or 'docker_stack',
+        'db_manual': db_manual_dict,
+    }
+    try:
+        _resolve_profile_and_client(pre_cfg)
+    except RuntimeError as exc:
+        return {'status': 'error', 'message': str(exc)}
 
     pg_password = data.postgres_password or secrets.token_urlsafe(24)
     mail_hostname = data.mail_hostname or f'mail.{data.domain}'
@@ -66,6 +148,8 @@ def start_install(request: HttpRequest, data: StartInstallSchema):
         'mail_hostname': mail_hostname,
         'dns_provider': data.dns_provider,
         'dns_credentials': data.dns_credentials,
+        'install_profile': data.install_profile or 'docker_stack',
+        'db_manual': db_manual_dict,
     }
 
     run = InstallationRun.objects.create(config_snapshot=config, status='pending')

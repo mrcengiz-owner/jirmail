@@ -22,7 +22,6 @@
 
     <div class="w-full max-w-2xl relative z-10" x-data="setupWizard()" x-init="init()">
 
-        <!-- Brand -->
         <div class="text-center mb-6 sm:mb-8">
             <img src="{% static 'brand/logo-icon.svg' %}" alt="JîrCode"
                  class="w-14 h-14 sm:w-16 sm:h-16 mx-auto mb-3 rounded-2xl shadow-2xl shadow-primary-500/30">
@@ -33,9 +32,7 @@
             <p class="text-slate-500 text-xs sm:text-sm mt-1.5">Kurulum Sihirbazı</p>
         </div>
 
-        <!-- Stepper: mobile compact (dot), desktop full -->
         <div class="mb-6 sm:mb-8">
-            <!-- Mobile: progress text + bar -->
             <div class="sm:hidden">
                 <div class="flex items-center justify-between mb-2">
                     <span class="text-xs font-semibold text-slate-400 uppercase tracking-wider">
@@ -49,7 +46,6 @@
                 </div>
             </div>
 
-            <!-- Desktop: dotted stepper -->
             <div class="hidden sm:flex items-start">
                 <template x-for="(label, index) in stepLabels" :key="index">
                     <div class="flex items-start" :class="index < stepLabels.length - 1 ? 'flex-1' : ''">
@@ -69,7 +65,7 @@
                                     <span class="text-xs font-bold" x-text="index + 1"></span>
                                 </template>
                             </div>
-                            <span class="text-[11px] mt-1.5 font-medium whitespace-nowrap"
+                            <span class="text-[11px] mt-1.5 font-medium text-center max-w-[5.5rem] leading-tight"
                                   :class="index + 1 <= step ? 'text-primary-400' : 'text-slate-500'"
                                   x-text="label"></span>
                         </div>
@@ -81,36 +77,60 @@
             </div>
         </div>
 
-        <!-- Wizard body -->
         <div class="card">
 
-            <!-- Step 1: Domain -->
+            <!-- 1: Kurulum modu -->
             <div x-show="step === 1" x-transition.opacity>
-                <h2 class="text-lg sm:text-xl font-semibold text-white mb-1">Domain Ayarı</h2>
-                <p class="text-slate-500 text-sm mb-5">Mail sunucunun ana domain adresini belirleyin</p>
+                <h2 class="text-lg sm:text-xl font-semibold text-white mb-1">Kurulum modu</h2>
+                <p class="text-slate-500 text-sm mb-5">Tam otomatik Docker stack mi, yoksa Coolify / harici veritabanı mı?</p>
 
+                <div class="space-y-3">
+                    <button type="button" @click="installProfile = 'docker_stack'; ensurePostgresSecret()"
+                            :class="installProfile === 'docker_stack' ? 'ring-2 ring-primary-500 border-primary-500/50 bg-primary-500/10' : 'border-slate-800 bg-slate-900/60 hover:border-slate-700'"
+                            class="w-full text-left rounded-xl border p-4 transition-all">
+                        <p class="font-semibold text-white">Docker ile tam kurulum</p>
+                        <p class="text-xs text-slate-400 mt-1">PostgreSQL, Redis, Postfix, Dovecot konteynerleri bu uygulama üzerinden ayağa kalkar (Docker API gerekir).</p>
+                    </button>
+                    <button type="button" @click="installProfile = 'platform_env'"
+                            :class="installProfile === 'platform_env' ? 'ring-2 ring-primary-500 border-primary-500/50 bg-primary-500/10' : 'border-slate-800 bg-slate-900/60 hover:border-slate-700'"
+                            class="w-full text-left rounded-xl border p-4 transition-all">
+                        <p class="font-semibold text-white">Ortamdaki veritabanı (otomatik)</p>
+                        <p class="text-xs text-slate-400 mt-1">Sunucuda tanımlı <code class="text-primary-400">DATABASE_URL</code> kullanılır (ör. Coolify PostgreSQL). Mail servisleri platformda ayrı kurulur.</p>
+                    </button>
+                    <button type="button" @click="installProfile = 'platform_manual'"
+                            :class="installProfile === 'platform_manual' ? 'ring-2 ring-primary-500 border-primary-500/50 bg-primary-500/10' : 'border-slate-800 bg-slate-900/60 hover:border-slate-700'"
+                            class="w-full text-left rounded-xl border p-4 transition-all">
+                        <p class="font-semibold text-white">Manuel PostgreSQL</p>
+                        <p class="text-xs text-slate-400 mt-1">Host, veritabanı adı, kullanıcı ve şifreyi siz girersiniz. Migrasyon bu bilgilerle çalışır; Coolify <code class="text-primary-400">DATABASE_URL</code> aynı hedefe işaret etmelidir.</p>
+                    </button>
+                </div>
+            </div>
+
+            <!-- 2: Domain -->
+            <div x-show="step === 2" x-transition.opacity>
+                <h2 class="text-lg sm:text-xl font-semibold text-white mb-1">Domain</h2>
+                <p class="text-slate-500 text-sm mb-5">Mail sunucusunun ana domain adresi</p>
                 <div>
-                    <label for="domain-input" class="label">Ana Domain</label>
+                    <label for="domain-input" class="label">Ana domain</label>
                     <input id="domain-input" type="text" x-model="domain"
                            placeholder="jircode.com"
                            autocapitalize="off" autocorrect="off" spellcheck="false"
                            class="input"
                            @keydown.enter="nextStep()">
                     <p class="hint">
-                        Örn: <code class="text-primary-400">jircode.com</code>, <code class="text-primary-400">firma.com.tr</code>.
-                        Mail sunucusu <code class="text-primary-400" x-text="'mail.' + (domain || 'domain.com')"></code> olarak yapılandırılacak.
+                        Örn: <code class="text-primary-400">jircode.com</code>. Mail hostname:
+                        <code class="text-primary-400" x-text="'mail.' + (domain || 'domain.com')"></code>
                     </p>
                 </div>
             </div>
 
-            <!-- Step 2: Admin -->
-            <div x-show="step === 2" x-transition.opacity>
-                <h2 class="text-lg sm:text-xl font-semibold text-white mb-1">Admin Hesabı</h2>
-                <p class="text-slate-500 text-sm mb-5">İlk yönetici hesabını oluşturun</p>
-
+            <!-- 3: Admin -->
+            <div x-show="step === 3" x-transition.opacity>
+                <h2 class="text-lg sm:text-xl font-semibold text-white mb-1">Admin hesabı</h2>
+                <p class="text-slate-500 text-sm mb-5">İlk yönetici</p>
                 <div class="space-y-4">
                     <div>
-                        <label for="admin-email" class="label">Admin E-posta</label>
+                        <label for="admin-email" class="label">Admin e-posta</label>
                         <input id="admin-email" type="email" x-model="adminEmail"
                                inputmode="email" autocapitalize="off" autocorrect="off" spellcheck="false"
                                :placeholder="'admin@' + (domain || 'domain.com')"
@@ -118,28 +138,23 @@
                     </div>
                     <div>
                         <label for="admin-password" class="label">Şifre</label>
-                        <input id="admin-password" type="password" x-model="adminPassword"
-                               placeholder="••••••••••••"
-                               class="input">
+                        <input id="admin-password" type="password" x-model="adminPassword" placeholder="En az 8 karakter" class="input">
                         <p x-show="adminPassword !== '' && adminPassword.length < 8"
                            class="text-danger-400 text-xs mt-1.5">Şifre en az 8 karakter olmalıdır</p>
                     </div>
                     <div>
-                        <label for="admin-password2" class="label">Şifre Tekrar</label>
-                        <input id="admin-password2" type="password" x-model="adminPassword2"
-                               placeholder="••••••••••••"
-                               class="input"
-                               @keydown.enter="nextStep()">
+                        <label for="admin-password2" class="label">Şifre tekrar</label>
+                        <input id="admin-password2" type="password" x-model="adminPassword2" class="input" @keydown.enter="nextStep()">
                         <p x-show="adminPassword && adminPassword2 && adminPassword !== adminPassword2"
                            class="text-danger-400 text-xs mt-1.5">Şifreler eşleşmiyor</p>
                     </div>
                 </div>
             </div>
 
-            <!-- Step 3: Security -->
-            <div x-show="step === 3" x-transition.opacity>
-                <h2 class="text-lg sm:text-xl font-semibold text-white mb-1">Güvenlik Yapılandırması</h2>
-                <p class="text-slate-500 text-sm mb-5">Otomatik üretilen sistem kimlikleri</p>
+            <!-- 4: Güvenlik + veritabanı -->
+            <div x-show="step === 4" x-transition.opacity>
+                <h2 class="text-lg sm:text-xl font-semibold text-white mb-1">Güvenlik ve veritabanı</h2>
+                <p class="text-slate-500 text-sm mb-5" x-text="installProfile === 'docker_stack' ? 'Otomatik üretilen gizli anahtarlar' : 'Kimlik bilgileri ve veri deposu'"></p>
 
                 <div class="space-y-3">
                     <div class="bg-slate-900/70 rounded-xl p-3 sm:p-4 border border-slate-800">
@@ -150,31 +165,76 @@
                         <label class="block text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1.5">JIR Local Key</label>
                         <code class="text-primary-400 font-mono text-xs sm:text-sm break-all" x-text="jirKey"></code>
                     </div>
-                    <div class="bg-slate-900/70 rounded-xl p-3 sm:p-4 border border-slate-800">
-                        <label class="block text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1.5">PostgreSQL Password</label>
+
+                    <div x-show="installProfile === 'docker_stack'" class="bg-slate-900/70 rounded-xl p-3 sm:p-4 border border-slate-800">
+                        <label class="block text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1.5">PostgreSQL şifresi (stack)</label>
                         <code class="text-primary-400 font-mono text-xs sm:text-sm break-all" x-text="postgresPassword"></code>
-                        <p class="hint">Veritabanı için otomatik üretildi.</p>
+                        <p class="hint">Docker içindeki Postgres için otomatik üretildi.</p>
                     </div>
+
+                    <div x-show="installProfile === 'platform_env'" class="rounded-xl border border-slate-800 bg-slate-900/60 p-4 space-y-2">
+                        <p class="text-sm text-slate-300 font-medium">Ortam veritabanı</p>
+                        <template x-if="bootstrap.has_database_url">
+                            <div class="text-xs text-slate-400 space-y-1">
+                                <p><span class="text-slate-500">Sunucu:</span> <span class="text-primary-300 font-mono" x-text="bootstrap.database_host_hint || '—'"></span></p>
+                                <p><span class="text-slate-500">Veritabanı:</span> <span class="text-primary-300 font-mono" x-text="bootstrap.database_name_hint || '—'"></span></p>
+                            </div>
+                        </template>
+                        <template x-if="!bootstrap.has_database_url">
+                            <p class="text-xs text-danger-300">Sunucuda DATABASE_URL tanımlı değil. Coolify üzerinde PostgreSQL servisini uygulamaya bağlayın.</p>
+                        </template>
+                    </div>
+
+                    <div x-show="installProfile === 'platform_manual'" class="rounded-xl border border-slate-800 bg-slate-900/60 p-4 space-y-3">
+                        <p class="text-sm text-slate-300 font-medium">PostgreSQL bağlantısı</p>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <div class="sm:col-span-2">
+                                <label class="label">Sunucu (host)</label>
+                                <input type="text" x-model="dbManual.host" class="input" placeholder="postgres.internal">
+                            </div>
+                            <div>
+                                <label class="label">Port</label>
+                                <input type="number" x-model.number="dbManual.port" class="input" placeholder="5432">
+                            </div>
+                            <div>
+                                <label class="label">Veritabanı adı</label>
+                                <input type="text" x-model="dbManual.name" class="input" placeholder="jir_mail_prod">
+                            </div>
+                            <div>
+                                <label class="label">Kullanıcı</label>
+                                <input type="text" x-model="dbManual.user" class="input">
+                            </div>
+                            <div>
+                                <label class="label">Şifre</label>
+                                <input type="password" x-model="dbManual.password" class="input">
+                            </div>
+                        </div>
+                        <div class="flex flex-wrap items-center gap-2">
+                            <button type="button" class="btn btn-secondary btn-sm" @click="testDb()" :disabled="dbTestLoading">Bağlantıyı dene</button>
+                            <span x-show="dbTestMessage" class="text-xs" :class="dbTestOk ? 'text-success-400' : 'text-danger-400'" x-text="dbTestMessage"></span>
+                        </div>
+                    </div>
+
                     <div class="bg-warning-500/10 border border-warning-500/20 rounded-xl p-3 sm:p-4 flex items-start gap-2.5">
                         <svg class="w-5 h-5 text-warning-400 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
                         </svg>
                         <div>
-                            <p class="text-warning-300 text-sm font-medium">Bu bilgileri güvenli bir yere kaydedin</p>
-                            <p class="text-warning-300/70 text-xs mt-0.5">API erişimi ve sistem kimliği için gerekli.</p>
+                            <p class="text-warning-300 text-sm font-medium">Bu bilgileri güvenli saklayın</p>
+                            <p class="text-warning-300/70 text-xs mt-0.5">API ve oturum güvenliği için gerekir.</p>
                         </div>
                     </div>
                 </div>
             </div>
 
-            <!-- Step 4: DNS -->
-            <div x-show="step === 4" x-transition.opacity>
-                <h2 class="text-lg sm:text-xl font-semibold text-white mb-1">DNS Sağlayıcı</h2>
-                <p class="text-slate-500 text-sm mb-5">Mail kayıtlarını (MX, SPF, DKIM, DMARC) nasıl yöneteceğini seçin</p>
+            <!-- 5: DNS -->
+            <div x-show="step === 5" x-transition.opacity>
+                <h2 class="text-lg sm:text-xl font-semibold text-white mb-1">DNS sağlayıcı</h2>
+                <p class="text-slate-500 text-sm mb-5">MX, SPF, DKIM, DMARC yönetimi</p>
 
                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-4">
                     <template x-for="opt in dnsProviders" :key="opt.value">
-                        <button @click="dnsProvider = opt.value"
+                        <button type="button" @click="dnsProvider = opt.value"
                                 :class="dnsProvider === opt.value ? 'bg-primary-500/10 border-primary-500/40 text-primary-200' : 'bg-slate-900/60 border-slate-800 text-slate-300 hover:border-slate-700'"
                                 class="p-3 sm:p-4 rounded-xl border text-left transition-all">
                             <p class="font-semibold text-sm" x-text="opt.label"></p>
@@ -184,25 +244,15 @@
                 </div>
 
                 <div x-show="dnsProvider === 'cloudflare'" class="space-y-3">
-                    <div>
-                        <label class="label">API Token</label>
-                        <input type="password" x-model="dnsCredentials.api_token"
-                               placeholder="Cloudflare API token (Zone:Edit yetkisi)"
-                               class="input">
-                    </div>
+                    <label class="label">API Token</label>
+                    <input type="password" x-model="dnsCredentials.api_token" placeholder="Cloudflare API token" class="input">
                 </div>
-
                 <div x-show="dnsProvider === 'route53'" class="space-y-3">
-                    <div>
-                        <label class="label">AWS Access Key ID</label>
-                        <input type="text" x-model="dnsCredentials.aws_access_key_id" class="input">
-                    </div>
-                    <div>
-                        <label class="label">AWS Secret Access Key</label>
-                        <input type="password" x-model="dnsCredentials.aws_secret_access_key" class="input">
-                    </div>
+                    <label class="label">AWS Access Key ID</label>
+                    <input type="text" x-model="dnsCredentials.aws_access_key_id" class="input">
+                    <label class="label">AWS Secret Access Key</label>
+                    <input type="password" x-model="dnsCredentials.aws_secret_access_key" class="input">
                 </div>
-
                 <div x-show="dnsProvider === 'namecheap'" class="space-y-3">
                     <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         <div>
@@ -214,39 +264,34 @@
                             <input type="text" x-model="dnsCredentials.username" class="input">
                         </div>
                     </div>
-                    <div>
-                        <label class="label">API Key</label>
-                        <input type="password" x-model="dnsCredentials.api_key" class="input">
-                    </div>
-                    <div>
-                        <label class="label">Whitelisted Client IP</label>
-                        <input type="text" x-model="dnsCredentials.client_ip" class="input">
-                    </div>
+                    <label class="label">API Key</label>
+                    <input type="password" x-model="dnsCredentials.api_key" class="input">
+                    <label class="label">Whitelisted Client IP</label>
+                    <input type="text" x-model="dnsCredentials.client_ip" class="input">
                 </div>
-
                 <div x-show="dnsProvider === 'manual'"
                      class="bg-info-500/10 border border-info-500/20 rounded-xl p-4 text-sm text-info-300 flex items-start gap-2.5">
                     <svg class="w-5 h-5 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
                     </svg>
-                    <p>Kurulumdan sonra kopyalamanız gereken DNS kayıtları gösterilecek. Bu kayıtları registrar panelinden eklemeniz gerekiyor.</p>
+                    <p>Kurulumdan sonra DNS kayıtlarını panelden kopyalayabilirsiniz.</p>
                 </div>
             </div>
 
-            <!-- Step 5: Summary -->
-            <div x-show="step === 5" x-transition.opacity>
-                <h2 class="text-lg sm:text-xl font-semibold text-white mb-1">Kurulum Özeti</h2>
-                <p class="text-slate-500 text-sm mb-5">Kurulum başladığında aşağıdaki bileşenler otomatik yaratılacak</p>
+            <!-- 6: Özet -->
+            <div x-show="step === 6" x-transition.opacity>
+                <h2 class="text-lg sm:text-xl font-semibold text-white mb-1">Özet</h2>
+                <p class="text-slate-500 text-sm mb-5">Seçiminize göre yapılacaklar</p>
 
                 <div class="bg-slate-900/70 rounded-xl p-4 border border-slate-800 mb-4">
                     <div class="grid grid-cols-2 gap-4 text-sm">
                         <div>
-                            <span class="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Domain</span>
-                            <p class="text-white font-medium truncate" x-text="domain || '—'"></p>
+                            <span class="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Mod</span>
+                            <p class="text-white font-medium truncate" x-text="profileLabel()"></p>
                         </div>
                         <div>
-                            <span class="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Mail Hostname</span>
-                            <p class="text-white font-medium truncate" x-text="'mail.' + (domain || '—')"></p>
+                            <span class="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Domain</span>
+                            <p class="text-white font-medium truncate" x-text="domain || '—'"></p>
                         </div>
                         <div>
                             <span class="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Admin</span>
@@ -260,19 +305,19 @@
                 </div>
 
                 <div class="space-y-2">
-                    <template x-for="svc in ['PostgreSQL 17', 'Redis 7', 'Postfix SMTP (25, 587)', 'Dovecot IMAP (993, 143)', 'DB migration + admin']" :key="svc">
+                    <template x-for="line in summaryLines()" :key="line">
                         <div class="flex items-center gap-2.5 text-sm text-slate-300">
-                            <span class="w-1.5 h-1.5 rounded-full bg-primary-500"></span>
-                            <span x-text="svc"></span>
+                            <span class="w-1.5 h-1.5 rounded-full bg-primary-500 shrink-0"></span>
+                            <span x-text="line"></span>
                         </div>
                     </template>
                 </div>
             </div>
 
-            <!-- Step 6: Progress -->
-            <div x-show="step === 6" x-transition.opacity>
-                <h2 class="text-lg sm:text-xl font-semibold text-white mb-1">Kurulum Çalışıyor</h2>
-                <p class="text-slate-500 text-sm mb-5">Servisler arka planda kuruluyor. Bu birkaç dakika sürebilir.</p>
+            <!-- 7: İlerleme -->
+            <div x-show="step === 7" x-transition.opacity>
+                <h2 class="text-lg sm:text-xl font-semibold text-white mb-1">Kurulum çalışıyor</h2>
+                <p class="text-slate-500 text-sm mb-5">Arka plan adımları</p>
 
                 <template x-if="overallStatus === 'failed'">
                     <div class="bg-danger-500/10 border border-danger-500/20 rounded-xl p-4 mb-4">
@@ -315,57 +360,50 @@
                                         </svg>
                                     </div>
                                 </template>
-
                                 <div class="flex-1 min-w-0">
                                     <p class="text-sm font-medium text-white" x-text="s.name"></p>
                                     <p class="text-xs text-slate-500" x-text="s.description"></p>
                                 </div>
-
                                 <template x-if="s.progress_percent > 0 && s.status === 'running'">
                                     <span class="text-xs text-primary-400 font-mono tabular-nums" x-text="s.progress_percent + '%'"></span>
                                 </template>
                             </div>
-
                             <template x-if="s.log_tail && (s.status === 'running' || s.status === 'failed')">
                                 <pre class="install-log mt-2 bg-slate-950/80 border border-slate-800 rounded-lg p-2 text-slate-400 max-h-32 overflow-y-auto custom-scrollbar whitespace-pre-wrap" x-text="s.log_tail"></pre>
                             </template>
                         </div>
                     </template>
-
                     <template x-if="steps.length === 0">
-                        <div class="text-center text-slate-500 text-sm py-8">
-                            Adımlar yükleniyor...
-                        </div>
+                        <div class="text-center text-slate-500 text-sm py-8">Adımlar yükleniyor...</div>
                     </template>
                 </div>
             </div>
 
-            <!-- Footer actions -->
             <div class="flex items-center justify-between gap-2 mt-6 pt-5 border-t border-slate-800">
-                <button x-show="step > 1 && step < 6" @click="step--" class="btn btn-secondary">
+                <button type="button" x-show="step > 1 && step < 7" @click="step--" class="btn btn-secondary">
                     <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
                     </svg>
                     Geri
                 </button>
-                <div x-show="step === 1 || step === 6" class="w-0"></div>
+                <div x-show="step === 1 || step === 7" class="w-0"></div>
 
-                <button x-show="step < 5" @click="nextStep()" :disabled="!canProceed()" class="btn btn-primary ml-auto">
+                <button type="button" x-show="step < 6" @click="nextStep()" :disabled="!canProceed()" class="btn btn-primary ml-auto">
                     İlerle
                     <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
                     </svg>
                 </button>
 
-                <button x-show="step === 5 && overallStatus !== 'running'" @click="startInstall()" class="btn btn-primary ml-auto">
-                    Kurulumu Başlat
+                <button type="button" x-show="step === 6 && overallStatus !== 'running'" @click="startInstall()" class="btn btn-primary ml-auto">
+                    Kurulumu başlat
                     <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
                     </svg>
                 </button>
             </div>
 
-            <div x-show="errorMessage && step !== 6"
+            <div x-show="errorMessage && step !== 7"
                  x-cloak
                  class="mt-4 bg-danger-500/10 border border-danger-500/20 rounded-xl p-3 flex items-start gap-2.5">
                 <svg class="h-5 w-5 text-danger-400 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -376,7 +414,7 @@
         </div>
 
         <p class="text-center text-slate-600 text-xs mt-5">
-            JîrCode Mail · <span class="text-mono">v2.0</span> · Privacy-first self-hosted
+            JîrCode Mail · <span class="font-mono">v2.0</span>
         </p>
     </div>
 </div>
@@ -387,9 +425,10 @@
 function setupWizard() {
     return {
         step: 1,
-        totalSteps: 6,
-        stepLabels: ['Domain', 'Admin', 'Güvenlik', 'DNS', 'Özet', 'Kurulum'],
+        totalSteps: 7,
+        stepLabels: ['Mod', 'Domain', 'Admin', 'Güvenlik', 'DNS', 'Özet', 'Kurulum'],
 
+        installProfile: 'docker_stack',
         domain: '',
         adminEmail: '',
         adminPassword: '',
@@ -399,13 +438,20 @@ function setupWizard() {
         jirKey: '',
         postgresPassword: '',
 
+        bootstrap: { has_database_url: false, suggested_profile: 'docker_stack', database_host_hint: '', database_name_hint: '' },
+
+        dbManual: { host: '', port: 5432, name: 'jir_mail_prod', user: '', password: '' },
+        dbTestLoading: false,
+        dbTestMessage: '',
+        dbTestOk: false,
+
         dnsProvider: 'manual',
         dnsCredentials: {},
         dnsProviders: [
-            { value: 'manual', label: 'Manuel', hint: 'Kopyala-yapıştır kayıt rehberi' },
-            { value: 'cloudflare', label: 'Cloudflare', hint: 'API token ile otomatik' },
-            { value: 'route53', label: 'AWS Route53', hint: 'IAM credentials ile' },
-            { value: 'namecheap', label: 'Namecheap', hint: 'API key + IP whitelist' },
+            { value: 'manual', label: 'Manuel', hint: 'Kayıtları sonra kopyalarsınız' },
+            { value: 'cloudflare', label: 'Cloudflare', hint: 'API token' },
+            { value: 'route53', label: 'AWS Route53', hint: 'IAM' },
+            { value: 'namecheap', label: 'Namecheap', hint: 'API key' },
         ],
 
         runId: '',
@@ -415,10 +461,42 @@ function setupWizard() {
         eventSource: null,
         pollInterval: null,
 
-        init() {
+        profileLabel() {
+            if (this.installProfile === 'docker_stack') return 'Docker tam stack';
+            if (this.installProfile === 'platform_env') return 'Ortam DATABASE_URL';
+            return 'Manuel PostgreSQL';
+        },
+
+        summaryLines() {
+            if (this.installProfile === 'docker_stack') {
+                return ['Docker network ve volume hazırlığı', 'PostgreSQL 17, Redis 7, Postfix, Dovecot imajları', 'Migration ve admin hesabı', 'DNS / TLS adımları (TLS Docker gerektirir)'];
+            }
+            if (this.installProfile === 'platform_env') {
+                return ['Docker orkestrasyonu yok', 'Mevcut PostgreSQL üzerinde migration', 'Admin hesabı ve SystemConfig', 'DNS yapılandırması'];
+            }
+            return ['Docker orkestrasyonu yok', 'Girdiğiniz PostgreSQL ile migration (alt süreç)', 'Admin hesabı ve SystemConfig', 'Coolify DATABASE_URL aynı DB olmalı', 'DNS yapılandırması'];
+        },
+
+        async init() {
             this.instanceId = this.generateUUID();
             this.jirKey = this.generateKey();
-            this.postgresPassword = this.generatePassword(24);
+            this.ensurePostgresSecret();
+            await this.loadBootstrap();
+        },
+
+        ensurePostgresSecret() {
+            if (!this.postgresPassword) this.postgresPassword = this.generatePassword(24);
+        },
+
+        async loadBootstrap() {
+            try {
+                const res = await fetch('/api/installer/bootstrap');
+                const d = await res.json();
+                this.bootstrap = d;
+                if (d.suggested_profile === 'platform_env' && d.has_database_url) {
+                    this.installProfile = 'platform_env';
+                }
+            } catch (e) { /* varsayılan docker_stack */ }
         },
 
         generateUUID() {
@@ -447,8 +525,18 @@ function setupWizard() {
         },
 
         canProceed() {
-            if (this.step === 1) return this.domain && this.domain.includes('.');
-            if (this.step === 2) return this.adminEmail && this.adminPassword && this.adminPassword === this.adminPassword2 && this.adminPassword.length >= 8;
+            if (this.step === 1) return !!this.installProfile;
+            if (this.step === 2) return this.domain && this.domain.includes('.');
+            if (this.step === 3) {
+                return this.adminEmail && this.adminPassword && this.adminPassword === this.adminPassword2 && this.adminPassword.length >= 8;
+            }
+            if (this.step === 4) {
+                if (this.installProfile === 'platform_env') return !!this.bootstrap.has_database_url;
+                if (this.installProfile === 'platform_manual') {
+                    return !!(this.dbManual.host && this.dbManual.name && String(this.dbManual.user || '').trim());
+                }
+                return true;
+            }
             return true;
         },
 
@@ -456,40 +544,72 @@ function setupWizard() {
             if (this.canProceed()) this.step++;
         },
 
+        async testDb() {
+            this.dbTestMessage = '';
+            this.dbTestOk = false;
+            this.dbTestLoading = true;
+            try {
+                const res = await fetch('/api/installer/test-db', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        host: this.dbManual.host,
+                        port: this.dbManual.port || 5432,
+                        name: this.dbManual.name,
+                        user: this.dbManual.user,
+                        password: this.dbManual.password || ''
+                    })
+                });
+                const data = await res.json();
+                this.dbTestOk = !!data.success;
+                this.dbTestMessage = data.message || (data.success ? 'OK' : 'Hata');
+            } catch (e) {
+                this.dbTestMessage = e.message || 'İstek başarısız';
+            } finally {
+                this.dbTestLoading = false;
+            }
+        },
+
         async startInstall() {
             this.errorMessage = '';
+            const payload = {
+                domain: this.domain,
+                admin_email: this.adminEmail,
+                admin_password: this.adminPassword,
+                instance_id: this.instanceId,
+                jir_local_key: this.jirKey,
+                postgres_password: this.installProfile === 'docker_stack' ? this.postgresPassword : '',
+                postgres_db: 'jir_mail_prod',
+                postgres_user: 'postgres',
+                mail_hostname: 'mail.' + this.domain,
+                dns_provider: this.dnsProvider,
+                dns_credentials: this.dnsCredentials,
+                install_profile: this.installProfile
+            };
+            if (this.installProfile === 'platform_manual') {
+                payload.db_manual = {
+                    host: this.dbManual.host,
+                    port: this.dbManual.port || 5432,
+                    name: this.dbManual.name,
+                    user: this.dbManual.user,
+                    password: this.dbManual.password || ''
+                };
+            }
             try {
                 const res = await fetch('/api/installer/start', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        domain: this.domain,
-                        admin_email: this.adminEmail,
-                        admin_password: this.adminPassword,
-                        instance_id: this.instanceId,
-                        jir_local_key: this.jirKey,
-                        postgres_password: this.postgresPassword,
-                        postgres_db: 'jir_mail_prod',
-                        postgres_user: 'postgres',
-                        mail_hostname: 'mail.' + this.domain,
-                        dns_provider: this.dnsProvider,
-                        dns_credentials: this.dnsCredentials
-                    })
+                    body: JSON.stringify(payload)
                 });
-
                 const text = await res.text();
                 let data;
-                try {
-                    data = JSON.parse(text);
-                } catch (parseErr) {
-                    this.errorMessage = 'Sunucu hatası (HTTP ' + res.status + '). Detay: ' +
-                                        text.replace(/<[^>]*>/g, '').trim().slice(0, 300);
+                try { data = JSON.parse(text); } catch (parseErr) {
+                    this.errorMessage = 'Sunucu hatası (HTTP ' + res.status + '). ' + text.replace(/<[^>]*>/g, '').trim().slice(0, 300);
                     return;
                 }
-
                 if (data.status === 'success') {
                     this.runId = data.run_id;
-                    this.step = 6;
+                    this.step = 7;
                     this.overallStatus = 'running';
                     this.openStream();
                 } else {
@@ -502,12 +622,10 @@ function setupWizard() {
 
         openStream() {
             if (!this.runId) return;
-
             const updateStep = (event) => {
                 const idx = this.steps.findIndex(s => s.id === event.step_id || s.order === event.order);
-                if (idx >= 0) {
-                    this.steps[idx] = { ...this.steps[idx], ...event };
-                } else {
+                if (idx >= 0) this.steps[idx] = { ...this.steps[idx], ...event };
+                else {
                     this.steps.push({
                         id: event.step_id,
                         order: event.order,
@@ -520,29 +638,23 @@ function setupWizard() {
                 }
                 this.steps.sort((a, b) => (a.order || 0) - (b.order || 0));
             };
-
             try {
                 this.eventSource = new EventSource('/api/installer/stream/' + this.runId);
-
                 this.eventSource.onmessage = (msg) => {
                     try {
                         const parsed = JSON.parse(msg.data);
                         const type = parsed.type;
                         const payload = parsed.payload || {};
-
-                        if (type === 'step_added') {
-                            updateStep(payload);
-                        } else if (type === 'step_start') {
-                            updateStep({ ...payload, status: 'running' });
-                        } else if (type === 'step_log') {
+                        if (type === 'step_added') updateStep(payload);
+                        else if (type === 'step_start') updateStep({ ...payload, status: 'running' });
+                        else if (type === 'step_log') {
                             const idx = this.steps.findIndex(s => s.id === payload.step_id);
                             if (idx >= 0) {
                                 this.steps[idx].log_tail = ((this.steps[idx].log_tail || '') + payload.log_line + '\n').slice(-2000);
                                 if (payload.progress != null) this.steps[idx].progress_percent = payload.progress;
                             }
-                        } else if (type === 'step_end') {
-                            updateStep(payload);
-                        } else if (type === 'completed') {
+                        } else if (type === 'step_end') updateStep(payload);
+                        else if (type === 'completed') {
                             this.overallStatus = 'completed';
                             setTimeout(() => { window.location.href = '/login/'; }, 2500);
                         } else if (type === 'failed') {
@@ -551,13 +663,8 @@ function setupWizard() {
                         }
                     } catch (e) { /* ignore */ }
                 };
-
-                this.eventSource.onerror = () => {
-                    this.startPolling();
-                };
-            } catch (e) {
-                this.startPolling();
-            }
+                this.eventSource.onerror = () => { this.startPolling(); };
+            } catch (e) { this.startPolling(); }
         },
 
         startPolling() {

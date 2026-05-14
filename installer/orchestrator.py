@@ -81,6 +81,45 @@ def _get_docker_client():
     return client
 
 
+PROFILE_DOCKER_STACK = 'docker_stack'
+PROFILE_PLATFORM_ENV = 'platform_env'
+PROFILE_PLATFORM_MANUAL = 'platform_manual'
+
+
+def _resolve_profile_and_client(config: dict):
+    """Sihirbaz install_profile + Docker client (yalnızca docker_stack için dolu)."""
+    p = (config.get('install_profile') or '').strip() or None
+    if p == PROFILE_DOCKER_STACK:
+        c = _get_docker_client_optional()
+        if c is None:
+            raise RuntimeError(
+                '“Docker ile tam kurulum” seçildi ancak Docker API erişilemiyor. '
+                'Docker soketini mount edin veya platform / ortam veritabanı modunu seçin.'
+            )
+        return PROFILE_DOCKER_STACK, c
+    if p == PROFILE_PLATFORM_ENV:
+        if not os.getenv('DATABASE_URL', '').strip():
+            raise RuntimeError(
+                '“Ortamdaki veritabanı” modu için sunucuda DATABASE_URL tanımlı olmalı '
+                '(ör. Coolify PostgreSQL servisi).'
+            )
+        return PROFILE_PLATFORM_ENV, None
+    if p == PROFILE_PLATFORM_MANUAL:
+        dbm = config.get('db_manual') or {}
+        if not (dbm.get('host') and dbm.get('name') and str(dbm.get('user', '')).strip()):
+            raise RuntimeError('Manuel veritabanı: sunucu, veritabanı adı ve kullanıcı zorunludur.')
+        return PROFILE_PLATFORM_MANUAL, None
+    c = _get_docker_client_optional()
+    if c is not None:
+        return PROFILE_DOCKER_STACK, c
+    if os.getenv('DATABASE_URL', '').strip():
+        return PROFILE_PLATFORM_ENV, None
+    raise RuntimeError(
+        'Kurulum profili belirlenemedi: Docker yok ve DATABASE_URL tanımlı değil. '
+        'Sihirbazdan mod seçin veya ortam değişkenlerini ayarlayın.'
+    )
+
+
 class StepRecorder:
     """Adım kaydedici. InstallationStep'i günceller, SSE event'i yayar."""
 
@@ -284,10 +323,40 @@ def _wait_for_healthy(client, container_name: str, recorder: StepRecorder, timeo
         recorder.finish(success=False, message=str(exc))
 
 
-def _run_migrations(recorder: StepRecorder) -> None:
+def _build_postgres_url_from_manual(dbm: dict) -> str:
+    """PostgreSQL bağlantı URL'i (migrate alt süreci için)."""
+    from urllib.parse import quote_plus
+
+    user = quote_plus(str(dbm['user']))
+    pw = quote_plus(str(dbm.get('password', '')))
+    host = str(dbm['host'])
+    port = int(dbm.get('port') or 5432)
+    name = str(dbm['name']).lstrip('/')
+    return f'postgresql://{user}:{pw}@{host}:{port}/{name}'
+
+
+def _run_migrations(recorder: StepRecorder, *, subprocess_database_url: str | None = None) -> None:
     recorder.start()
     try:
+        if subprocess_database_url:
+            import subprocess
+            import sys
+
+            recorder.log('Veritabanı migration (manuel bağlantı ile alt süreç)...')
+            env = os.environ.copy()
+            env['DATABASE_URL'] = subprocess_database_url
+            subprocess.check_call(
+                [sys.executable, str(settings.BASE_DIR / 'manage.py'), 'migrate', '--noinput'],
+                cwd=str(settings.BASE_DIR),
+                env=env,
+                timeout=600,
+            )
+            recorder.log('Migration tamamlandı (alt süreç).')
+            recorder.finish(success=True)
+            return
+
         from django.core.management import call_command
+
         recorder.log('makemigrations çalıştırılıyor...')
         try:
             call_command('makemigrations', verbosity=0, interactive=False)
@@ -406,7 +475,19 @@ def _request_tls_certificate(config: dict, recorder: StepRecorder) -> None:
 
 
 def _apply_system_config_database(config_obj, config: dict, recorder: StepRecorder) -> None:
-    """SystemConfig veritabanı alanları: DATABASE_URL öncelikli, yoksa compose varsayılanı."""
+    """SystemConfig veritabanı alanları: sihirbaz manuel > DATABASE_URL > compose."""
+    manual = config.get('db_manual') or {}
+    if manual.get('host') and manual.get('name') and manual.get('user') is not None:
+        config_obj.db_engine = 'django.db.backends.postgresql'
+        config_obj.db_host = str(manual['host'])
+        port = manual.get('port')
+        config_obj.db_port = int(port) if port not in (None, '') else 5432
+        config_obj.db_name = str(manual['name'])
+        config_obj.db_user = str(manual['user'])
+        config_obj.db_password = str(manual.get('password', ''))
+        recorder.log('SystemConfig manuel girilen PostgreSQL bilgileriyle dolduruldu.')
+        return
+
     database_url = os.getenv('DATABASE_URL', '').strip()
     if database_url:
         try:
@@ -517,45 +598,9 @@ def run_installation(run_id: str) -> None:
     config = run.config_snapshot or {}
 
     try:
-        client = _get_docker_client_optional()
+        profile, client = _resolve_profile_and_client(config)
 
-        if client is None:
-            if not os.getenv('DATABASE_URL', '').strip():
-                raise RuntimeError(
-                    'Docker API kullanılamıyor ve DATABASE_URL tanımlı değil. '
-                    "Coolify'da PostgreSQL ekleyip DATABASE_URL verin veya Docker soketini mount edin."
-                )
-
-            order = 0
-            order += 1
-            managed_rec = _make_step(
-                run, order, 'Yönetilen ortam',
-                'Docker yok — migrasyon ve hesap kurulumu (Coolify / PaaS)',
-            )
-            managed_rec.start()
-            managed_rec.log(
-                'Docker soketi veya API erişilemedi. Postfix/Dovecot vb. konteynerleri '
-                'platformunuzda ayrı tanımlamanız gerekir; bu adım yalnızca veritabanı ve '
-                'panel hesabını tamamlar.'
-            )
-            managed_rec.finish(success=True)
-
-            order += 1
-            _run_migrations(_make_step(run, order, 'Veritabanı migration',
-                                       'Django migrate çalıştır'))
-
-            order += 1
-            _create_admin_account(config, _make_step(run, order, 'Admin hesabı',
-                                                     'Admin kullanıcısı ve SystemConfig oluştur'))
-
-            order += 1
-            _apply_dns_records(config, _make_step(run, order, 'DNS kayıtları',
-                                                 f'{config.get("dns_provider", "manual")} ile DNS yapılandırması'))
-
-            order += 1
-            _request_tls_certificate(config, _make_step(run, order, 'TLS sertifikası',
-                                                       'Let\'s Encrypt sertifika talebi (staging)'))
-        else:
+        if profile == PROFILE_DOCKER_STACK:
             specs = order_specs(build_specs(config))
 
             order = 0
@@ -602,6 +647,46 @@ def run_installation(run_id: str) -> None:
                 client.close()
             except Exception:
                 pass
+        else:
+            order = 0
+            order += 1
+            managed_rec = _make_step(
+                run, order, 'Platform kurulumu',
+                'Docker orkestrasyonu yok — veritabanı ve panel',
+            )
+            managed_rec.start()
+            if profile == PROFILE_PLATFORM_ENV:
+                managed_rec.log(
+                    'DATABASE_URL ile mevcut PostgreSQL kullanılıyor. '
+                    'Postfix/Dovecot vb. ayrı dağıtımlarda tanımlanmalıdır.'
+                )
+            else:
+                managed_rec.log(
+                    'Manuel girilen PostgreSQL ile migrate ayrı süreçte çalıştırılır. '
+                    'Uygulama ortamındaki DATABASE_URL aynı veritabanına işaret etmelidir (Coolify).'
+                )
+            managed_rec.finish(success=True)
+
+            order += 1
+            sub_url = None
+            if profile == PROFILE_PLATFORM_MANUAL:
+                sub_url = _build_postgres_url_from_manual(config.get('db_manual') or {})
+            _run_migrations(
+                _make_step(run, order, 'Veritabanı migration', 'Django migrate'),
+                subprocess_database_url=sub_url,
+            )
+
+            order += 1
+            _create_admin_account(config, _make_step(run, order, 'Admin hesabı',
+                                                     'Admin kullanıcısı ve SystemConfig oluştur'))
+
+            order += 1
+            _apply_dns_records(config, _make_step(run, order, 'DNS kayıtları',
+                                                 f'{config.get("dns_provider", "manual")} ile DNS yapılandırması'))
+
+            order += 1
+            _request_tls_certificate(config, _make_step(run, order, 'TLS sertifikası',
+                                                         'Let\'s Encrypt sertifika talebi (staging)'))
 
         run.status = 'completed'
         run.finished_at = timezone.now()
