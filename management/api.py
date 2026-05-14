@@ -335,19 +335,135 @@ def check_port_listening(port, host='localhost'):
         return False
 
 
+def _normalize_docker_container_name(name):
+    if not name:
+        return ''
+    return str(name).strip().strip('/')
+
+
+def _management_docker_client(timeout=10):
+    import docker
+    dh = getattr(settings, 'DOCKER_HOST', None) or 'unix:///var/run/docker.sock'
+    return docker.DockerClient(base_url=dh, timeout=timeout)
+
+
+def _static_jir_container_names():
+    return frozenset({
+        getattr(settings, 'JIR_CONTAINER_POSTGRES', 'jir_postgres'),
+        getattr(settings, 'JIR_CONTAINER_POSTFIX', 'jir_postfix'),
+        getattr(settings, 'JIR_CONTAINER_DOVECOT', 'jir_dovecot'),
+        getattr(settings, 'JIR_CONTAINER_REDIS', 'jir_redis'),
+        getattr(settings, 'JIR_CONTAINER_DJANGO', 'jir_django'),
+        getattr(settings, 'JIR_CONTAINER_CELERY', 'jir_celery'),
+        getattr(settings, 'JIR_CONTAINER_CELERY_BEAT', 'jir_celery_beat'),
+    })
+
+
+def _jir_stack_name_substrings(include_proxy=False):
+    """Konteyner listelerinde eşleştirme (Coolify uzun adları için substring)."""
+    names = list(_static_jir_container_names())
+    if include_proxy:
+        names.append('jir_docker_proxy')
+    names.append('jir_')
+    out = []
+    seen = set()
+    for n in names:
+        if n and n not in seen:
+            seen.add(n)
+            out.append(n)
+    return out
+
+
+_DOCKER_SERVICE_HINTS = {
+    'PostgreSQL': ('postgres', 'postgresql'),
+    'Postfix': ('postfix',),
+    'Dovecot': ('dovecot',),
+    'Redis': ('redis',),
+}
+
+
+def _discover_container_by_hints(client, hints):
+    hints = tuple(h.lower() for h in hints if h)
+    if not hints:
+        return None
+    matches = []
+    for c in client.containers.list(all=True):
+        nm = _normalize_docker_container_name(c.name).lower()
+        img = ''
+        try:
+            img = (((c.attrs or {}).get('Config') or {}).get('Image') or '').lower()
+        except Exception:
+            pass
+        if any(h in nm or h in img for h in hints):
+            matches.append(_normalize_docker_container_name(c.name))
+    if len(matches) == 1:
+        return matches[0]
+    if len(matches) > 1:
+        for name in matches:
+            try:
+                ct = client.containers.get(name)
+                if ct.status == 'running':
+                    return _normalize_docker_container_name(ct.name)
+            except Exception:
+                continue
+        return matches[0]
+    return None
+
+
+def _resolve_service_container_name(default_name, display_name):
+    """Önce ayarlı ad; yoksa imaj/isim ipuçlarıyla tek aday keşfi (Coolify vb.)."""
+    resolved = _normalize_docker_container_name(default_name)
+    hints = _DOCKER_SERVICE_HINTS.get(display_name, ())
+    client = None
+    try:
+        client = _management_docker_client(3)
+        client.ping()
+    except Exception:
+        return resolved
+    try:
+        if check_service_in_docker(resolved):
+            return resolved
+        alt = _discover_container_by_hints(client, hints)
+        if alt:
+            return alt
+    except Exception:
+        pass
+    finally:
+        if client:
+            try:
+                client.close()
+            except Exception:
+                pass
+    return resolved
+
+
+def _management_container_pass_through_allowed(client, name):
+    try:
+        c = client.containers.get(_normalize_docker_container_name(name))
+    except Exception:
+        return False
+    nm = _normalize_docker_container_name(c.name).lower()
+    img = ''
+    try:
+        img = (((c.attrs or {}).get('Config') or {}).get('Image') or '').lower()
+    except Exception:
+        pass
+    needles = ('postgres', 'postgresql', 'postfix', 'dovecot', 'redis', 'celery', 'jir')
+    return any(n in nm or n in img for n in needles)
+
+
 def check_service_in_docker(container_name, docker_host=None):
     """Docker içinde container çalışıyor mu kontrol et"""
     try:
         import docker
-        if docker_host and docker_host.startswith('tcp://'):
-            client = docker.DockerClient(base_url=docker_host, timeout=3)
-        else:
-            client = docker.DockerClient(base_url='unix://var/run/docker.sock', timeout=3)
-
+        dh = docker_host or getattr(settings, 'DOCKER_HOST', None) or 'unix:///var/run/docker.sock'
+        client = docker.DockerClient(base_url=dh, timeout=3)
+        want = _normalize_docker_container_name(container_name)
         for container in client.containers.list(all=True):
-            if container.name == container_name:
+            if _normalize_docker_container_name(container.name) == want:
+                ok = container.status == 'running'
                 client.close()
-                return container.status == 'running'
+                return ok
         client.close()
         return False
     except Exception:
@@ -371,16 +487,28 @@ def check_system_requirements(request):
 
     services = []
     docker_services = {
-        'PostgreSQL': {'container': 'jir_postgres', 'port': 5432, 'docker_host': None},
-        'Postfix': {'container': 'jir_postfix', 'port': 25, 'docker_host': None},
-        'Dovecot': {'container': 'jir_dovecot', 'port': 993, 'docker_host': None},
-        'Redis': {'container': 'jir_redis', 'port': 6379, 'docker_host': None},
+        'PostgreSQL': {
+            'container': getattr(settings, 'JIR_CONTAINER_POSTGRES', 'jir_postgres'),
+            'port': 5432,
+        },
+        'Postfix': {
+            'container': getattr(settings, 'JIR_CONTAINER_POSTFIX', 'jir_postfix'),
+            'port': 25,
+        },
+        'Dovecot': {
+            'container': getattr(settings, 'JIR_CONTAINER_DOVECOT', 'jir_dovecot'),
+            'port': 993,
+        },
+        'Redis': {
+            'container': getattr(settings, 'JIR_CONTAINER_REDIS', 'jir_redis'),
+            'port': 6379,
+        },
     }
 
     docker_host = getattr(settings, 'DOCKER_HOST', None)
 
     for name, info in docker_services.items():
-        container_name = info['container']
+        container_name = _resolve_service_container_name(info['container'], name)
         port = info['port']
 
         # 1. Önce Docker container kontrolü (en güvenilir)
@@ -443,15 +571,12 @@ def get_system_specs(request):
 
     try:
         import docker
-        docker_host = getattr(settings, 'DOCKER_HOST', None)
-        if docker_host and docker_host.startswith('tcp://'):
-            client = docker.DockerClient(base_url=docker_host)
-        else:
-            client = docker.DockerClient(base_url='unix://var/run/docker.sock')
-        jir_containers = ['jir_django', 'jir_postgres', 'jir_postfix', 'jir_dovecot', 'jir_redis', 'jir_celery', 'jir_celery_beat']
+        client = _management_docker_client(5)
+        client.ping()
+        jir_subs = _jir_stack_name_substrings(include_proxy=False)
 
         for container in client.containers.list(all=True):
-            if any(c in container.name for c in jir_containers):
+            if any(c in container.name for c in jir_subs):
                 try:
                     container.reload()
                     state = container.status
@@ -541,20 +666,35 @@ class ContainerStatusSchema(Schema):
 @router.get("/container-status", response={200: list}, summary="Container Durumu")
 def get_container_status(request):
     containers = []
+    import docker
 
-    docker_host = getattr(settings, 'DOCKER_HOST', None)
-    if docker_host and docker_host.startswith('tcp://'):
+    substrings = _jir_stack_name_substrings(include_proxy=True)
+    base_urls = []
+    dh = getattr(settings, 'DOCKER_HOST', None) or 'unix:///var/run/docker.sock'
+    base_urls.append(dh)
+    if dh.startswith('unix://'):
+        for sp in ('/var/run/docker.sock', '/run/docker.sock'):
+            u = f'unix://{sp}'
+            if u not in base_urls:
+                base_urls.append(u)
+
+    for base_url in base_urls:
+        client = None
         try:
-            import docker
-            client = docker.DockerClient(base_url=docker_host, timeout=5)
+            client = docker.DockerClient(base_url=base_url, timeout=5)
             client.ping()
+        except Exception:
+            if client:
+                try:
+                    client.close()
+                except Exception:
+                    pass
+            continue
 
-            jir_containers = ['jir_django', 'jir_postgres', 'jir_postfix', 'jir_dovecot',
-                              'jir_redis', 'jir_celery', 'jir_celery_beat', 'jir_docker_proxy']
+        try:
             all_containers = client.containers.list(all=True)
-
             for container in all_containers:
-                if any(c in container.name for c in jir_containers):
+                if any(s in container.name for s in substrings):
                     try:
                         container.reload()
                         state = container.status
@@ -597,71 +737,22 @@ def get_container_status(request):
             client.close()
             return containers
         except Exception as e:
-            return [{
-                "container_id": "error",
-                "container_name": "Docker Proxy Error",
-                "status": "offline",
-                "cpu_percent": 0,
-                "ram_percent": 0,
-                "ram_usage_mb": 0,
-                "ram_limit_mb": 0,
-                "error": str(e)
-            }]
-
-    # Fallback: doğrudan socket (yerel geliştirme)
-    socket_paths = ['/var/run/docker.sock', '/run/docker.sock']
-    for socket_path in socket_paths:
-        if not os.path.exists(socket_path):
-            continue
-        try:
-            import docker
-            client = docker.DockerClient(base_url=f'unix://{socket_path}', timeout=5)
-            client.ping()
-
-            jir_containers = ['jir_django', 'jir_postgres', 'jir_postfix', 'jir_dovecot',
-                              'jir_redis', 'jir_celery', 'jir_celery_beat']
-            all_containers = client.containers.list(all=True)
-
-            for container in all_containers:
-                if any(c in container.name for c in jir_containers):
-                    try:
-                        container.reload()
-                        state = container.status
-                        is_running = state == 'running'
-
-                        stats = container.stats(stream=False) if is_running else None
-                        cpu_percent = 0.0
-                        mem_usage = 0.0
-                        mem_limit = 0.0
-                        mem_percent = 0.0
-
-                        if stats:
-                            cpu_delta = stats['cpu_stats']['cpu_usage']['total_usage'] - \
-                                        stats['precpu_stats']['cpu_usage']['total_usage']
-                            system_delta = stats['cpu_stats']['system_cpu_usage'] - \
-                                           stats['precpu_stats']['system_cpu_usage']
-                            cpu_count = stats['cpu_stats'].get('online_cpus', 1)
-                            cpu_percent = (cpu_delta / system_delta * cpu_count * 100.0) if system_delta > 0 else 0
-
-                            mem_usage = stats['memory_stats'].get('usage', 0) / (1024 * 1024)
-                            mem_limit = stats['memory_stats'].get('limit', 1) / (1024 * 1024)
-                            mem_percent = (mem_usage / mem_limit * 100) if mem_limit > 0 else 0
-
-                        containers.append({
-                            "container_id": container.short_id,
-                            "container_name": container.name,
-                            "status": state,
-                            "cpu_percent": round(cpu_percent, 2),
-                            "ram_percent": round(mem_percent, 2),
-                            "ram_usage_mb": round(mem_usage, 2),
-                            "ram_limit_mb": round(mem_limit, 2),
-                        })
-                    except Exception:
-                        continue
-
-            client.close()
-            return containers
-        except Exception as e:
+            if client:
+                try:
+                    client.close()
+                except Exception:
+                    pass
+            if dh.startswith('tcp://') and base_url == dh:
+                return [{
+                    "container_id": "error",
+                    "container_name": "Docker Proxy Error",
+                    "status": "offline",
+                    "cpu_percent": 0,
+                    "ram_percent": 0,
+                    "ram_usage_mb": 0,
+                    "ram_limit_mb": 0,
+                    "error": str(e)
+                }]
             continue
 
     return [{
@@ -689,36 +780,46 @@ def container_action(request, container_name, action):
         return {"status": "error", "message": "Invalid action. Use start, stop, or restart."}
 
     container_map = {
-        'postgresql': 'jir_postgres',
-        'postgres': 'jir_postgres',
-        'postfix': 'jir_postfix',
-        'dovecot': 'jir_dovecot',
-        'redis': 'jir_redis',
-        'django': 'jir_django',
-        'celery': 'jir_celery',
-        'celery_beat': 'jir_celery_beat',
+        'postgresql': getattr(settings, 'JIR_CONTAINER_POSTGRES', 'jir_postgres'),
+        'postgres': getattr(settings, 'JIR_CONTAINER_POSTGRES', 'jir_postgres'),
+        'postfix': getattr(settings, 'JIR_CONTAINER_POSTFIX', 'jir_postfix'),
+        'dovecot': getattr(settings, 'JIR_CONTAINER_DOVECOT', 'jir_dovecot'),
+        'redis': getattr(settings, 'JIR_CONTAINER_REDIS', 'jir_redis'),
+        'django': getattr(settings, 'JIR_CONTAINER_DJANGO', 'jir_django'),
+        'celery': getattr(settings, 'JIR_CONTAINER_CELERY', 'jir_celery'),
+        'celery_beat': getattr(settings, 'JIR_CONTAINER_CELERY_BEAT', 'jir_celery_beat'),
     }
+    # Eski dashboard / istemciler sabit jir_* adı gönderirse ayarlardaki gerçek ada çevir
+    for legacy_key, attr in (
+        ('jir_postgres', 'JIR_CONTAINER_POSTGRES'),
+        ('jir_postfix', 'JIR_CONTAINER_POSTFIX'),
+        ('jir_dovecot', 'JIR_CONTAINER_DOVECOT'),
+        ('jir_redis', 'JIR_CONTAINER_REDIS'),
+        ('jir_django', 'JIR_CONTAINER_DJANGO'),
+        ('jir_celery', 'JIR_CONTAINER_CELERY'),
+        ('jir_celery_beat', 'JIR_CONTAINER_CELERY_BEAT'),
+    ):
+        container_map[legacy_key] = _normalize_docker_container_name(
+            getattr(settings, attr, legacy_key)
+        )
 
-    actual_name = container_map.get(container_name.lower(), container_name)
-    if actual_name not in container_map.values():
-        actual_name = f'jir_{container_name}' if not container_name.startswith('jir_') else container_name
+    raw = _normalize_docker_container_name(container_name)
+    lk = raw.lower()
+    if lk in container_map:
+        actual_name = _normalize_docker_container_name(container_map[lk])
+    else:
+        actual_name = raw
 
-    allowed = frozenset(container_map.values()) | frozenset({
-        'jir_postgres', 'jir_postfix', 'jir_dovecot', 'jir_redis',
-        'jir_django', 'jir_celery', 'jir_celery_beat',
-    })
-    if actual_name not in allowed:
-        return {"status": "error", "message": f"Bu konteyner için işlem tanımlı değil: {actual_name}"}
+    allowed_static = _static_jir_container_names()
 
-    docker_host = getattr(settings, 'DOCKER_HOST', None)
     client = None
 
     try:
         import docker
-        if docker_host and docker_host.startswith('tcp://'):
-            client = docker.DockerClient(base_url=docker_host, timeout=10)
-        else:
-            client = docker.DockerClient(base_url='unix://var/run/docker.sock', timeout=10)
+        client = _management_docker_client(10)
+
+        if actual_name not in allowed_static and not _management_container_pass_through_allowed(client, actual_name):
+            return {"status": "error", "message": f"Bu konteyner için işlem tanımlı değil: {actual_name}"}
 
         container = client.containers.get(actual_name)
 
@@ -901,42 +1002,43 @@ class MailAccountSchema(Schema):
 @router.post("/restart-container/{container_name}", summary="Container Yeniden Başlat")
 def restart_container(request, container_name: str):
     """Belirtilen Docker container'ını yeniden başlatır."""
-    # Sadece izin verilen container'lar yeniden başlatılabilir
-    allowed_containers = [
-        'jir_django', 'jir_postgres', 'jir_postfix',
-        'jir_dovecot', 'jir_redis', 'jir_celery', 'jir_celery_beat'
-    ]
+    raw = _normalize_docker_container_name(container_name)
+    allowed_static = _static_jir_container_names()
 
-    if container_name not in allowed_containers:
+    client = None
+    try:
+        import docker
+        client = _management_docker_client(10)
+        client.ping()
+    except Exception as e:
+        if client:
+            try:
+                client.close()
+            except Exception:
+                pass
+        return {"status": "error", "message": f"Docker'a bağlanılamadı: {str(e)}"}
+
+    if raw not in allowed_static and not _management_container_pass_through_allowed(client, raw):
+        try:
+            client.close()
+        except Exception:
+            pass
         return {"status": "error", "message": f"Container '{container_name}' izin listesinde değil."}
 
-    socket_paths = ['/var/run/docker.sock', '/run/docker.sock']
-    client = None
-
-    for socket_path in socket_paths:
-        if not os.path.exists(socket_path):
-            continue
-        try:
-            import docker
-            client = docker.DockerClient(base_url=f'unix://{socket_path}')
-            client.ping()
-            break
-        except Exception:
-            client = None
-
-    if not client:
-        return {"status": "error", "message": "Docker socket'e bağlanılamadı."}
-
     try:
-        container = client.containers.get(container_name)
+        container = client.containers.get(raw)
         container.restart(timeout=10)
         client.close()
         return {
             "status": "success",
-            "message": f"'{container_name}' container'ı yeniden başlatıldı.",
-            "container": container_name
+            "message": f"'{raw}' container'ı yeniden başlatıldı.",
+            "container": raw
         }
     except Exception as e:
+        try:
+            client.close()
+        except Exception:
+            pass
         return {"status": "error", "message": f"Yeniden başlatma hatası: {str(e)}"}
 
 

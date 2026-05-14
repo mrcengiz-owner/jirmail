@@ -295,6 +295,15 @@ SMTP_PORT = int(os.getenv('SMTP_PORT', '587'))
 # Coolify / tek konteyner: soket mount edildiğinde unix soketi kullanılır (docker-proxy yok).
 DOCKER_HOST = os.getenv('DOCKER_HOST', 'unix:///var/run/docker.sock')
 
+# Docker servis konteyner adları (Coolify vb. farklı isimler için ortam değişkeni)
+JIR_CONTAINER_POSTGRES = os.getenv('JIR_CONTAINER_POSTGRES', 'jir_postgres')
+JIR_CONTAINER_POSTFIX = os.getenv('JIR_CONTAINER_POSTFIX', 'jir_postfix')
+JIR_CONTAINER_DOVECOT = os.getenv('JIR_CONTAINER_DOVECOT', 'jir_dovecot')
+JIR_CONTAINER_REDIS = os.getenv('JIR_CONTAINER_REDIS', 'jir_redis')
+JIR_CONTAINER_DJANGO = os.getenv('JIR_CONTAINER_DJANGO', 'jir_django')
+JIR_CONTAINER_CELERY = os.getenv('JIR_CONTAINER_CELERY', 'jir_celery')
+JIR_CONTAINER_CELERY_BEAT = os.getenv('JIR_CONTAINER_CELERY_BEAT', 'jir_celery_beat')
+
 SESSION_COOKIE_AGE = 86400
 SESSION_COOKIE_SECURE = not DEBUG
 SESSION_COOKIE_HTTPONLY = True
