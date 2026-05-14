@@ -672,7 +672,7 @@ def get_container_status(request):
         "ram_percent": 0,
         "ram_usage_mb": 0,
         "ram_limit_mb": 0,
-        "error": "Docker socket not accessible. Ensure docker-proxy is running or docker.sock is mounted."
+        "error": "Docker API erişilemiyor. DOCKER_HOST ortam değişkenini ayarlayın veya /var/run/docker.sock mount edin (yerel compose için docker-proxy kullanılabilir)."
     }]
 
 

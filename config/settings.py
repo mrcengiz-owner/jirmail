@@ -291,7 +291,9 @@ IMAP_PORT = int(os.getenv('IMAP_PORT', '993'))
 IMAP_SSL = os.getenv('IMAP_SSL', 'true').lower() == 'true'
 SMTP_HOST = os.getenv('SMTP_HOST', 'jir_postfix')
 SMTP_PORT = int(os.getenv('SMTP_PORT', '587'))
-DOCKER_HOST = os.getenv('DOCKER_HOST', 'tcp://docker-proxy:2375')
+# Yerel compose: docker-compose.yml içinde DOCKER_HOST=tcp://docker-proxy:2375 verilir.
+# Coolify / tek konteyner: soket mount edildiğinde unix soketi kullanılır (docker-proxy yok).
+DOCKER_HOST = os.getenv('DOCKER_HOST', 'unix:///var/run/docker.sock')
 
 SESSION_COOKIE_AGE = 86400
 SESSION_COOKIE_SECURE = not DEBUG
