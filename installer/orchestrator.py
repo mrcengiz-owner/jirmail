@@ -1,6 +1,6 @@
 """Docker SDK üzerinden mail server stack'ini orkestre eden modül.
 
-Sırayla:
+Sırayla (Docker erişilebiliyorsa):
   1. Docker daemon erişimini doğrular
   2. Gerekli network'ü oluşturur
   3. Gerekli volume'ları oluşturur
@@ -9,12 +9,17 @@ Sırayla:
   6. Django migrate çalıştırır
   7. Admin hesabı ve SystemConfig oluşturur
 
+Docker soketi / API yoksa (Coolify, yönetilen PaaS): yalnızca migrasyon,
+admin hesabı, DNS/TLS adımları (TLS Docker gerektirirse adım atlanır)
+çalışır; DATABASE_URL varsa SystemConfig DB alanları bundan doldurulur.
+
 Tüm adımlar InstallationStep olarak persist edilir; ilerleme SSE üzerinden
 real-time olarak istemciye stream edilir.
 """
 from __future__ import annotations
 
 import logging
+import os
 import time
 from typing import Callable
 
@@ -29,17 +34,51 @@ from .sse import publish_event
 logger = logging.getLogger(__name__)
 
 
-def _get_docker_client():
-    """Docker SDK client'ını döndürür.
+def _unix_socket_path_from_docker_host(docker_host: str) -> str | None:
+    """unix:///var/run/docker.sock -> /var/run/docker.sock (veya None)."""
+    if not docker_host.startswith('unix://'):
+        return None
+    path = docker_host[len('unix://') :]
+    if path.startswith('//'):
+        path = path[1:]
+    return path or '/var/run/docker.sock'
 
-    Önce DOCKER_HOST env var'a bakar (örn. tcp://docker-proxy:2375),
-    sonra /var/run/docker.sock'a düşer.
+
+def _get_docker_client_optional():
+    """Docker varsa client döndürür; yoksa None (yönetilen kurulum).
+
+    JIR_MANAGED_INSTALL=1 ise Docker denenmez.
     """
+    if os.getenv('JIR_MANAGED_INSTALL', '').lower() in ('1', 'true', 'yes'):
+        logger.info('JIR_MANAGED_INSTALL: Docker orkestrasyonu atlanıyor.')
+        return None
+
     import docker
-    docker_host = getattr(settings, 'DOCKER_HOST', None) or 'unix://var/run/docker.sock'
-    if docker_host.startswith('tcp://'):
-        return docker.DockerClient(base_url=docker_host, timeout=120)
-    return docker.DockerClient(base_url=docker_host, timeout=120)
+
+    docker_host = getattr(settings, 'DOCKER_HOST', None) or 'unix:///var/run/docker.sock'
+    unix_path = _unix_socket_path_from_docker_host(docker_host)
+    if unix_path is not None and not os.path.exists(unix_path):
+        logger.info('Docker unix socket yok (%s); yönetilen kurulum modu.', unix_path)
+        return None
+
+    try:
+        client = docker.DockerClient(base_url=docker_host, timeout=20)
+        client.ping()
+        return client
+    except Exception as exc:
+        logger.info('Docker API kullanılamıyor (%s); yönetilen kurulum modu.', exc)
+        return None
+
+
+def _get_docker_client():
+    """Docker SDK client — yoksa RuntimeError (geri uyumluluk)."""
+    client = _get_docker_client_optional()
+    if client is None:
+        raise RuntimeError(
+            'Docker daemon erişilemiyor. Coolify / PaaS için DATABASE_URL tanımlayın '
+            '(yönetilen kurulum) veya /var/run/docker.sock mount edin / DOCKER_HOST ayarlayın.'
+        )
+    return client
 
 
 class StepRecorder:
@@ -366,6 +405,45 @@ def _request_tls_certificate(config: dict, recorder: StepRecorder) -> None:
         })
 
 
+def _apply_system_config_database(config_obj, config: dict, recorder: StepRecorder) -> None:
+    """SystemConfig veritabanı alanları: DATABASE_URL öncelikli, yoksa compose varsayılanı."""
+    database_url = os.getenv('DATABASE_URL', '').strip()
+    if database_url:
+        try:
+            import dj_database_url
+
+            dbc = dj_database_url.parse(database_url, conn_max_age=600)
+        except Exception as exc:
+            recorder.log(f'DATABASE_URL ayrıştırılamadı: {exc}')
+            raise
+        engine = (dbc.get('ENGINE') or '').lower()
+        if 'sqlite' in engine:
+            config_obj.db_engine = 'django.db.backends.sqlite3'
+            config_obj.db_host = ''
+            config_obj.db_port = None
+            config_obj.db_name = str(dbc.get('NAME') or '')
+            config_obj.db_user = ''
+            config_obj.db_password = ''
+        else:
+            config_obj.db_engine = 'django.db.backends.postgresql'
+            config_obj.db_host = str(dbc.get('HOST') or 'localhost')
+            port = dbc.get('PORT')
+            config_obj.db_port = int(port) if port not in (None, '') else 5432
+            config_obj.db_name = str(dbc.get('NAME') or '')
+            config_obj.db_user = str(dbc.get('USER') or '')
+            config_obj.db_password = str(dbc.get('PASSWORD') or '')
+        recorder.log('SystemConfig veritabanı alanları DATABASE_URL ile dolduruldu.')
+        return
+
+    config_obj.db_engine = 'django.db.backends.postgresql'
+    config_obj.db_host = 'jir_postgres'
+    config_obj.db_port = 5432
+    config_obj.db_name = config.get('postgres_db', 'jir_mail_prod')
+    config_obj.db_user = config.get('postgres_user', 'postgres')
+    config_obj.db_password = config.get('postgres_password', '')
+    recorder.log('SystemConfig veritabanı alanları Docker Compose (jir_postgres) için ayarlandı.')
+
+
 def _create_admin_account(config: dict, recorder: StepRecorder) -> None:
     recorder.start()
     try:
@@ -405,12 +483,7 @@ def _create_admin_account(config: dict, recorder: StepRecorder) -> None:
         config_obj.is_installed = True
         config_obj.instance_id = config.get('instance_id') or config_obj.instance_id
         config_obj.jir_local_key = config.get('jir_local_key', config_obj.jir_local_key)
-        config_obj.db_engine = 'django.db.backends.postgresql'
-        config_obj.db_host = 'jir_postgres'
-        config_obj.db_port = 5432
-        config_obj.db_name = config.get('postgres_db', 'jir_mail_prod')
-        config_obj.db_user = config.get('postgres_user', 'postgres')
-        config_obj.db_password = config.get('postgres_password', '')
+        _apply_system_config_database(config_obj, config, recorder)
         config_obj.installation_log = {
             'run_id': str(recorder.run.run_id),
             'completed_at': timezone.now().isoformat(),
@@ -442,59 +515,93 @@ def run_installation(run_id: str) -> None:
     publish_event(str(run.run_id), 'run_start', {'run_id': str(run.run_id)})
 
     config = run.config_snapshot or {}
-    specs = order_specs(build_specs(config))
 
     try:
-        client = _get_docker_client()
-        try:
-            client.ping()
-        except Exception as exc:
-            raise RuntimeError(f'Docker daemon erişilemiyor: {exc}')
+        client = _get_docker_client_optional()
 
-        order = 0
-        order += 1
-        _ensure_network(client, _make_step(run, order, 'Docker network',
-                                           f'Bridge network {JIR_NETWORK} oluştur'))
+        if client is None:
+            if not os.getenv('DATABASE_URL', '').strip():
+                raise RuntimeError(
+                    'Docker API kullanılamıyor ve DATABASE_URL tanımlı değil. '
+                    "Coolify'da PostgreSQL ekleyip DATABASE_URL verin veya Docker soketini mount edin."
+                )
 
-        order += 1
-        _ensure_volumes(client, specs, _make_step(run, order, 'Volume hazırlığı',
-                                                   'Persistent volume\'lar oluştur'))
-
-        for spec in specs:
+            order = 0
             order += 1
-            _pull_image(client, spec.image, _make_step(
-                run, order, f'Image: {spec.image}', f'Pull {spec.image}'))
+            managed_rec = _make_step(
+                run, order, 'Yönetilen ortam',
+                'Docker yok — migrasyon ve hesap kurulumu (Coolify / PaaS)',
+            )
+            managed_rec.start()
+            managed_rec.log(
+                'Docker soketi veya API erişilemedi. Postfix/Dovecot vb. konteynerleri '
+                'platformunuzda ayrı tanımlamanız gerekir; bu adım yalnızca veritabanı ve '
+                'panel hesabını tamamlar.'
+            )
+            managed_rec.finish(success=True)
 
-        for spec in specs:
             order += 1
-            _start_container(client, spec, _make_step(
-                run, order, f'Container: {spec.name}', f'Start {spec.name}'))
+            _run_migrations(_make_step(run, order, 'Veritabanı migration',
+                                       'Django migrate çalıştır'))
 
-            if spec.healthcheck:
+            order += 1
+            _create_admin_account(config, _make_step(run, order, 'Admin hesabı',
+                                                     'Admin kullanıcısı ve SystemConfig oluştur'))
+
+            order += 1
+            _apply_dns_records(config, _make_step(run, order, 'DNS kayıtları',
+                                                 f'{config.get("dns_provider", "manual")} ile DNS yapılandırması'))
+
+            order += 1
+            _request_tls_certificate(config, _make_step(run, order, 'TLS sertifikası',
+                                                       'Let\'s Encrypt sertifika talebi (staging)'))
+        else:
+            specs = order_specs(build_specs(config))
+
+            order = 0
+            order += 1
+            _ensure_network(client, _make_step(run, order, 'Docker network',
+                                               f'Bridge network {JIR_NETWORK} oluştur'))
+
+            order += 1
+            _ensure_volumes(client, specs, _make_step(run, order, 'Volume hazırlığı',
+                                                       'Persistent volume\'lar oluştur'))
+
+            for spec in specs:
                 order += 1
-                _wait_for_healthy(client, spec.name, _make_step(
-                    run, order, f'Healthcheck: {spec.name}', f'{spec.name} hazır olana kadar bekle'))
+                _pull_image(client, spec.image, _make_step(
+                    run, order, f'Image: {spec.image}', f'Pull {spec.image}'))
 
-        order += 1
-        _run_migrations(_make_step(run, order, 'Veritabanı migration',
-                                    'Django migrate çalıştır'))
+            for spec in specs:
+                order += 1
+                _start_container(client, spec, _make_step(
+                    run, order, f'Container: {spec.name}', f'Start {spec.name}'))
 
-        order += 1
-        _create_admin_account(config, _make_step(run, order, 'Admin hesabı',
-                                                   'Admin kullanıcısı ve SystemConfig oluştur'))
+                if spec.healthcheck:
+                    order += 1
+                    _wait_for_healthy(client, spec.name, _make_step(
+                        run, order, f'Healthcheck: {spec.name}', f'{spec.name} hazır olana kadar bekle'))
 
-        order += 1
-        _apply_dns_records(config, _make_step(run, order, 'DNS kayıtları',
-                                               f'{config.get("dns_provider", "manual")} ile DNS yapılandırması'))
+            order += 1
+            _run_migrations(_make_step(run, order, 'Veritabanı migration',
+                                        'Django migrate çalıştır'))
 
-        order += 1
-        _request_tls_certificate(config, _make_step(run, order, 'TLS sertifikası',
-                                                     'Let\'s Encrypt sertifika talebi (staging)'))
+            order += 1
+            _create_admin_account(config, _make_step(run, order, 'Admin hesabı',
+                                                     'Admin kullanıcısı ve SystemConfig oluştur'))
 
-        try:
-            client.close()
-        except Exception:
-            pass
+            order += 1
+            _apply_dns_records(config, _make_step(run, order, 'DNS kayıtları',
+                                                 f'{config.get("dns_provider", "manual")} ile DNS yapılandırması'))
+
+            order += 1
+            _request_tls_certificate(config, _make_step(run, order, 'TLS sertifikası',
+                                                         'Let\'s Encrypt sertifika talebi (staging)'))
+
+            try:
+                client.close()
+            except Exception:
+                pass
 
         run.status = 'completed'
         run.finished_at = timezone.now()
