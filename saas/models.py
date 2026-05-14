@@ -43,6 +43,8 @@ class SystemConfig(models.Model):
     max_accounts = models.PositiveIntegerField(default=3)
     storage_limit_gb = models.PositiveIntegerField(default=1)
 
+    installation_log = models.JSONField(default=dict, blank=True)
+
     updated_at = models.DateTimeField(auto_now=True)
 
     def get_database_config(self):

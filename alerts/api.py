@@ -1,6 +1,7 @@
 from ninja import Router, Schema
 from django.conf import settings
 from saas.models import Alert, AlertThreshold
+from core.models import MailAccount
 from datetime import datetime, timedelta
 import psutil
 import subprocess
@@ -179,8 +180,6 @@ def evaluate_thresholds(metrics):
 
 @router.get("/metrics", response={200: SystemMetricsSchema}, summary="Sistem Metrikleri")
 def get_system_metrics(request):
-    from core.models import MailAccount
-
     disk = check_disk_usage()
     memory = check_memory_usage()
     cpu = check_cpu_usage()

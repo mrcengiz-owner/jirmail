@@ -25,4 +25,8 @@ app.conf.beat_schedule = {
         'task': 'alerts.tasks.check_all_domains_dns',
         'schedule': 21600.0,
     },
+    'renew-tls-certificates-weekly': {
+        'task': 'tls.renew_certificates',
+        'schedule': 604800.0,
+    },
 }

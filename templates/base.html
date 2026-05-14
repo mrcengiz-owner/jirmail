@@ -3,11 +3,22 @@
 <html lang="tr" class="dark">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <meta name="csrf-token" content="{{ csrf_token }}">
-    <meta name="description" content="Jîr-Mail - Professional Mail Hosting Command Center">
-    <link rel="icon" type="image/svg+xml" href="/favicon.ico">
-    <title>{% block title %}Jîr-Mail{% endblock %}</title>
+    <meta name="description" content="JîrCode Mail — Privacy-first self-hosted mail platform">
+    <meta name="theme-color" content="#020617" media="(prefers-color-scheme: dark)">
+    <meta name="theme-color" content="#10b981" media="(prefers-color-scheme: light)">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="JîrCode">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="format-detection" content="telephone=no">
+    <meta name="color-scheme" content="dark">
+
+    <link rel="icon" type="image/svg+xml" href="{% static 'brand/favicon.svg' %}">
+    <link rel="apple-touch-icon" href="{% static 'brand/logo-icon.svg' %}">
+
+    <title>{% block title %}JîrCode Mail{% endblock %}</title>
 
     <script>
         (function() {
@@ -15,10 +26,6 @@
                 var theme = localStorage.getItem('theme');
                 if (theme === 'light') {
                     document.documentElement.classList.remove('dark');
-                } else if (theme === 'dark') {
-                    document.documentElement.classList.add('dark');
-                } else if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
-                    document.documentElement.classList.add('dark');
                 } else {
                     document.documentElement.classList.add('dark');
                 }
@@ -28,83 +35,52 @@
         })();
     </script>
 
-    <!-- Tailwind CSS CDN -->
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-        tailwind.config = {
-            darkMode: 'class',
-            theme: {
-                extend: {
-                    colors: {
-                        slate: { 850: '#1a2234', 900: '#0f172a', 950: '#020617' },
-                        primary: {
-                            50: '#f0fdf4', 100: '#dcfce7', 200: '#bbf7d0',
-                            300: '#86efac', 400: '#34d399', 500: '#10b981',
-                            600: '#059669', 700: '#047857', 800: '#065f46', 900: '#064e3b',
-                        },
-                        success: { 400: '#4ade80', 500: '#22c55e', 600: '#16a34a' },
-                        danger:  { 400: '#f87171', 500: '#ef4444', 600: '#dc2626' },
-                        warning: { 400: '#fbbf24', 500: '#f59e0b', 600: '#d97706' },
-                        info:    { 400: '#60a5fa', 500: '#3b82f6', 600: '#2563eb' },
-                        neutral: {
-                            50: '#f9fafb', 100: '#f3f4f6', 200: '#e5e7eb',
-                            300: '#d1d5db', 400: '#9ca3af', 500: '#6b7280',
-                            600: '#4b5563', 700: '#374151', 800: '#1f2937', 900: '#111827',
-                        },
-                    },
-                    animation: {
-                        'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
-                    }
-                }
-            }
-        }
-    </script>
-
-    <!-- Custom CSS -->
     <link rel="stylesheet" href="{% static 'css/main.css' %}">
+    <link rel="stylesheet" href="{% static 'css/brand.css' %}">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap">
 
-    <!-- Alpine.js & HTMX -->
     <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
-    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
 
     {% block extra_head %}{% endblock %}
 </head>
-<body x-data="{ sidebarOpen: false }" class="bg-slate-950 text-slate-100 h-screen overflow-hidden">
+<body x-data="{ sidebarOpen: false }"
+      @keydown.escape.window="sidebarOpen = false"
+      :class="sidebarOpen ? 'overflow-hidden' : ''"
+      class="bg-slate-950 text-slate-100 h-dvh overflow-hidden bg-radial-fade">
 
-<!-- Main Flex Container -->
-<div class="flex h-screen overflow-hidden">
+<div class="flex h-dvh overflow-hidden">
 
-    <!-- Sidebar (always visible on desktop) -->
-    {% include 'partials/sidebar.html' %}
+    {% block sidebar %}{% include 'partials/sidebar.html' %}{% endblock %}
 
-    <!-- Right Side: Navbar + Content -->
-    <div class="flex-1 flex flex-col overflow-hidden">
-        <!-- Navbar -->
-        {% include 'partials/navbar.html' %}
+    <div class="flex-1 flex flex-col overflow-hidden min-w-0">
+        {% block navbar %}{% include 'partials/navbar.html' %}{% endblock %}
 
-        <!-- Main Content Area -->
-        <main id="content-area" class="flex-1 overflow-x-hidden overflow-y-auto bg-slate-950">
+        <main id="content-area"
+              class="flex-1 overflow-x-hidden overflow-y-auto bg-slate-950 custom-scrollbar pb-[var(--safe-bottom)]">
             {% block content %}{% endblock %}
         </main>
+
+        {% block bottom_nav %}{% include 'partials/bottom_nav.html' %}{% endblock %}
     </div>
 
 </div>
 
-<!-- Mobile Sidebar Overlay -->
+<!-- Mobile drawer backdrop -->
 <div x-show="sidebarOpen"
      @click="sidebarOpen = false"
-     x-transition:enter="transition-opacity ease-linear duration-300"
+     x-transition:enter="transition-opacity ease-out duration-200"
      x-transition:enter-start="opacity-0"
      x-transition:enter-end="opacity-100"
-     x-transition:leave="transition-opacity ease-linear duration-300"
+     x-transition:leave="transition-opacity ease-in duration-150"
      x-transition:leave-start="opacity-100"
      x-transition:leave-end="opacity-0"
-     class="fixed inset-0 bg-black/50 z-30 md:hidden"
+     class="drawer-backdrop"
      x-cloak>
 </div>
 
-<!-- Toast Container -->
-{% block toast %}{% endblock %}
+{% block toast %}{% include "partials/toast.html" %}{% endblock %}
 
 <script src="{% static 'js/app.js' %}"></script>
 {% block extra_scripts %}{% endblock %}

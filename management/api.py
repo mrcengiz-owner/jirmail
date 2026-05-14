@@ -388,7 +388,8 @@ def check_system_requirements(request):
             services.append({
                 "name": name,
                 "status": "running",
-                "port": port
+                "port": port,
+                "container": container_name,
             })
             continue
 
@@ -403,97 +404,9 @@ def check_system_requirements(request):
         services.append({
             "name": name,
             "status": "running" if is_listening else "stopped",
-            "port": port
+            "port": port,
+            "container": container_name,
         })
-
-    ram_required_gb = 2.0
-    disk_required_gb = 10.0
-
-    all_ok = (
-        ram.total / (1024**3) >= ram_required_gb and
-        disk.free / (1024**3) >= disk_required_gb and
-        len(ports_blocked) == 0
-    )
-
-    return {
-        "status": "ok" if all_ok else "warning",
-        "ram_ok": ram.total / (1024**3) >= ram_required_gb,
-        "ram_total_gb": round(ram.total / (1024**3), 2),
-        "ram_required_gb": ram_required_gb,
-        "disk_ok": disk.free / (1024**3) >= disk_required_gb,
-        "disk_free_gb": round(disk.free / (1024**3), 2),
-        "disk_required_gb": disk_required_gb,
-        "ports_ok": ports_ok,
-        "ports_blocked": ports_blocked,
-        "services": services
-    }
-    """Docker içinde container çalışıyor mu kontrol et"""
-    try:
-        import docker
-        if docker_host and docker_host.startswith('tcp://'):
-            client = docker.DockerClient(base_url=docker_host, timeout=3)
-        else:
-            client = docker.DockerClient(base_url='unix://var/run/docker.sock', timeout=3)
-
-        for container in client.containers.list(all=True):
-            if container.name == container_name:
-                client.close()
-                return container.status == 'running'
-        client.close()
-        return False
-    except Exception:
-        return False
-
-
-def check_port_listening(port, host='localhost'):
-    import socket
-    try:
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-            s.settimeout(2)
-            result = s.connect_ex((host, port))
-            return result == 0
-    except:
-        return False
-
-
-@router.get("/system-requirements", response={200: dict}, summary="Sistem Gereksinimleri Kontrol")
-def check_system_requirements(request):
-    ram = psutil.virtual_memory()
-    disk = psutil.disk_usage('/')
-
-    required_ports = [25, 465, 587, 993, 143]
-    ports_ok = []
-    ports_blocked = []
-
-    for port in required_ports:
-        if check_port_listening(port):
-            ports_ok.append(port)
-        else:
-            ports_blocked.append(port)
-
-    services = []
-    docker_services = {
-        'PostgreSQL': {'container': 'jir_postgres', 'port': 5432},
-        'Postfix': {'container': 'jir_postfix', 'port': 25},
-        'Dovecot': {'container': 'jir_dovecot', 'port': 993},
-        'Redis': {'container': 'jir_redis', 'port': 6379},
-    }
-
-    docker_host = getattr(settings, 'DOCKER_HOST', None)
-
-    for name, info in docker_services.items():
-        container_name = info['container']
-        port = info['port']
-
-        if check_service_in_docker(container_name, docker_host):
-            services.append({"name": name, "status": "running", "port": port})
-            continue
-
-        is_listening = check_port_listening(port, host=name.lower())
-        if not is_listening:
-            is_listening = check_port_listening(port, host='localhost')
-
-        services.append({"name": name, "status": "running" if is_listening else "stopped", "port": port})
 
     ram_required_gb = 2.0
     disk_required_gb = 10.0
@@ -766,7 +679,12 @@ def get_container_status(request):
 @router.post("/container/{container_name}/{action}", summary="Container Start/Stop/Restart")
 @csrf_exempt
 def container_action(request, container_name, action):
-    """Start, stop, or restart a Docker container"""
+    """Start, stop, or restart a Docker container (dashboard — FULL oturum gerekir)."""
+    if not request.session.get('is_logged_in'):
+        return {"status": "error", "message": "Oturum gerekli. Lütfen yeniden giriş yapın."}
+    if request.session.get('role') != 'FULL':
+        return {"status": "error", "message": "Bu işlem için yönetici (FULL) yetkisi gerekir."}
+
     if action not in ['start', 'stop', 'restart']:
         return {"status": "error", "message": "Invalid action. Use start, stop, or restart."}
 
@@ -778,11 +696,19 @@ def container_action(request, container_name, action):
         'redis': 'jir_redis',
         'django': 'jir_django',
         'celery': 'jir_celery',
+        'celery_beat': 'jir_celery_beat',
     }
 
     actual_name = container_map.get(container_name.lower(), container_name)
     if actual_name not in container_map.values():
         actual_name = f'jir_{container_name}' if not container_name.startswith('jir_') else container_name
+
+    allowed = frozenset(container_map.values()) | frozenset({
+        'jir_postgres', 'jir_postfix', 'jir_dovecot', 'jir_redis',
+        'jir_django', 'jir_celery', 'jir_celery_beat',
+    })
+    if actual_name not in allowed:
+        return {"status": "error", "message": f"Bu konteyner için işlem tanımlı değil: {actual_name}"}
 
     docker_host = getattr(settings, 'DOCKER_HOST', None)
     client = None
@@ -797,14 +723,26 @@ def container_action(request, container_name, action):
         container = client.containers.get(actual_name)
 
         if action == 'start':
-            container.start()
-            return {"status": "success", "message": f"{actual_name} started", "action": "start"}
+            try:
+                container.start()
+            except docker.errors.APIError as e:
+                err = str(e).lower()
+                if 'already started' in err or 'already running' in err or '304' in str(e):
+                    return {"status": "success", "message": f"{actual_name} zaten çalışıyor", "action": "noop"}
+                raise
+            return {"status": "success", "message": f"{actual_name} başlatıldı", "action": "start"}
         elif action == 'stop':
-            container.stop(timeout=10)
-            return {"status": "success", "message": f"{actual_name} stopped", "action": "stop"}
+            try:
+                container.stop(timeout=10)
+            except docker.errors.APIError as e:
+                err = str(e).lower()
+                if 'not running' in err or 'is not running' in err:
+                    return {"status": "success", "message": f"{actual_name} zaten durmuş", "action": "noop"}
+                raise
+            return {"status": "success", "message": f"{actual_name} durduruldu", "action": "stop"}
         elif action == 'restart':
             container.restart(timeout=10)
-            return {"status": "success", "message": f"{actual_name} restarted", "action": "restart"}
+            return {"status": "success", "message": f"{actual_name} yeniden başlatıldı", "action": "restart"}
 
     except ImportError:
         return {"status": "error", "message": "Docker module not installed. Install with: pip install docker"}

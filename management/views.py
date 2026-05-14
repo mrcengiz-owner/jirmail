@@ -108,6 +108,7 @@ def dashboard(request):
         'active_domains': active_domains,
         'active_accounts': active_accounts,
         'inactive_accounts': inactive_accounts,
+        'can_manage_docker': request.session.get('role') == 'FULL',
     })
 
 
@@ -124,28 +125,10 @@ def login(request):
     if request.session.get('is_logged_in'):
         role = request.session.get('role')
         if role == 'FULL':
-            return redirect('master_panel')
+            return redirect('dashboard')
         return redirect('mail_panel')
 
     return render(request, 'login.html')
-
-
-@require_http_methods(["GET"])
-def master_panel(request):
-    """Admin Panel - System Specs, Domain Control, User Logs, Backup"""
-    if not is_installed():
-        return redirect('setup')
-    if not request.session.get('is_logged_in'):
-        return redirect('login')
-    if request.session.get('role') != 'FULL':
-        return redirect('mail_panel')
-
-    instance_info = get_instance_info()
-    return render(request, 'master_panel.html', {
-        'JIR_LOCAL_KEY': get_jir_key(),
-        'instance_id': instance_info['instance_id'],
-        'tier': instance_info['tier'],
-    })
 
 
 @require_http_methods(["GET"])
@@ -202,6 +185,11 @@ def login_success(request):
         request.session['role'] = account.role
         request.session['domain'] = account.domain.name
         request.session['is_logged_in'] = True
+        request.session['account_id'] = account.id
+        # IMAP/SMTP istemcisi için kullanıcının düz parolası geçici cache'lenir.
+        # Session cookie SECURE+HttpOnly olduğu sürece tarayıcıdan erişilemez;
+        # uzun vadede credential vault'a taşımak ideal.
+        request.session['mail_password'] = password
         request.session.set_expiry(86400)
 
         from saas.models import SystemConfig
@@ -209,7 +197,7 @@ def login_success(request):
         jir_key = config.jir_local_key if config else get_jir_key()
 
         if account.role == 'FULL':
-            redirect_url = '/master-panel/'
+            redirect_url = '/dashboard/'
         else:
             redirect_url = '/mail-panel/'
 
@@ -251,13 +239,35 @@ def domains_view(request):
 
     try:
         from core.models import MailDomain
-        domains = list(MailDomain.objects.all().values('name', 'is_active'))
+        domains_qs = MailDomain.objects.all().order_by('name')
+        domains_bootstrap = [
+            {
+                'id': d.id,
+                'name': d.name,
+                'is_active': d.is_active,
+                'dkim_enabled': d.dkim_enabled,
+                'verification_status': d.verification_status,
+                'spf_record': d.spf_record or '',
+                'dkim_record': d.dkim_record or '',
+                'dmarc_record': d.dmarc_record or '',
+                'dns_provider': d.dns_provider,
+            }
+            for d in domains_qs
+        ]
+        dns_provider_choices = [
+            {'value': c[0], 'label': c[1]} for c in MailDomain.DNS_PROVIDER_CHOICES
+        ]
     except Exception:
-        domains = []
+        domains_bootstrap = []
+        dns_provider_choices = []
+
+    mail_hostname = (getattr(settings, 'MAIL_SERVER_HOSTNAME', None) or '').strip()
 
     return render(request, 'pages/domains.html', {
         'JIR_LOCAL_KEY': get_jir_key(),
-        'domains': domains,
+        'domains_bootstrap': domains_bootstrap,
+        'dns_provider_choices': dns_provider_choices,
+        'mail_hostname': mail_hostname,
         'current_page': 'domains',
     })
 

@@ -89,6 +89,9 @@ INSTALLED_APPS = [
     'core',
     'backup',
     'alerts',
+    'installer',
+    'webmail',
+    'monitoring',
 ]
 
 MIDDLEWARE = [
@@ -282,6 +285,13 @@ BACKUP_DIR = get_jir_path('backup')
 
 CELERY_BROKER_URL = os.getenv('CELERY_BROKER_URL', f'redis://{REDIS_HOST}:6379/0')
 CELERY_RESULT_BACKEND = os.getenv('CELERY_RESULT_BACKEND', f'redis://{REDIS_HOST}:6379/0')
+
+IMAP_HOST = os.getenv('IMAP_HOST', 'jir_dovecot')
+IMAP_PORT = int(os.getenv('IMAP_PORT', '993'))
+IMAP_SSL = os.getenv('IMAP_SSL', 'true').lower() == 'true'
+SMTP_HOST = os.getenv('SMTP_HOST', 'jir_postfix')
+SMTP_PORT = int(os.getenv('SMTP_PORT', '587'))
+DOCKER_HOST = os.getenv('DOCKER_HOST', 'tcp://docker-proxy:2375')
 
 SESSION_COOKIE_AGE = 86400
 SESSION_COOKIE_SECURE = not DEBUG

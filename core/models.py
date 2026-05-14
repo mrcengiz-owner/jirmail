@@ -27,6 +27,19 @@ class MailDomain(models.Model):
     ])
     verified_at = models.DateTimeField(null=True, blank=True)
 
+    DNS_PROVIDER_CHOICES = [
+        ('manual', 'Manuel'),
+        ('cloudflare', 'Cloudflare'),
+        ('route53', 'AWS Route53'),
+        ('namecheap', 'Namecheap'),
+    ]
+    dns_provider = models.CharField(max_length=20, choices=DNS_PROVIDER_CHOICES, default='manual')
+    dns_credentials = models.JSONField(default=dict, blank=True, help_text='Provider API token/secret (encrypted-at-rest önerilir)')
+    tls_cert_path = models.CharField(max_length=500, blank=True, default='')
+    tls_key_path = models.CharField(max_length=500, blank=True, default='')
+    tls_issued_at = models.DateTimeField(null=True, blank=True)
+    tls_expires_at = models.DateTimeField(null=True, blank=True)
+
     class Meta:
         ordering = ['name']
 

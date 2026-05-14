@@ -1,201 +1,229 @@
 {% extends "base.html" %}
+{% load static %}
 
-{% block toast %}
-{% include "partials/toast.html" %}
-{% endblock %}
+{% block title %}Webmail — JîrCode Mail{% endblock %}
+
+{% block sidebar %}{% endblock %}
+{% block navbar %}{% endblock %}
+{% block bottom_nav %}{% endblock %}
 
 {% block content %}
-<div class="flex h-full w-full overflow-hidden pt-14 md:pt-0" x-data="mailApp()">
+<div class="flex h-dvh w-full overflow-hidden bg-slate-950" x-data="mailApp()">
 
     <!-- Column 1: Folder Sidebar -->
-    <aside class="w-64 bg-slate-900 border-r border-slate-800 flex-col h-full shrink-0"
+    <aside class="bg-slate-900 border-r border-slate-800 flex-col h-full shrink-0 w-full md:w-64"
            :class="mobileView === 'folders' ? 'flex' : 'hidden md:flex'">
 
-        <!-- Compose Button -->
-        <div class="p-4 border-b border-slate-800">
-            <button @click="showCompose = true; mobileView = 'detail'"
-                    class="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-semibold py-3 px-4 rounded-xl transition-all flex items-center justify-center gap-2">
+        <div class="h-14 px-4 flex items-center justify-between border-b border-slate-800 shrink-0">
+            <a href="{% url 'dashboard' %}" class="flex items-center gap-2.5 min-w-0">
+                <img src="{% static 'brand/logo-icon.svg' %}" alt="JîrCode" class="w-9 h-9 rounded-xl shrink-0">
+                <div class="min-w-0 leading-tight">
+                    <p class="jir-wordmark text-base text-white truncate">Jîr<span class="jir-text-gradient">Code</span></p>
+                    <p class="text-[10px] font-semibold uppercase tracking-[0.2em] text-emerald-400">Webmail</p>
+                </div>
+            </a>
+        </div>
+
+        <div class="p-3 border-b border-slate-800/70">
+            <button @click="showCompose = true; mobileView = 'detail'" class="btn btn-primary w-full">
                 <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
                 </svg>
-                Compose
+                Yeni Mesaj
             </button>
         </div>
 
-        <!-- Folder Navigation -->
-        <nav class="flex-1 px-3 py-4 overflow-y-auto space-y-1">
-            <div class="mb-3">
-                <span class="px-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">Mailboxes</span>
+        <nav class="flex-1 px-2 py-3 overflow-y-auto custom-scrollbar space-y-0.5" aria-label="Klasörler">
+            <div class="px-3 py-2">
+                <span class="text-[10px] font-bold text-slate-500 uppercase tracking-[0.15em]">Mailboxes</span>
             </div>
 
             <button @click="currentFolder = 'inbox'; mobileView = 'list'"
-                    class="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all text-sm font-medium"
-                    :class="currentFolder === 'inbox' ? 'bg-emerald-500/10 text-emerald-400' : 'text-slate-400 hover:bg-slate-800 hover:text-white'">
+                    class="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors"
+                    :class="currentFolder === 'inbox' ? 'bg-primary-500/10 text-primary-300 border border-primary-500/20' : 'text-slate-400 hover:bg-slate-800/60 hover:text-white border border-transparent'">
                 <svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
                 </svg>
-                <span>Inbox</span>
+                <span>Gelen Kutusu</span>
                 <span x-show="unreadCount > 0"
-                      class="ml-auto bg-emerald-500/20 text-emerald-400 px-2 py-0.5 rounded-full text-xs font-bold"
+                      class="ml-auto bg-primary-500/20 text-primary-300 px-2 py-0.5 rounded-full text-xs font-bold tabular-nums"
                       x-text="unreadCount"></span>
             </button>
 
             <button @click="currentFolder = 'starred'; mobileView = 'list'"
-                    class="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all text-sm font-medium"
-                    :class="currentFolder === 'starred' ? 'bg-emerald-500/10 text-emerald-400' : 'text-slate-400 hover:bg-slate-800 hover:text-white'">
+                    class="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors"
+                    :class="currentFolder === 'starred' ? 'bg-primary-500/10 text-primary-300 border border-primary-500/20' : 'text-slate-400 hover:bg-slate-800/60 hover:text-white border border-transparent'">
                 <svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z"/>
                 </svg>
-                <span>Starred</span>
+                <span>Yıldızlı</span>
             </button>
 
             <button @click="currentFolder = 'sent'; mobileView = 'list'"
-                    class="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all text-sm font-medium"
-                    :class="currentFolder === 'sent' ? 'bg-emerald-500/10 text-emerald-400' : 'text-slate-400 hover:bg-slate-800 hover:text-white'">
+                    class="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors"
+                    :class="currentFolder === 'sent' ? 'bg-primary-500/10 text-primary-300 border border-primary-500/20' : 'text-slate-400 hover:bg-slate-800/60 hover:text-white border border-transparent'">
                 <svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/>
                 </svg>
-                <span>Sent</span>
+                <span>Gönderilen</span>
             </button>
 
             <button @click="currentFolder = 'drafts'; mobileView = 'list'"
-                    class="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all text-sm font-medium"
-                    :class="currentFolder === 'drafts' ? 'bg-emerald-500/10 text-emerald-400' : 'text-slate-400 hover:bg-slate-800 hover:text-white'">
+                    class="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors"
+                    :class="currentFolder === 'drafts' ? 'bg-primary-500/10 text-primary-300 border border-primary-500/20' : 'text-slate-400 hover:bg-slate-800/60 hover:text-white border border-transparent'">
                 <svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
                 </svg>
-                <span>Drafts</span>
+                <span>Taslaklar</span>
             </button>
 
             <button @click="currentFolder = 'trash'; mobileView = 'list'"
-                    class="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all text-sm font-medium"
-                    :class="currentFolder === 'trash' ? 'bg-emerald-500/10 text-emerald-400' : 'text-slate-400 hover:bg-slate-800 hover:text-white'">
+                    class="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors"
+                    :class="currentFolder === 'trash' ? 'bg-primary-500/10 text-primary-300 border border-primary-500/20' : 'text-slate-400 hover:bg-slate-800/60 hover:text-white border border-transparent'">
                 <svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
                 </svg>
-                <span>Trash</span>
+                <span>Çöp Kutusu</span>
             </button>
         </nav>
 
-        <!-- User Info & Logout -->
-        <div class="p-4 border-t border-slate-800">
-            <div class="flex items-center gap-3 mb-3">
-                <div class="w-9 h-9 bg-emerald-600 rounded-full flex items-center justify-center text-white font-bold text-sm shrink-0"
-                     x-text="'{{ email }}'.charAt(0).toUpperCase()">A</div>
-                <div class="overflow-hidden">
-                    <p class="text-sm font-medium text-white truncate">{{ email }}</p>
-                    <p class="text-xs text-slate-500">Connected</p>
+        <div class="p-3 border-t border-slate-800 shrink-0">
+            <a href="{% url 'dashboard' %}" class="flex items-center gap-3 mb-2 px-2 py-1.5 rounded-lg hover:bg-slate-800/60 transition-colors group">
+                <div class="w-9 h-9 bg-gradient-to-br from-primary-500 to-primary-700 rounded-full flex items-center justify-center text-white font-bold text-sm shrink-0">
+                    {{ email|slice:":1"|upper }}
                 </div>
-            </div>
+                <div class="min-w-0 flex-1">
+                    <p class="text-sm font-medium text-white truncate">{{ email }}</p>
+                    <p class="text-xs text-slate-500">Bağlı</p>
+                </div>
+                <svg class="w-4 h-4 text-slate-500 group-hover:text-white transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+                </svg>
+            </a>
             <form method="POST" action="{% url 'logout' %}">
                 {% csrf_token %}
-                <button type="submit"
-                        class="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-xl text-slate-400 hover:bg-red-500/10 hover:text-red-400 transition-colors text-sm">
+                <button type="submit" class="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-xl text-slate-400 hover:bg-danger-500/10 hover:text-danger-400 transition-colors text-sm">
                     <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/>
                     </svg>
-                    Logout
+                    Çıkış Yap
                 </button>
             </form>
         </div>
     </aside>
 
     <!-- Column 2: Mail List -->
-    <div class="w-80 bg-slate-900/60 border-r border-slate-800 flex-col shrink-0"
-         :class="mobileView === 'list' ? 'flex w-full' : 'hidden md:flex md:w-80'">
+    <section class="bg-slate-900/60 border-r border-slate-800 flex-col shrink-0 w-full md:w-80 lg:w-96"
+             :class="mobileView === 'list' ? 'flex' : 'hidden md:flex'">
 
-        <!-- Mobile Back -->
-        <div class="md:hidden flex items-center gap-2 p-3 border-b border-slate-800">
-            <button @click="mobileView = 'folders'" class="p-2 rounded-lg text-slate-400 hover:bg-slate-800">
-                <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+        <!-- Mobile header: hamburger + title -->
+        <div class="md:hidden h-14 flex items-center gap-1 px-2 border-b border-slate-800 shrink-0">
+            <button @click="mobileView = 'folders'" aria-label="Klasörleri aç" class="icon-btn">
+                <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+                </svg>
             </button>
-            <span class="font-medium text-white capitalize" x-text="currentFolder"></span>
+            <span class="font-semibold text-white capitalize flex-1 truncate" x-text="currentFolder"></span>
+            <button @click="showCompose = true; mobileView = 'detail'" aria-label="Yeni mesaj" class="icon-btn text-primary-400">
+                <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
+                </svg>
+            </button>
         </div>
 
         <!-- Search -->
-        <div class="p-4 border-b border-slate-800">
+        <div class="p-3 border-b border-slate-800 shrink-0">
             <div class="relative">
-                <svg class="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <svg class="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
                 </svg>
-                <input type="text" x-model="searchQuery" placeholder="Search..."
-                       aria-label="Search emails"
-                       class="w-full bg-slate-800 border border-slate-700 rounded-xl pl-9 pr-4 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 transition-all">
+                <input type="search" x-model="searchQuery" placeholder="Mail içeriklerinde ara..."
+                       aria-label="Mail içeriklerinde ara"
+                       class="input pl-10" style="min-height:42px;padding-top:0.5rem;padding-bottom:0.5rem;">
             </div>
         </div>
 
-        <!-- Mail Items -->
-        <div class="flex-1 overflow-y-auto">
+        <!-- List -->
+        <div class="flex-1 overflow-y-auto custom-scrollbar">
             <template x-for="mail in filteredMails" :key="mail.id">
-                <div @click="selectMail(mail); mobileView = 'detail'"
-                     class="p-4 border-b border-slate-800/50 hover:bg-slate-800/50 cursor-pointer transition-all relative"
-                     :class="selectedMail && selectedMail.id === mail.id ? 'bg-slate-800 border-l-2 border-l-emerald-500' : ''">
-                    <div class="flex justify-between items-center mb-1">
+                <button @click="selectMail(mail); mobileView = 'detail'"
+                        class="w-full text-left p-4 border-b border-slate-800/40 hover:bg-slate-800/40 transition-colors relative"
+                        :class="selectedMail && selectedMail.id === mail.id ? 'bg-slate-800/60' : ''">
+                    <span x-show="selectedMail && selectedMail.id === mail.id"
+                          class="absolute left-0 inset-y-2 w-0.5 bg-primary-500 rounded-r"></span>
+                    <div class="flex items-start justify-between gap-2 mb-1">
                         <div class="flex items-center gap-2 min-w-0">
-                            <span x-show="mail.unread" class="w-2 h-2 rounded-full bg-emerald-500 shrink-0"></span>
+                            <span x-show="mail.unread" class="w-2 h-2 rounded-full bg-primary-500 shrink-0"></span>
                             <span class="truncate text-sm"
-                                  :class="mail.unread ? 'font-semibold text-white' : 'font-normal text-slate-400'"
+                                  :class="mail.unread ? 'font-semibold text-white' : 'text-slate-400'"
                                   x-text="mail.from"></span>
                         </div>
-                        <span class="text-xs text-slate-500 shrink-0 ml-2" x-text="formatDate(mail.date)"></span>
+                        <span class="text-[11px] text-slate-500 shrink-0 tabular-nums" x-text="formatDate(mail.date)"></span>
                     </div>
                     <div class="text-sm truncate mb-1"
-                         :class="mail.unread ? 'font-semibold text-emerald-400' : 'text-slate-500'"
+                         :class="mail.unread ? 'font-semibold text-primary-300' : 'text-slate-400'"
                          x-text="mail.subject"></div>
-                    <div class="text-xs text-slate-600 truncate" x-text="mail.preview"></div>
-                </div>
+                    <div class="text-xs text-slate-500 truncate" x-text="mail.preview"></div>
+                </button>
             </template>
             <template x-if="filteredMails.length === 0">
-                <div class="p-8 text-center text-slate-500">
-                    <svg class="h-10 w-10 mx-auto mb-3 opacity-30" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
-                    </svg>
-                    <p class="text-sm">No mails in <span x-text="currentFolder"></span></p>
+                <div class="empty-state">
+                    <div class="empty-state-icon">
+                        <svg class="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
+                        </svg>
+                    </div>
+                    <p class="text-sm text-slate-500"><span class="capitalize" x-text="currentFolder"></span> klasöründe mail yok</p>
                 </div>
             </template>
         </div>
-    </div>
+    </section>
 
     <!-- Column 3: Detail / Compose -->
-    <div class="flex-1 bg-slate-950 flex-col relative min-w-0"
-         :class="mobileView === 'detail' ? 'flex' : 'hidden md:flex'">
+    <section class="flex-1 bg-slate-950 flex-col min-w-0"
+             :class="mobileView === 'detail' ? 'flex' : 'hidden md:flex'">
 
-        <!-- Mobile Back -->
-        <div class="md:hidden flex items-center gap-2 p-3 border-b border-slate-800">
-            <button @click="mobileView = 'list'; selectedMail = null" class="p-2 rounded-lg text-slate-400 hover:bg-slate-800">
-                <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+        <!-- Mobile back header -->
+        <div class="md:hidden h-14 flex items-center gap-2 px-3 border-b border-slate-800 shrink-0">
+            <button @click="mobileView = 'list'; selectedMail = null; closeCompose()" aria-label="Listeye dön" class="icon-btn">
+                <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
+                </svg>
             </button>
-            <span class="font-medium text-white truncate" x-text="selectedMail ? selectedMail.subject : ''"></span>
+            <span class="font-medium text-white truncate flex-1" x-text="showCompose ? (composeType === 'reply' ? 'Yanıtla' : composeType === 'forward' ? 'Yönlendir' : 'Yeni Mesaj') : (selectedMail ? selectedMail.subject : '')"></span>
         </div>
 
-        <!-- Empty State -->
+        <!-- Empty state -->
         <template x-if="!showCompose && !selectedMail">
-            <div class="absolute inset-0 flex flex-col items-center justify-center text-slate-600">
+            <div class="flex-1 flex flex-col items-center justify-center p-8 text-center">
                 <div class="w-20 h-20 bg-slate-900 rounded-full flex items-center justify-center mb-4 border border-slate-800">
                     <svg class="w-10 h-10 text-slate-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
                     </svg>
                 </div>
-                <p class="text-base font-medium text-slate-500">Select an item to read</p>
+                <p class="text-base font-medium text-slate-500">Görüntülemek için bir mail seçin</p>
+                <button @click="showCompose = true; mobileView = 'detail'" class="btn btn-primary mt-4">
+                    Yeni Mesaj Oluştur
+                </button>
             </div>
         </template>
 
-        <!-- Mail Reading Pane -->
+        <!-- Reading pane -->
         <template x-if="!showCompose && selectedMail">
             <div class="flex flex-col h-full">
-                <div class="p-6 border-b border-slate-800 bg-slate-900/50">
-                    <div class="flex items-start justify-between mb-4">
-                        <h2 class="text-xl font-bold text-white leading-tight pr-4" x-text="selectedMail.subject"></h2>
-                        <div class="flex items-center gap-2 shrink-0">
-                            <button @click="toggleStar(selectedMail)"
-                                    class="p-2 bg-slate-800 hover:bg-slate-700 rounded-lg transition-all border border-slate-700"
-                                    :class="selectedMail.starred ? 'text-amber-400' : 'text-slate-400'">
+                <div class="p-4 sm:p-6 border-b border-slate-800 bg-slate-900/30 shrink-0">
+                    <div class="flex items-start justify-between gap-3 mb-4">
+                        <h2 class="text-lg sm:text-xl font-bold text-white leading-tight min-w-0 break-words" x-text="selectedMail.subject"></h2>
+                        <div class="flex items-center gap-1 shrink-0">
+                            <button @click="toggleStar(selectedMail)" aria-label="Yıldızla"
+                                    class="icon-btn"
+                                    :class="selectedMail.starred ? 'text-amber-400' : ''">
                                 <svg class="h-4 w-4" fill="currentColor" viewBox="0 0 24 24">
                                     <path d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z"/>
                                 </svg>
                             </button>
-                            <button @click="deleteMail(selectedMail)"
-                                    class="p-2 bg-slate-800 hover:bg-red-500/20 text-slate-400 hover:text-red-400 rounded-lg transition-all border border-slate-700">
+                            <button @click="deleteMail(selectedMail)" aria-label="Sil"
+                                    class="icon-btn hover:text-danger-400 hover:bg-danger-500/10">
                                 <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
                                 </svg>
@@ -203,61 +231,65 @@
                         </div>
                     </div>
                     <div class="flex items-center gap-3 p-3 bg-slate-900 rounded-xl border border-slate-800">
-                        <div class="w-10 h-10 bg-emerald-500/20 border border-emerald-500/30 rounded-lg flex items-center justify-center text-emerald-400 font-bold"
+                        <div class="w-10 h-10 bg-gradient-to-br from-primary-500 to-primary-700 rounded-xl flex items-center justify-center text-white font-bold shrink-0"
                              x-text="selectedMail.from.charAt(0).toUpperCase()"></div>
                         <div class="flex-1 min-w-0">
-                            <div class="font-semibold text-white text-sm" x-text="selectedMail.from"></div>
-                            <div class="text-xs text-slate-500">to me ({{ email }})</div>
+                            <div class="font-semibold text-white text-sm truncate" x-text="selectedMail.from"></div>
+                            <div class="text-xs text-slate-500 truncate">→ {{ email }}</div>
                         </div>
-                        <div class="text-xs text-slate-400 bg-slate-800 px-2 py-1 rounded border border-slate-700" x-text="formatDateTime(selectedMail.date)"></div>
+                        <div class="text-[11px] text-slate-400 chip shrink-0 hidden sm:flex" x-text="formatDateTime(selectedMail.date)"></div>
                     </div>
                 </div>
-                <div class="flex-1 p-6 overflow-y-auto">
-                    <div class="text-slate-300 leading-relaxed text-sm" x-html="formatBody(selectedMail.body)"></div>
+                <div class="flex-1 p-4 sm:p-6 overflow-y-auto custom-scrollbar">
+                    <div class="text-slate-300 leading-relaxed text-sm sm:text-[15px] max-w-prose" x-html="formatBody(selectedMail.body)"></div>
                 </div>
-                <div class="p-4 border-t border-slate-800 bg-slate-900/50 flex items-center gap-3">
-                    <button @click="replyTo(selectedMail)"
-                            class="px-5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg font-medium text-sm flex items-center gap-2 transition-all">
+                <div class="p-3 sm:p-4 border-t border-slate-800 bg-slate-900/30 flex items-center gap-2 shrink-0">
+                    <button @click="replyTo(selectedMail)" class="btn btn-primary flex-1 sm:flex-none">
                         <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6"/>
                         </svg>
-                        Reply
+                        Yanıtla
                     </button>
-                    <button @click="forwardMail(selectedMail)"
-                            class="px-5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg font-medium text-sm flex items-center gap-2 border border-slate-700 transition-all">
+                    <button @click="forwardMail(selectedMail)" class="btn btn-secondary flex-1 sm:flex-none">
                         <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 5l7 7-7 7M5 5l7 7-7 7"/>
                         </svg>
-                        Forward
+                        Yönlendir
                     </button>
                 </div>
             </div>
         </template>
 
-        <!-- Compose Pane -->
+        <!-- Compose pane -->
         <template x-if="showCompose">
             <div class="flex flex-col h-full">
-                <div class="p-5 border-b border-slate-800 flex items-center justify-between">
+                <div class="hidden md:flex p-4 border-b border-slate-800 items-center justify-between shrink-0">
                     <h2 class="text-lg font-bold text-white"
-                        x-text="composeType === 'reply' ? 'Reply' : composeType === 'forward' ? 'Forward' : 'New Message'"></h2>
-                    <button @click="closeCompose(); mobileView = 'list'"
-                            class="p-2 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-white transition-colors">
-                        <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                        x-text="composeType === 'reply' ? 'Yanıtla' : composeType === 'forward' ? 'Yönlendir' : 'Yeni Mesaj'"></h2>
+                    <button @click="closeCompose(); mobileView = 'list'" aria-label="Kapat" class="icon-btn">
+                        <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                        </svg>
                     </button>
                 </div>
-                <div class="p-5 space-y-4 flex-1 overflow-y-auto">
-                    <input type="email" x-model="composeTo" placeholder="To: recipient@example.com"
-                           class="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-3 text-white text-sm placeholder-slate-500 focus:outline-none focus:border-emerald-500 transition-all">
-                    <input type="text" x-model="composeSubject" placeholder="Subject"
-                           class="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-3 text-white text-sm placeholder-slate-500 focus:outline-none focus:border-emerald-500 transition-all">
-                    <textarea x-model="composeBody" placeholder="Write your message here..."
-                              class="w-full h-64 bg-slate-800 border border-slate-700 rounded-xl px-4 py-3 text-slate-300 text-sm placeholder-slate-500 focus:outline-none focus:border-emerald-500 transition-all resize-none"></textarea>
+                <div class="p-4 sm:p-5 space-y-3 flex-1 overflow-y-auto custom-scrollbar">
+                    <div>
+                        <label class="label">Kime</label>
+                        <input type="email" x-model="composeTo" placeholder="alici@example.com" class="input" autocomplete="email">
+                    </div>
+                    <div>
+                        <label class="label">Konu</label>
+                        <input type="text" x-model="composeSubject" placeholder="Mesajınızın konusu" class="input">
+                    </div>
+                    <div>
+                        <label class="label">Mesaj</label>
+                        <textarea x-model="composeBody" placeholder="Mesajınızı buraya yazın..."
+                                  class="input min-h-[200px] sm:min-h-[300px] resize-none" rows="10"></textarea>
+                    </div>
                 </div>
-                <div class="p-5 border-t border-slate-800 flex items-center justify-between bg-slate-900/50">
-                    <button @click="saveDraft()"
-                            class="px-5 py-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg text-sm transition-all">Save Draft</button>
-                    <button @click="sendMail()" :disabled="sendingMail"
-                            class="px-6 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white rounded-lg font-medium text-sm flex items-center gap-2 transition-all">
+                <div class="p-3 sm:p-4 border-t border-slate-800 flex items-center justify-between gap-2 bg-slate-900/30 shrink-0">
+                    <button @click="saveDraft()" class="btn btn-ghost btn-sm">Taslağı Kaydet</button>
+                    <button @click="sendMail()" :disabled="sendingMail" class="btn btn-primary">
                         <template x-if="sendingMail">
                             <svg class="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
                                 <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
@@ -267,12 +299,12 @@
                         <svg x-show="!sendingMail" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/>
                         </svg>
-                        <span x-text="sendingMail ? 'Sending...' : 'Send'"></span>
+                        <span x-text="sendingMail ? 'Gönderiliyor...' : 'Gönder'"></span>
                     </button>
                 </div>
             </div>
         </template>
-    </div>
+    </section>
 
 </div>
 {% endblock %}

@@ -1,6 +1,8 @@
 # /home/murat/Jir/jir-mail/core/api.py
 
-from ninja import Router, Schema
+from typing import Optional
+
+from ninja import Query, Router, Schema
 from django.conf import settings
 from django.db import connection
 from .models import MailAccount, MailDomain, MailRole
@@ -362,25 +364,23 @@ def create_mail_account(request, data: MailAccountSchema):
         return {"status": "error", "message": "E-posta adresi kullanımda veya bir hata oluştu."}
 
 
-@router.post("/generate-dns-records/{domain}", summary="DNS Kayıtları Oluştur")
-def generate_dns_records(request, domain: str, key: str = None):
+@router.post("/generate-dns-records/{domain}", summary="DNS Kayıtları Oluştur / Yenile")
+def generate_dns_records(
+    request,
+    domain: str,
+    key: str = None,
+    regenerate: bool = Query(False),
+):
     if not check_auth(request, key):
         return {"status": "error", "message": "Yetkisiz erişim!"}
 
     try:
         domain_obj = MailDomain.objects.get(name=domain)
 
-        if not domain_obj.dkim_private_key:
-            keys = domain_obj.generate_dkim_keys()
-        else:
-            keys = {
-                'dkim_selector': domain_obj.dkim_record.split(' ')[0],
-                'spf_record': domain_obj.spf_record,
-                'dkim_record': domain_obj.dkim_record,
-                'dmarc_record': domain_obj.dmarc_record
-            }
+        if regenerate or not domain_obj.dkim_private_key:
+            domain_obj.generate_dkim_keys()
 
-        mail_server_hostname = getattr(settings, 'MAIL_SERVER_HOSTNAME', 'mail.jircode.com')
+        mail_server_hostname = getattr(settings, 'MAIL_SERVER_HOSTNAME', None) or f'mail.{domain_obj.name}'
 
         return {
             "status": "success",
@@ -418,6 +418,7 @@ def list_domains(request, key: str = None):
                 "spf_record": d.spf_record,
                 "dkim_record": d.dkim_record,
                 "dmarc_record": d.dmarc_record,
+                "dns_provider": d.dns_provider,
                 "created_at": d.created_at.isoformat()
             } for d in domains
         ]
@@ -452,6 +453,12 @@ def verify_domain(request, domain: str, key: str = None):
 class AddDomainSchema(Schema):
     name: str
     is_active: bool = True
+
+
+class UpdateDomainSchema(Schema):
+    """Domain güncelleme (durum askıya alma, DNS sağlayıcı)."""
+    is_active: Optional[bool] = None
+    dns_provider: Optional[str] = None
 
 
 class DomainDetailsSchema(Schema):
@@ -497,6 +504,40 @@ def add_domain(request, data: AddDomainSchema, key: str = None):
         }
     except Exception as e:
         return {"status": "error", "message": f"Hata: {str(e)}"}
+
+
+@router.patch("/update-domain/{domain}", summary="Domain Güncelle")
+def update_domain_settings(request, domain: str, data: UpdateDomainSchema, key: str = None):
+    if not check_auth(request, key):
+        return {"status": "error", "message": "Yetkisiz erişim!"}
+
+    try:
+        domain_obj = MailDomain.objects.get(name=domain)
+        allowed_dns = {c[0] for c in MailDomain.DNS_PROVIDER_CHOICES}
+
+        if data.is_active is not None:
+            domain_obj.is_active = data.is_active
+        if data.dns_provider is not None:
+            if data.dns_provider not in allowed_dns:
+                return {"status": "error", "message": "Geçersiz DNS sağlayıcı"}
+            domain_obj.dns_provider = data.dns_provider
+
+        domain_obj.save()
+        return {
+            "status": "success",
+            "message": "Domain güncellendi",
+            "domain": {
+                "id": domain_obj.id,
+                "name": domain_obj.name,
+                "is_active": domain_obj.is_active,
+                "dns_provider": domain_obj.dns_provider,
+                "verification_status": domain_obj.verification_status,
+            },
+        }
+    except MailDomain.DoesNotExist:
+        return {"status": "error", "message": "Domain bulunamadı."}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
 
 
 @router.get("/domain-details/{domain}", summary="Domain Detayları")

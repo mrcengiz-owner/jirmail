@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% load static %}
 
-{% block title %}Backups - Jîr-Mail{% endblock %}
+{% block title %}Yedekler — JîrCode Mail{% endblock %}
 
 {% block extra_head %}
 <script>
@@ -10,56 +10,63 @@
 {% endblock %}
 
 {% block content %}
-<div class="p-6" x-data="backupApp()" x-init="init()">
-    <div class="flex items-center justify-between mb-8">
-        <div>
-            <h2 class="text-3xl font-bold tracking-tight text-white">Backups</h2>
-            <p class="text-slate-500 mt-1">Manage system backups</p>
-        </div>
-        <button @click="createBackup()"
-                class="btn btn-primary flex items-center gap-2">
-            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"/>
-            </svg>
-            Create Backup
-        </button>
-    </div>
+<div class="page" x-data="backupApp()" x-init="init()">
 
-    <!-- Backups List -->
-    <div class="space-y-4">
+    <header class="page-header">
+        <div class="min-w-0">
+            <h1 class="section-title">Yedekler</h1>
+            <p class="section-subtitle">Veritabanı ve mail arşivlerini yönetin</p>
+        </div>
+        <button @click="createBackup()" class="btn btn-primary">
+            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+            </svg>
+            <span>Yedek Al</span>
+        </button>
+    </header>
+
+    <div class="space-y-3" x-show="backups.length > 0">
         <template x-for="backup in backups" :key="backup.name">
-            <div class="bento-card flex items-center justify-between">
-                <div class="flex items-center gap-4">
-                    <div class="w-12 h-12 rounded-lg bg-slate-800 flex items-center justify-center">
-                        <svg class="w-6 h-6 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <div class="bento-card flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div class="flex items-center gap-3 min-w-0">
+                    <div class="w-11 h-11 rounded-xl bg-success-500/10 border border-success-500/20 flex items-center justify-center shrink-0">
+                        <svg class="w-5 h-5 text-success-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4"/>
                         </svg>
                     </div>
-                    <div>
-                        <h4 class="text-white font-semibold" x-text="backup.name"></h4>
-                        <p class="text-sm text-slate-500" x-text="backup.date"></p>
+                    <div class="min-w-0">
+                        <h4 class="text-white font-semibold truncate" x-text="backup.name"></h4>
+                        <p class="text-xs text-slate-500" x-text="backup.date"></p>
                     </div>
                 </div>
-                <div class="flex items-center gap-2">
-                    <button class="px-3 py-2 rounded-lg bg-slate-800 text-slate-400 hover:text-white hover:bg-slate-700 text-sm font-medium transition-colors">
-                        Download
+                <div class="flex items-center gap-2 shrink-0">
+                    <button class="btn btn-sm btn-secondary flex-1 sm:flex-none">
+                        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
+                        </svg>
+                        İndir
                     </button>
-                    <button class="px-3 py-2 rounded-lg bg-danger-500/10 text-danger-400 hover:bg-danger-500/20 border border-danger-500/20 text-sm font-medium transition-colors">
-                        Delete
+                    <button class="btn btn-sm bg-danger-500/10 text-danger-400 hover:bg-danger-500/20 border border-danger-500/20 flex-1 sm:flex-none">
+                        Sil
                     </button>
                 </div>
             </div>
         </template>
     </div>
 
-    <!-- Empty State -->
-    <div x-show="backups.length === 0" class="text-center py-12">
-        <svg class="w-16 h-16 text-slate-700 mx-auto mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4"/>
-        </svg>
-        <p class="text-slate-500 mb-4">No backups yet</p>
+    <div x-show="backups.length === 0" x-cloak class="empty-state bento-card">
+        <div class="empty-state-icon">
+            <svg class="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4"/>
+            </svg>
+        </div>
+        <h3 class="empty-state-title">Henüz yedek yok</h3>
+        <p class="empty-state-body">Veri kaybına karşı korunmak için ilk yedeğinizi oluşturun. Otomatik haftalık yedekler de planlanabilir.</p>
         <button @click="createBackup()" class="btn btn-primary">
-            Create First Backup
+            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+            </svg>
+            İlk Yedeği Oluştur
         </button>
     </div>
 </div>

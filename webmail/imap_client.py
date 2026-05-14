@@ -1,0 +1,237 @@
+"""IMAPClient wrapper'ı.
+
+Dovecot IMAP sunucusuna kullanıcı adıyla bağlanır. Sistem, kullanıcının
+düz şifresini saklamadığı için (`password_hash` bcrypt) login sırasında
+session'a şifreyi cache'leyip IMAP bağlantısı için kullanır.
+"""
+from __future__ import annotations
+
+import email
+import logging
+import re
+from contextlib import contextmanager
+from datetime import datetime
+from email.header import decode_header, make_header
+from email.utils import parseaddr, parsedate_to_datetime
+from typing import Iterator
+
+from django.conf import settings
+
+
+logger = logging.getLogger(__name__)
+
+
+def _decode_header(value: str) -> str:
+    if not value:
+        return ''
+    try:
+        return str(make_header(decode_header(value)))
+    except Exception:
+        return value
+
+
+def _format_addresses(value: str) -> tuple[str, str]:
+    name, addr = parseaddr(value or '')
+    return _decode_header(name), addr
+
+
+@contextmanager
+def imap_connection(account, password: str) -> Iterator:
+    """Verilen MailAccount için IMAP bağlantısı açar (context manager).
+
+    Bağlantı her zaman SSL üzerinden (port 993). Bağlantı sonunda otomatik
+    kapanır.
+    """
+    from imapclient import IMAPClient
+
+    host = getattr(settings, 'IMAP_HOST', 'jir_dovecot')
+    port = int(getattr(settings, 'IMAP_PORT', 993))
+    ssl_required = getattr(settings, 'IMAP_SSL', True)
+
+    client = IMAPClient(host=host, port=port, ssl=ssl_required, use_uid=True, timeout=30)
+    try:
+        client.login(account.email, password)
+        yield client
+    finally:
+        try:
+            client.logout()
+        except Exception:
+            pass
+
+
+def _parse_envelope_to_meta(envelope, raw_size: int, flags: list) -> dict:
+    """IMAP envelope'unu DB cache modeli için sözlüğe çevirir."""
+    subject = ''
+    if envelope.subject:
+        try:
+            subject = _decode_header(envelope.subject.decode('utf-8', 'replace'))
+        except Exception:
+            subject = str(envelope.subject)
+
+    from_name, from_addr = '', ''
+    if envelope.from_:
+        addr = envelope.from_[0]
+        from_addr = f'{addr.mailbox.decode()}@{addr.host.decode()}' if addr.mailbox and addr.host else ''
+        if addr.name:
+            try:
+                from_name = _decode_header(addr.name.decode('utf-8', 'replace'))
+            except Exception:
+                from_name = str(addr.name)
+
+    to_parts = []
+    if envelope.to:
+        for a in envelope.to:
+            if a.mailbox and a.host:
+                to_parts.append(f'{a.mailbox.decode()}@{a.host.decode()}')
+
+    date_obj = None
+    try:
+        if envelope.date:
+            date_obj = envelope.date if isinstance(envelope.date, datetime) else parsedate_to_datetime(envelope.date)
+    except Exception:
+        date_obj = None
+
+    flag_set = set()
+    for f in (flags or []):
+        try:
+            flag_set.add(f.decode() if isinstance(f, bytes) else str(f))
+        except Exception:
+            pass
+
+    return {
+        'subject': subject[:998],
+        'from_addr': from_addr[:500],
+        'from_name': from_name[:255],
+        'to_addr': ', '.join(to_parts)[:2000],
+        'date': date_obj,
+        'flags': list(flag_set),
+        'is_seen': '\\Seen' in flag_set,
+        'is_flagged': '\\Flagged' in flag_set,
+        'is_answered': '\\Answered' in flag_set,
+        'is_draft': '\\Draft' in flag_set,
+        'raw_size': raw_size or 0,
+    }
+
+
+def sync_folder_metadata(account, password: str, folder_name: str = 'INBOX', *, limit: int = 200) -> dict:
+    """Folder içindeki son N mesajın metadata'sını DB cache'e alır."""
+    from .models import MailFolder, MailMessageCache
+
+    with imap_connection(account, password) as client:
+        select_info = client.select_folder(folder_name)
+        uidvalidity = select_info.get(b'UIDVALIDITY') or 0
+        total = select_info.get(b'EXISTS') or 0
+
+        folder_obj, _ = MailFolder.objects.update_or_create(
+            account=account, name=folder_name,
+            defaults={
+                'display_name': folder_name,
+                'uidvalidity': uidvalidity,
+                'total': total,
+                'last_synced': datetime.utcnow(),
+            },
+        )
+
+        uids = client.search(['ALL'])
+        if not uids:
+            return {'folder': folder_name, 'fetched': 0}
+
+        recent_uids = uids[-limit:]
+        fetch_data = client.fetch(recent_uids, ['ENVELOPE', 'FLAGS', 'RFC822.SIZE', 'BODYSTRUCTURE'])
+
+        fetched = 0
+        unread_count = 0
+        for uid, data in fetch_data.items():
+            envelope = data.get(b'ENVELOPE')
+            flags = data.get(b'FLAGS', [])
+            size = data.get(b'RFC822.SIZE', 0)
+            if not envelope:
+                continue
+
+            meta = _parse_envelope_to_meta(envelope, size, list(flags))
+            if not meta['is_seen']:
+                unread_count += 1
+
+            MailMessageCache.objects.update_or_create(
+                folder=folder_obj, uid=uid,
+                defaults=meta,
+            )
+            fetched += 1
+
+        folder_obj.unread = unread_count
+        folder_obj.save(update_fields=['unread'])
+
+    return {'folder': folder_name, 'fetched': fetched, 'unread': unread_count}
+
+
+def fetch_message_body(account, password: str, folder_name: str, uid: int) -> dict:
+    """Bir mesajın HTML ve plain body'sini IMAP'tan getirir."""
+    with imap_connection(account, password) as client:
+        client.select_folder(folder_name)
+        data = client.fetch([uid], ['RFC822'])
+        raw = data.get(uid, {}).get(b'RFC822')
+        if not raw:
+            return {'html': '', 'plain': '', 'attachments': []}
+
+        msg = email.message_from_bytes(raw)
+
+        html_body = ''
+        plain_body = ''
+        attachments: list[dict] = []
+
+        for part in msg.walk():
+            ctype = part.get_content_type()
+            disposition = (part.get('Content-Disposition') or '').lower()
+
+            if 'attachment' in disposition or part.get_filename():
+                filename = _decode_header(part.get_filename() or 'attachment')
+                payload = part.get_payload(decode=True) or b''
+                attachments.append({
+                    'filename': filename,
+                    'mime_type': ctype,
+                    'size': len(payload),
+                })
+                continue
+
+            if part.is_multipart():
+                continue
+
+            charset = part.get_content_charset() or 'utf-8'
+            try:
+                content = (part.get_payload(decode=True) or b'').decode(charset, errors='replace')
+            except Exception:
+                content = ''
+
+            if ctype == 'text/html' and not html_body:
+                html_body = content
+            elif ctype == 'text/plain' and not plain_body:
+                plain_body = content
+
+        return {
+            'html': html_body,
+            'plain': plain_body,
+            'attachments': attachments,
+        }
+
+
+def set_flag(account, password: str, folder_name: str, uid: int, flag: str, *, add: bool = True) -> None:
+    """\Seen, \Flagged gibi flag'leri ekle/kaldır."""
+    with imap_connection(account, password) as client:
+        client.select_folder(folder_name)
+        if add:
+            client.add_flags([uid], [flag])
+        else:
+            client.remove_flags([uid], [flag])
+
+
+def move_message(account, password: str, folder_name: str, uid: int, target_folder: str) -> None:
+    with imap_connection(account, password) as client:
+        client.select_folder(folder_name)
+        client.move([uid], target_folder)
+
+
+def delete_message(account, password: str, folder_name: str, uid: int) -> None:
+    with imap_connection(account, password) as client:
+        client.select_folder(folder_name)
+        client.delete_messages([uid])
+        client.expunge()

@@ -88,6 +88,19 @@ module.exports = {
           800: '#991b1b',
           900: '#7f1d1d',
         },
+        info: {
+          // Blue tabanlı
+          50:  '#eff6ff',
+          100: '#dbeafe',
+          200: '#bfdbfe',
+          300: '#93c5fd',
+          400: '#60a5fa',
+          500: '#3b82f6',
+          600: '#2563eb',
+          700: '#1d4ed8',
+          800: '#1e40af',
+          900: '#1e3a8a',
+        },
         neutral: {
           // Gray tabanlı
           50:  '#f9fafb',
@@ -101,13 +114,22 @@ module.exports = {
           800: '#1f2937',
           900: '#111827',
         },
+        // JîrCode brand renk paleti
+        brand: {
+          primary: '#10b981',
+          'primary-dark': '#0d9488',
+          'primary-light': '#34d399',
+          accent: '#f59e0b',
+          'accent-light': '#fbbf24',
+          surface: '#0f172a',
+          'surface-2': '#1e293b',
+          border: '#334155',
+        },
       },
       animation: {
         'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
       },
     },
   },
-  plugins: [
-    require('flowbite/plugin'),
-  ],
+  plugins: [],
 }
