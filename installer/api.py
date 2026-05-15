@@ -21,6 +21,7 @@ from pydantic import Field
 
 from .models import InstallationRun, InstallationStep
 from .orchestrator import _resolve_profile_and_client, run_installation
+from .port_check import scan_mail_stack_ports
 from .profiles import (
     PROFILE_DOCKER_STACK,
     PROFILE_PLATFORM_MANUAL,
@@ -70,6 +71,10 @@ class StartInstallSchema(Schema):
         default='smart',
         description='docker_stack için: smart | force_recreate',
     )
+    stack_skip_busy_host_ports: bool = Field(
+        default=True,
+        description='docker_stack: 25/587/993/143 hostta doluysa publish etme (kurulum devam eder)',
+    )
 
 
 class TestDbSchema(Schema):
@@ -106,6 +111,26 @@ def installer_bootstrap(request: HttpRequest):
     else:
         out['database_host_hint'] = ''
         out['database_name_hint'] = ''
+    if cap.get('docker_available'):
+        out['host_mail_ports'] = scan_mail_stack_ports()
+    else:
+        out['host_mail_ports'] = None
+    try:
+        from management.deploy_readiness import collect_deploy_readiness
+
+        dr = collect_deploy_readiness()
+        out['deploy_readiness'] = {
+            'status': dr.get('status'),
+            'deployment': dr.get('deployment'),
+            'summary_lines': dr.get('summary_lines', []),
+            'checks': [
+                {k: c[k] for k in ('id', 'title', 'status', 'message', 'hint')}
+                for c in (dr.get('checks') or [])
+                if c.get('status') != 'ok'
+            ],
+        }
+    except Exception as exc:
+        out['deploy_readiness'] = {'status': 'warning', 'message': str(exc)}
     return out
 
 
@@ -192,6 +217,9 @@ def start_install(request: HttpRequest, data: StartInstallSchema):
         'install_profile': canonical_profile,
         'db_manual': db_manual_dict,
         'stack_service_policy': stack_policy if canonical_profile == PROFILE_DOCKER_STACK else 'smart',
+        'stack_skip_busy_host_ports': bool(data.stack_skip_busy_host_ports)
+        if canonical_profile == PROFILE_DOCKER_STACK
+        else True,
     }
 
     run = InstallationRun.objects.create(config_snapshot=config, status='pending')

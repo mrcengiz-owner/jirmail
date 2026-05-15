@@ -34,6 +34,38 @@ def _resolve_service(docker_name: str, local_fallback: str) -> str:
 # Servis hostname'leri — Docker'da otomatik çözülür, lokalde env var veya fallback
 REDIS_HOST    = os.getenv('REDIS_HOST',    _resolve_service('redis',    '127.0.0.1'))
 POSTGRES_HOST = os.getenv('POSTGRES_HOST', _resolve_service('postgres', '127.0.0.1'))
+
+
+def _resolve_mail_service_host(service_key: str, docker_default: str) -> str:
+    """SMTP/IMAP: Docker ağında konteyner adı; host'ta `runserver` için localhost.
+
+    `jir_postfix` / `jir_dovecot` yalnızca Docker DNS'te çözülür; host'tan
+    bağlanırken [Errno -3] Temporary failure in name resolution oluşur.
+    """
+    env_primary = {'postfix': 'SMTP_HOST', 'dovecot': 'IMAP_HOST'}
+    env_local = {'postfix': 'POSTFIX_SMTP_HOST', 'dovecot': 'DOVECOT_IMAP_HOST'}
+
+    primary = os.getenv(env_primary.get(service_key, ''), '').strip()
+    if primary:
+        return primary
+
+    if not IN_DOCKER:
+        local = os.getenv(env_local.get(service_key, ''), '').strip()
+        if local:
+            return local
+        return '127.0.0.1'
+
+    try:
+        from management.docker_containers import merged_container_name
+
+        resolved = merged_container_name(service_key)
+        if resolved:
+            return resolved
+    except Exception:
+        pass
+    return docker_default
+
+
 # ──────────────────────────────────────────────────────────────────────────────
 
 ALLOWED_HOSTS = ['*']
@@ -286,10 +318,10 @@ BACKUP_DIR = get_jir_path('backup')
 CELERY_BROKER_URL = os.getenv('CELERY_BROKER_URL', f'redis://{REDIS_HOST}:6379/0')
 CELERY_RESULT_BACKEND = os.getenv('CELERY_RESULT_BACKEND', f'redis://{REDIS_HOST}:6379/0')
 
-IMAP_HOST = os.getenv('IMAP_HOST', 'jir_dovecot')
+IMAP_HOST = _resolve_mail_service_host('dovecot', 'jir_dovecot')
 IMAP_PORT = int(os.getenv('IMAP_PORT', '993'))
 IMAP_SSL = os.getenv('IMAP_SSL', 'true').lower() == 'true'
-SMTP_HOST = os.getenv('SMTP_HOST', 'jir_postfix')
+SMTP_HOST = _resolve_mail_service_host('postfix', 'jir_postfix')
 SMTP_PORT = int(os.getenv('SMTP_PORT', '587'))
 # Yerel compose: docker-compose.yml içinde DOCKER_HOST=tcp://docker-proxy:2375 verilir.
 # Coolify / tek konteyner: soket mount edildiğinde unix soketi kullanılır (docker-proxy yok).

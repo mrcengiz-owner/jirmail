@@ -17,6 +17,7 @@ from typing import Iterator
 
 from django.conf import settings
 
+from management.mail_service_endpoint import resolve_mail_endpoint
 
 logger = logging.getLogger(__name__)
 
@@ -44,8 +45,7 @@ def imap_connection(account, password: str) -> Iterator:
     """
     from imapclient import IMAPClient
 
-    host = getattr(settings, 'IMAP_HOST', 'jir_dovecot')
-    port = int(getattr(settings, 'IMAP_PORT', 993))
+    host, port = resolve_mail_endpoint('dovecot', int(getattr(settings, 'IMAP_PORT', 993)))
     ssl_required = getattr(settings, 'IMAP_SSL', True)
 
     client = IMAPClient(host=host, port=port, ssl=ssl_required, use_uid=True, timeout=30)

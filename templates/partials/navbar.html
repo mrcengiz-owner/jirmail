@@ -42,11 +42,12 @@
     <!-- Right actions -->
     <div class="flex items-center gap-1.5">
         <a href="{% url 'mail_panel' %}"
-           class="icon-btn hidden sm:inline-flex"
+           class="icon-btn hidden sm:inline-flex items-center gap-2 px-3 py-2"
            aria-label="Webmail">
-            <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
             </svg>
+            <span class="text-sm font-medium text-white">Webmail</span>
         </a>
 
         <button class="icon-btn" aria-label="Bildirimler">

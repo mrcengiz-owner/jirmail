@@ -29,6 +29,7 @@ from django.utils import timezone
 
 from .compose_builder import JIR_NETWORK, ServiceSpec, build_specs, order_specs
 from .models import InstallationRun, InstallationStep
+from .port_check import filter_publish_ports
 from .profiles import (
     PROFILE_DOCKER_STACK,
     PROFILE_PLATFORM_ENV,
@@ -109,8 +110,36 @@ def _stack_service_action(client, spec: ServiceSpec, policy: str) -> str:
     return 'start'
 
 
-def _create_container_from_spec(client, spec: ServiceSpec, recorder: StepRecorder) -> None:
+def _publish_ports_for_spec(spec: ServiceSpec, config: dict, recorder: StepRecorder) -> dict:
+    """Host'ta dolu portları atla veya hata ver (config: stack_skip_busy_host_ports)."""
+    if not spec.ports:
+        return {}
+    skip_busy = config.get('stack_skip_busy_host_ports', True)
+    if isinstance(skip_busy, str):
+        skip_busy = skip_busy.strip().lower() not in ('0', 'false', 'no', 'off')
+    filtered, skipped = filter_publish_ports(spec.ports, skip_busy=bool(skip_busy))
+    for p in skipped:
+        recorder.log(
+            f'UYARI: Host port {p} kullanımda — {spec.name} için dışarı publish edilmedi. '
+            f'(Docker ağı içinden erişim devam eder; internetten gelen SMTP için portu boşaltın.)'
+        )
+    if spec.ports and not filtered and skipped:
+        recorder.log(
+            f'{spec.name}: Tüm istenen host portları dolu; konteyner yalnızca {spec.network} ağında çalışacak.'
+        )
+    return filtered
+
+
+def _create_container_from_spec(
+    client,
+    spec: ServiceSpec,
+    recorder: StepRecorder,
+    *,
+    config: dict | None = None,
+) -> None:
     """Yeni konteyner oluştur ve başlat."""
+    cfg = config or {}
+    publish_ports = _publish_ports_for_spec(spec, cfg, recorder)
     container_kwargs = {
         'image': spec.image,
         'name': spec.name,
@@ -119,7 +148,7 @@ def _create_container_from_spec(client, spec: ServiceSpec, recorder: StepRecorde
         'network': spec.network,
         'environment': spec.environment,
         'volumes': spec.volumes,
-        'ports': spec.ports,
+        'ports': publish_ports,
     }
     if spec.command:
         container_kwargs['command'] = spec.command
@@ -128,11 +157,29 @@ def _create_container_from_spec(client, spec: ServiceSpec, recorder: StepRecorde
     if spec.healthcheck:
         container_kwargs['healthcheck'] = spec.healthcheck
 
-    container = client.containers.run(**container_kwargs)
+    try:
+        container = client.containers.run(**container_kwargs)
+    except Exception as exc:
+        err = str(exc).lower()
+        if 'address already in use' in err or 'failed to bind host port' in err:
+            raise RuntimeError(
+                f'{spec.name} başlatılamadı: host portu dolu ({exc}). '
+                'Sistemdeki postfix/sendmail servisini durdurun: '
+                '`sudo systemctl stop postfix` veya `sudo ss -tlnp | grep :25` ile süreci bulun. '
+                'Kurulum "dolu portları atla" ile yeniden denenebilir.'
+            ) from exc
+        raise
     recorder.log(f'Konteyner oluşturuldu: {spec.name} ({container.short_id}).')
 
 
-def _apply_stack_service_step(client, spec: ServiceSpec, policy: str, recorder: StepRecorder) -> str:
+def _apply_stack_service_step(
+    client,
+    spec: ServiceSpec,
+    policy: str,
+    recorder: StepRecorder,
+    *,
+    config: dict | None = None,
+) -> str:
     """Politikaya göre skip | start | recreate uygula."""
     recorder.start()
     try:
@@ -140,11 +187,23 @@ def _apply_stack_service_step(client, spec: ServiceSpec, policy: str, recorder: 
         recorder.log(f'Politika={policy} → eylem={action}')
         if action == 'recreate':
             _remove_container_by_name(client, spec.name)
-            _create_container_from_spec(client, spec, recorder)
+            _create_container_from_spec(client, spec, recorder, config=config)
         elif action == 'start':
             c = client.containers.get(spec.name)
-            c.start()
-            recorder.log(f'{spec.name} başlatıldı.')
+            try:
+                c.start()
+            except Exception as start_exc:
+                err = str(start_exc).lower()
+                if 'address already in use' in err or 'failed to bind host port' in err:
+                    recorder.log(
+                        f'{spec.name} mevcut port eşlemesi host ile çakışıyor; konteyner yeniden oluşturuluyor…'
+                    )
+                    _remove_container_by_name(client, spec.name)
+                    _create_container_from_spec(client, spec, recorder, config=config)
+                else:
+                    raise
+            else:
+                recorder.log(f'{spec.name} başlatıldı.')
         else:
             recorder.log(f'{spec.name} uyumlu ve çalışıyor — değiştirilmedi.')
         recorder.finish(success=True)
@@ -726,6 +785,7 @@ def run_installation(run_id: str) -> None:
                         f'Servis: {spec.name}',
                         f'Politika {policy_raw} — konteyner oluştur / güncelle / atla',
                     ),
+                    config=config,
                 )
 
                 order += 1

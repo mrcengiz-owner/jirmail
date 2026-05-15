@@ -19,6 +19,20 @@ Jîr-Mail, **Postfix + Dovecot + PostgreSQL** mail yığınını tek tıkla kuru
 
 Adım adım kontrol listesi: [docs/coolify-kontrol-listesi.md](docs/coolify-kontrol-listesi.md).
 
+**Deploy kontrolü (otomatik):**
+
+- Her container start’ta: `python manage.py check_deploy` (`docker-entrypoint.sh`)
+- Panel: **Ayarlar → Deploy uyumluluk** veya `GET /api/management/deploy-readiness` (FULL oturum)
+- Kurulum sihirbazı adım 1: `GET /api/installer/bootstrap` → `deploy_readiness`
+
+```bash
+python manage.py check_deploy          # insan okunur özet
+python manage.py check_deploy --json   # CI / Coolify post-deploy script
+python manage.py check_deploy --fail-on-error
+```
+
+**Önemli:** Lokal **Docker tam kurulum** (`docker_stack`) Coolify tek uygulama konteynerinde çalışmaz. Sunucuda **Ortam veritabanı (DATABASE_URL)** + ayrı Postfix/Dovecot servisleri kullanın; `JIR_CONTAINER_POSTFIX` / `JIR_CONTAINER_DOVECOT` env ile gerçek konteyner adlarını verin.
+
 ## Teknoloji Yığını
 
 **Backend**

@@ -25,6 +25,9 @@ echo "=== Collecting static files ==="
 mkdir -p /app/staticfiles
 python manage.py collectstatic --noinput --clear
 
+echo "=== Deploy readiness (Coolify / PaaS) ==="
+python manage.py check_deploy || true
+
 # Kurulum durumunu kontrol et
 if [ -f "$INSTALLED_FLAG" ]; then
     echo "✓ System already installed (cached flag found)"

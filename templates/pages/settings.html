@@ -41,6 +41,24 @@
                 user: '',
                 password_configured: false,
             },
+            deployReport: null,
+            deployLoading: false,
+            async loadDeploy() {
+                this.deployLoading = true;
+                try {
+                    const res = await fetch('/api/management/deploy-readiness', { credentials: 'same-origin' });
+                    const data = await res.json();
+                    if (data.status === 'ok') {
+                        this.deployReport = data;
+                    } else {
+                        this.deployReport = { status: 'error', checks: [{ status: 'error', title: 'Rapor', message: data.message || 'Yüklenemedi' }] };
+                    }
+                } catch (e) {
+                    this.deployReport = { status: 'error', checks: [{ status: 'error', title: 'Rapor', message: e.message }] };
+                } finally {
+                    this.deployLoading = false;
+                }
+            },
             async load() {
                 this.loading = true;
                 this.error = '';
@@ -69,6 +87,7 @@
                     this.paths.dovecot_passdb_path = data.dovecot_passdb_path || '';
                     this.paths.backup_dir = data.backup_dir || '';
                     this.database_visible = Object.assign(this.database_visible, data.database_visible || {});
+                    await this.loadDeploy();
                 } catch (e) {
                     this.error = e.message || 'Ağ hatası';
                 } finally {
@@ -138,6 +157,46 @@
 
         <div x-show="error" class="rounded-xl border border-danger-500/30 bg-danger-500/10 px-4 py-3 text-sm text-danger-200" x-text="error"></div>
         <div x-show="message" class="rounded-xl border border-primary-500/30 bg-primary-500/10 px-4 py-3 text-sm text-primary-200" x-text="message"></div>
+
+        <!-- Deploy / Coolify uyumluluk -->
+        <section class="bento-card p-4 sm:p-5 border border-slate-800/80">
+            <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
+                <h2 class="text-sm font-semibold text-white">Deploy uyumluluk</h2>
+                <button type="button" class="btn btn-secondary btn-sm" @click="loadDeploy()" :disabled="deployLoading">Kontrol et</button>
+            </div>
+            <template x-if="deployLoading && !deployReport">
+                <p class="text-xs text-slate-500">Kontrol çalışıyor…</p>
+            </template>
+            <template x-if="deployReport">
+                <p class="text-xs mb-3"
+                   :class="deployReport.status === 'ok' ? 'text-success-400' : (deployReport.status === 'warning' ? 'text-amber-400' : 'text-danger-400')">
+                    Genel durum: <span class="font-semibold uppercase" x-text="deployReport.status"></span>
+                    <span x-show="deployReport.deployment" class="text-slate-500 normal-case">
+                        · platform <span x-text="deployReport.deployment.platform"></span>
+                        · önerilen profil <span x-text="deployReport.deployment.recommended_install_profile"></span>
+                    </span>
+                </p>
+                <ul class="space-y-2 mb-3" x-show="deployReport.summary_lines && deployReport.summary_lines.length">
+                    <template x-for="line in deployReport.summary_lines" :key="line">
+                        <li class="text-xs text-slate-400 flex gap-2"><span class="text-primary-500">•</span><span x-text="line"></span></li>
+                    </template>
+                </ul>
+                <div class="space-y-2 max-h-72 overflow-y-auto custom-scrollbar">
+                    <template x-for="chk in (deployReport.checks || [])" :key="chk.id">
+                        <div class="rounded-lg border px-3 py-2 text-xs"
+                             :class="chk.status === 'ok' ? 'border-slate-800 bg-slate-900/50' : (chk.status === 'warning' ? 'border-amber-500/30 bg-amber-500/5' : 'border-danger-500/30 bg-danger-500/5')">
+                            <p class="font-medium text-slate-200" x-text="chk.title"></p>
+                            <p class="text-slate-400 mt-0.5" x-text="chk.message"></p>
+                            <p x-show="chk.hint" class="text-slate-500 mt-1" x-text="chk.hint"></p>
+                        </div>
+                    </template>
+                </div>
+                <p class="text-[10px] text-slate-500 mt-3">
+                    Coolify kontrol listesi: <code class="text-primary-300">docs/coolify-kontrol-listesi.md</code>
+                    · CLI: <code class="text-primary-300">python manage.py check_deploy --json</code>
+                </p>
+            </template>
+        </section>
 
         <!-- Kurulum durumu -->
         <section class="bento-card p-4 sm:p-5 border border-slate-800/80">

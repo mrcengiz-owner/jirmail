@@ -106,6 +106,18 @@
                         </button>
                     </template>
                 </div>
+
+                <div x-show="bootstrap.deploy_readiness && bootstrap.deploy_readiness.checks && bootstrap.deploy_readiness.checks.length"
+                     class="mt-4 rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 space-y-2">
+                    <p class="text-sm font-medium text-amber-200">Deploy uyarıları (sunucu vs lokal)</p>
+                    <template x-for="chk in bootstrap.deploy_readiness.checks" :key="chk.id">
+                        <p class="text-xs text-amber-100/90">
+                            <span class="font-semibold uppercase" x-text="chk.status"></span>
+                            — <span x-text="chk.title"></span>: <span x-text="chk.message"></span>
+                        </p>
+                    </template>
+                    <p class="text-[11px] text-amber-200/70">Coolify’da genelde <strong>Ortam veritabanı (DATABASE_URL)</strong> seçin; Postfix/Dovecot ayrı servis olarak deploy edilir.</p>
+                </div>
             </div>
 
             <!-- 2: Domain -->
@@ -188,6 +200,25 @@
                             <span>
                                 <span class="text-sm text-white font-medium">Her serviste sıfırdan</span>
                                 <span class="block text-xs text-slate-400 mt-0.5">Her jir_* servisi için mevcut konteyner silinip yeniden kurulur (isimli volume verileri korunur).</span>
+                            </span>
+                        </label>
+                    </div>
+
+                    <div x-show="installProfile === 'docker_stack' && bootstrap.host_mail_ports && bootstrap.host_mail_ports.busy && bootstrap.host_mail_ports.busy.length"
+                         class="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 sm:p-4 text-xs text-amber-100/90 space-y-2">
+                        <p class="font-medium text-amber-200">Sunucuda dolu mail portları</p>
+                        <template x-for="p in bootstrap.host_mail_ports.busy" :key="p.port">
+                            <p x-text="p.label + ' (port ' + p.port + ') — başka bir servis dinliyor.'"></p>
+                        </template>
+                        <p class="text-amber-200/80">Boşaltmak için: <code class="text-amber-100">sudo systemctl stop postfix</code> veya <code class="text-amber-100">sudo ss -tlnp | grep :25</code></p>
+                    </div>
+
+                    <div x-show="installProfile === 'docker_stack'" class="bg-slate-900/70 rounded-xl p-3 sm:p-4 border border-slate-800">
+                        <label class="flex items-start gap-3 cursor-pointer">
+                            <input type="checkbox" x-model="stackSkipBusyHostPorts" class="mt-1 shrink-0 accent-primary-500">
+                            <span>
+                                <span class="text-sm text-white font-medium">Dolu host portlarını atla (önerilen)</span>
+                                <span class="block text-xs text-slate-400 mt-0.5">25 veya 587 meşgulse kurulum tamamlanır; o portlar dışarı publish edilmez. Webmail Docker ağı üzerinden çalışır.</span>
                             </span>
                         </label>
                     </div>
@@ -461,6 +492,7 @@ function setupWizard() {
         jirKey: '',
         postgresPassword: '',
         stackServicePolicy: 'smart',
+        stackSkipBusyHostPorts: true,
 
         bootstrap: {
             has_database_url: false,
@@ -683,6 +715,7 @@ function setupWizard() {
             };
             if (this.installProfile === 'docker_stack') {
                 payload.stack_service_policy = this.stackServicePolicy || 'smart';
+                payload.stack_skip_busy_host_ports = !!this.stackSkipBusyHostPorts;
             }
             if (this.installProfile === 'platform_manual') {
                 payload.db_manual = {

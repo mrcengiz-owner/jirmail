@@ -813,6 +813,20 @@ def docker_diagnostics(request):
     return out
 
 
+@router.get("/deploy-readiness", summary="Deploy / Coolify uyumluluk raporu (FULL)")
+def deploy_readiness_api(request):
+    """Deploy sonrası ortam kontrolü: profil uyumu, Docker, mail, env."""
+    if not request.session.get('is_logged_in'):
+        return {"status": "error", "message": "Oturum gerekli."}
+    if request.session.get('role') != 'FULL':
+        return {"status": "error", "message": "Bu işlem için yönetici (FULL) yetkisi gerekir."}
+
+    from .deploy_readiness import collect_deploy_readiness
+
+    report = collect_deploy_readiness()
+    return {"status": "ok", **report}
+
+
 @router.get("/system-settings", summary="Kurulum sonrası sistem ayarları (FULL)")
 def get_system_settings(request):
     if not request.session.get('is_logged_in'):

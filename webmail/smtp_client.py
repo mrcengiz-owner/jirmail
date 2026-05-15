@@ -5,11 +5,14 @@ Postfix'e bağlanır. SASL auth ile mail gönderir.
 """
 from __future__ import annotations
 
+import socket
 import smtplib
 from email.message import EmailMessage
 from email.utils import formataddr, make_msgid
 
 from django.conf import settings
+
+from management.mail_service_endpoint import resolve_mail_endpoint
 
 
 def send_mail(account, password: str, *, to: list[str] | str, subject: str, body_text: str,
@@ -19,8 +22,7 @@ def send_mail(account, password: str, *, to: list[str] | str, subject: str, body
 
     attachments: [{'filename': 'a.pdf', 'mime_type': 'application/pdf', 'content': bytes}]
     """
-    host = getattr(settings, 'SMTP_HOST', 'jir_postfix')
-    port = int(getattr(settings, 'SMTP_PORT', 587))
+    host, port = resolve_mail_endpoint('postfix', int(getattr(settings, 'SMTP_PORT', 587)))
 
     msg = EmailMessage()
     msg['From'] = formataddr((account.email.split('@')[0], account.email))
@@ -60,5 +62,29 @@ def send_mail(account, password: str, *, to: list[str] | str, subject: str, body
             smtp.login(account.email, password)
             smtp.send_message(msg, from_addr=account.email, to_addrs=recipients)
         return {'success': True, 'message_id': msg['Message-ID']}
+    except socket.gaierror as exc:
+        hint = (
+            f' SMTP hedefi çözülemedi ({host!r}). '
+        )
+        if not getattr(settings, 'IN_DOCKER', False):
+            hint += (
+                'Panel `runserver` ile host üzerinde çalışıyorsa .env dosyasına '
+                'SMTP_HOST=127.0.0.1 ekleyin; Postfix konteynerinde 587 hosta publish edilmiş olmalı. '
+                'Coolify’da panel konteyneri ile aynı Docker ağında çalıştırın veya gerçek postfix host adını yazın.'
+            )
+        return {'success': False, 'message': f'{exc}{hint}'}
+    except (ConnectionRefusedError, OSError) as exc:
+        if isinstance(exc, ConnectionRefusedError) or getattr(exc, 'errno', None) in (111, 61, 10061):
+            return {
+                'success': False,
+                'message': (
+                    f'{host}:{port} bağlantısı reddedildi. '
+                    f'Postfix konteyneri çalışıyor mu? (`docker ps | grep postfix`) '
+                    f'Host publish yoksa .env: SMTP_HOST=<köprü IP> veya kurulumda 587/25 portlarını boşaltıp '
+                    f'jir_postfix\'i yeniden oluşturun. Docker IP: '
+                    f'`docker inspect jir_postfix --format "{{{{json .NetworkSettings.Networks}}}}"`'
+                ),
+            }
+        raise
     except Exception as exc:
         return {'success': False, 'message': str(exc)}
