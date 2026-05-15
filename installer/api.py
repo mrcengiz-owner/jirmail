@@ -1,14 +1,13 @@
 """Installer için django-ninja router.
 
 Endpoint'ler:
-    GET  /api/installer/bootstrap      Ortam DATABASE_URL ipucu + önerilen profil
+    GET  /api/installer/bootstrap      Ortam yetenekleri + install_modes + önerilen profil
     POST /api/installer/test-db        PostgreSQL bağlantı testi (kurulum öncesi)
     POST /api/installer/start          Kurulum çalışmasını başlatır (run_id döner)
-    GET  /api/installer/status         Mevcut run'ın durumu (polling fallback)
-    GET  /api/installer/stream         SSE event stream (tarayıcıdan açılır)
-    GET  /api/installer/dns-records    Domain için önerilen DNS kayıtları
-    POST /api/installer/dns-apply      DNS kayıtlarını provider üzerinden uygula
-    POST /api/installer/tls-request    Let's Encrypt sertifikası iste
+    ...
+
+install_profile: canonical değerler docker_stack | platform_env | platform_manual
+veya alias (ör. coolify, dokploy, cpanel → aynı canonical yollara normalize edilir).
 """
 import os
 import secrets
@@ -22,6 +21,14 @@ from pydantic import Field
 
 from .models import InstallationRun, InstallationStep
 from .orchestrator import _resolve_profile_and_client, run_installation
+from .profiles import (
+    PROFILE_PLATFORM_MANUAL,
+    install_modes_for_ui,
+    normalize_install_profile,
+    probe_capabilities,
+    suggested_profile_from_capabilities,
+    validate_manual_db_connection,
+)
 from .sse import sse_response
 
 
@@ -48,7 +55,14 @@ class StartInstallSchema(Schema):
     mail_hostname: str = ''
     dns_provider: str = 'manual'
     dns_credentials: Dict[str, Any] = Field(default_factory=dict)
-    install_profile: str = 'docker_stack'
+    install_profile: str = Field(
+        default='docker_stack',
+        description=(
+            'Canonical: docker_stack | platform_env | platform_manual. '
+            'Alias örnekleri: coolify, dokploy, railway → platform_env; '
+            'cpanel, plesk, external_postgres → platform_manual; compose, docker → docker_stack.'
+        ),
+    )
     db_manual: Optional[DbManualSchema] = None
 
 
@@ -62,11 +76,15 @@ class TestDbSchema(Schema):
 
 @router.get('/bootstrap', summary='Kurulum sihirbazı ortam bilgisi')
 def installer_bootstrap(request: HttpRequest):
-    """DATABASE_URL var mı (maskeli ipucu) ve önerilen kurulum profili."""
+    """Docker / DATABASE_URL yetenekleri, önerilen profil ve UI mod listesi."""
+    cap = probe_capabilities()
     url = os.getenv('DATABASE_URL', '').strip()
     out: Dict[str, Any] = {
-        'has_database_url': bool(url),
-        'suggested_profile': 'platform_env' if url else 'docker_stack',
+        'has_database_url': cap['has_database_url'],
+        'docker_available': cap['docker_available'],
+        'managed_install_forced': cap.get('managed_install_forced', False),
+        'suggested_profile': suggested_profile_from_capabilities(cap),
+        'install_modes': install_modes_for_ui(cap),
     }
     if url:
         try:
@@ -79,6 +97,9 @@ def installer_bootstrap(request: HttpRequest):
         except Exception:
             out['database_host_hint'] = ''
             out['database_name_hint'] = ''
+    else:
+        out['database_host_hint'] = ''
+        out['database_name_hint'] = ''
     return out
 
 
@@ -124,8 +145,18 @@ def start_install(request: HttpRequest, data: StartInstallSchema):
         else:
             db_manual_dict = data.db_manual.dict(exclude_none=True)
 
+    try:
+        canonical_profile = normalize_install_profile(data.install_profile or 'docker_stack')
+    except ValueError as exc:
+        return {'status': 'error', 'message': str(exc)}
+
+    if canonical_profile == PROFILE_PLATFORM_MANUAL:
+        ok, msg = validate_manual_db_connection(db_manual_dict)
+        if not ok:
+            return {'status': 'error', 'message': f'PostgreSQL bağlantısı doğrulanamadı: {msg}'}
+
     pre_cfg = {
-        'install_profile': data.install_profile or 'docker_stack',
+        'install_profile': canonical_profile,
         'db_manual': db_manual_dict,
     }
     try:
@@ -148,7 +179,7 @@ def start_install(request: HttpRequest, data: StartInstallSchema):
         'mail_hostname': mail_hostname,
         'dns_provider': data.dns_provider,
         'dns_credentials': data.dns_credentials,
-        'install_profile': data.install_profile or 'docker_stack',
+        'install_profile': canonical_profile,
         'db_manual': db_manual_dict,
     }
 

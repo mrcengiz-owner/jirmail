@@ -28,6 +28,12 @@ from django.utils import timezone
 
 from .compose_builder import JIR_NETWORK, ServiceSpec, build_specs, order_specs
 from .models import InstallationRun, InstallationStep
+from .profiles import (
+    PROFILE_DOCKER_STACK,
+    PROFILE_PLATFORM_ENV,
+    PROFILE_PLATFORM_MANUAL,
+    normalize_install_profile,
+)
 from .sse import publish_event
 
 
@@ -81,14 +87,28 @@ def _get_docker_client():
     return client
 
 
-PROFILE_DOCKER_STACK = 'docker_stack'
-PROFILE_PLATFORM_ENV = 'platform_env'
-PROFILE_PLATFORM_MANUAL = 'platform_manual'
-
-
 def _resolve_profile_and_client(config: dict):
     """Sihirbaz install_profile + Docker client (yalnızca docker_stack için dolu)."""
-    p = (config.get('install_profile') or '').strip() or None
+    raw = config.get('install_profile')
+    raw_s = str(raw).strip() if raw is not None else ''
+
+    if not raw_s:
+        # Eski run kayıtları: profil yoksa ortamdan çıkar
+        c = _get_docker_client_optional()
+        if c is not None:
+            return PROFILE_DOCKER_STACK, c
+        if os.getenv('DATABASE_URL', '').strip():
+            return PROFILE_PLATFORM_ENV, None
+        raise RuntimeError(
+            'Kurulum profili yapılandırmada yok ve ortam hazır değil '
+            '(Docker API yok, DATABASE_URL yok). Sihirbazı yeniden başlatın.'
+        )
+
+    try:
+        p = normalize_install_profile(raw_s)
+    except ValueError as exc:
+        raise RuntimeError(str(exc)) from exc
+
     if p == PROFILE_DOCKER_STACK:
         c = _get_docker_client_optional()
         if c is None:
@@ -109,15 +129,8 @@ def _resolve_profile_and_client(config: dict):
         if not (dbm.get('host') and dbm.get('name') and str(dbm.get('user', '')).strip()):
             raise RuntimeError('Manuel veritabanı: sunucu, veritabanı adı ve kullanıcı zorunludur.')
         return PROFILE_PLATFORM_MANUAL, None
-    c = _get_docker_client_optional()
-    if c is not None:
-        return PROFILE_DOCKER_STACK, c
-    if os.getenv('DATABASE_URL', '').strip():
-        return PROFILE_PLATFORM_ENV, None
-    raise RuntimeError(
-        'Kurulum profili belirlenemedi: Docker yok ve DATABASE_URL tanımlı değil. '
-        'Sihirbazdan mod seçin veya ortam değişkenlerini ayarlayın.'
-    )
+
+    raise RuntimeError(f'Dahili hata: bilinmeyen profil {p!r}.')
 
 
 class StepRecorder:

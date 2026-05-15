@@ -82,27 +82,29 @@
             <!-- 1: Kurulum modu -->
             <div x-show="step === 1" x-transition.opacity>
                 <h2 class="text-lg sm:text-xl font-semibold text-white mb-1">Kurulum modu</h2>
-                <p class="text-slate-500 text-sm mb-5">Tam otomatik Docker stack mi, yoksa Coolify / harici veritabanı mı?</p>
+                <p class="text-slate-500 text-sm mb-5">Ortamınıza uygun yolu seçin; devre dışı seçenekler sunucuda gerekli erişim yoksa kilitlenir.</p>
 
                 <div class="space-y-3">
-                    <button type="button" @click="installProfile = 'docker_stack'; ensurePostgresSecret()"
-                            :class="installProfile === 'docker_stack' ? 'ring-2 ring-primary-500 border-primary-500/50 bg-primary-500/10' : 'border-slate-800 bg-slate-900/60 hover:border-slate-700'"
-                            class="w-full text-left rounded-xl border p-4 transition-all">
-                        <p class="font-semibold text-white">Docker ile tam kurulum</p>
-                        <p class="text-xs text-slate-400 mt-1">PostgreSQL, Redis, Postfix, Dovecot konteynerleri bu uygulama üzerinden ayağa kalkar (Docker API gerekir).</p>
-                    </button>
-                    <button type="button" @click="installProfile = 'platform_env'"
-                            :class="installProfile === 'platform_env' ? 'ring-2 ring-primary-500 border-primary-500/50 bg-primary-500/10' : 'border-slate-800 bg-slate-900/60 hover:border-slate-700'"
-                            class="w-full text-left rounded-xl border p-4 transition-all">
-                        <p class="font-semibold text-white">Ortamdaki veritabanı (otomatik)</p>
-                        <p class="text-xs text-slate-400 mt-1">Sunucuda tanımlı <code class="text-primary-400">DATABASE_URL</code> kullanılır (ör. Coolify PostgreSQL). Mail servisleri platformda ayrı kurulur.</p>
-                    </button>
-                    <button type="button" @click="installProfile = 'platform_manual'"
-                            :class="installProfile === 'platform_manual' ? 'ring-2 ring-primary-500 border-primary-500/50 bg-primary-500/10' : 'border-slate-800 bg-slate-900/60 hover:border-slate-700'"
-                            class="w-full text-left rounded-xl border p-4 transition-all">
-                        <p class="font-semibold text-white">Manuel PostgreSQL</p>
-                        <p class="text-xs text-slate-400 mt-1">Host, veritabanı adı, kullanıcı ve şifreyi siz girersiniz. Migrasyon bu bilgilerle çalışır; Coolify <code class="text-primary-400">DATABASE_URL</code> aynı hedefe işaret etmelidir.</p>
-                    </button>
+                    <template x-for="mode in installModesList()" :key="mode.id">
+                        <button type="button"
+                                @click="!mode.disabled && selectInstallMode(mode.id)"
+                                :disabled="mode.disabled"
+                                :class="mode.disabled
+                                    ? 'opacity-50 cursor-not-allowed border-slate-800/80 bg-slate-900/40'
+                                    : (installProfile === mode.id
+                                        ? 'ring-2 ring-primary-500 border-primary-500/50 bg-primary-500/10'
+                                        : 'border-slate-800 bg-slate-900/60 hover:border-slate-700 cursor-pointer')"
+                                class="w-full text-left rounded-xl border p-4 transition-all">
+                            <p class="font-semibold text-white" x-text="mode.title"></p>
+                            <p class="text-xs text-slate-400 mt-1" x-text="mode.subtitle"></p>
+                            <p class="text-[11px] text-slate-500 mt-1.5" x-show="mode.scenarios">
+                                <span class="text-slate-600">Örnek:</span> <span x-text="mode.scenarios"></span>
+                            </p>
+                            <p x-show="mode.disabled && mode.disabled_reason"
+                               class="text-xs text-danger-300 mt-2"
+                               x-text="mode.disabled_reason"></p>
+                        </button>
+                    </template>
                 </div>
             </div>
 
@@ -186,27 +188,30 @@
                     </div>
 
                     <div x-show="installProfile === 'platform_manual'" class="rounded-xl border border-slate-800 bg-slate-900/60 p-4 space-y-3">
+                        <div class="rounded-lg border border-amber-500/20 bg-amber-500/5 p-3 text-xs text-amber-200/90">
+                            Kurulumu başlatmadan önce <strong>Bağlantıyı dene</strong> ile doğrulama zorunludur; sunucu başlatmadan önce aynı kontrolü tekrarlar.
+                        </div>
                         <p class="text-sm text-slate-300 font-medium">PostgreSQL bağlantısı</p>
                         <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
                             <div class="sm:col-span-2">
                                 <label class="label">Sunucu (host)</label>
-                                <input type="text" x-model="dbManual.host" class="input" placeholder="postgres.internal">
+                                <input type="text" x-model="dbManual.host" @change="dbTestOk = false; dbTestMessage = ''" class="input" placeholder="postgres.internal">
                             </div>
                             <div>
                                 <label class="label">Port</label>
-                                <input type="number" x-model.number="dbManual.port" class="input" placeholder="5432">
+                                <input type="number" x-model.number="dbManual.port" @change="dbTestOk = false; dbTestMessage = ''" class="input" placeholder="5432">
                             </div>
                             <div>
                                 <label class="label">Veritabanı adı</label>
-                                <input type="text" x-model="dbManual.name" class="input" placeholder="jir_mail_prod">
+                                <input type="text" x-model="dbManual.name" @change="dbTestOk = false; dbTestMessage = ''" class="input" placeholder="jir_mail_prod">
                             </div>
                             <div>
                                 <label class="label">Kullanıcı</label>
-                                <input type="text" x-model="dbManual.user" class="input">
+                                <input type="text" x-model="dbManual.user" @change="dbTestOk = false; dbTestMessage = ''" class="input">
                             </div>
                             <div>
                                 <label class="label">Şifre</label>
-                                <input type="password" x-model="dbManual.password" class="input">
+                                <input type="password" x-model="dbManual.password" @change="dbTestOk = false; dbTestMessage = ''" class="input">
                             </div>
                         </div>
                         <div class="flex flex-wrap items-center gap-2">
@@ -438,7 +443,15 @@ function setupWizard() {
         jirKey: '',
         postgresPassword: '',
 
-        bootstrap: { has_database_url: false, suggested_profile: 'docker_stack', database_host_hint: '', database_name_hint: '' },
+        bootstrap: {
+            has_database_url: false,
+            docker_available: false,
+            managed_install_forced: false,
+            suggested_profile: 'docker_stack',
+            install_modes: [],
+            database_host_hint: '',
+            database_name_hint: '',
+        },
 
         dbManual: { host: '', port: 5432, name: 'jir_mail_prod', user: '', password: '' },
         dbTestLoading: false,
@@ -462,9 +475,65 @@ function setupWizard() {
         pollInterval: null,
 
         profileLabel() {
-            if (this.installProfile === 'docker_stack') return 'Docker tam stack';
+            const m = this.installModesList().find((x) => x.id === this.installProfile);
+            if (m) return m.title;
+            if (this.installProfile === 'docker_stack') return 'Docker ile tam kurulum';
             if (this.installProfile === 'platform_env') return 'Ortam DATABASE_URL';
             return 'Manuel PostgreSQL';
+        },
+
+        installModesList() {
+            const m = this.bootstrap && this.bootstrap.install_modes;
+            if (m && m.length) return m;
+            return [
+                {
+                    id: 'docker_stack',
+                    title: 'Docker ile tam kurulum',
+                    subtitle: 'PostgreSQL, Redis, Postfix, Dovecot konteynerleri.',
+                    scenarios: 'VPS, docker compose',
+                    disabled: false,
+                    disabled_reason: null,
+                },
+                {
+                    id: 'platform_env',
+                    title: 'Ortam veritabanı (DATABASE_URL)',
+                    subtitle: 'Sunucuda tanımlı DATABASE_URL ile migrate.',
+                    scenarios: 'Coolify, Dokploy',
+                    disabled: false,
+                    disabled_reason: null,
+                },
+                {
+                    id: 'platform_manual',
+                    title: 'Manuel PostgreSQL',
+                    subtitle: 'Host, veritabanı, kullanıcı ve şifre.',
+                    scenarios: 'cPanel, Plesk, harici Postgres',
+                    disabled: false,
+                    disabled_reason: null,
+                },
+            ];
+        },
+
+        selectInstallMode(id) {
+            this.installProfile = id;
+            if (id === 'docker_stack') this.ensurePostgresSecret();
+            if (id !== 'platform_manual') {
+                this.dbTestOk = false;
+                this.dbTestMessage = '';
+            }
+        },
+
+        syncInstallProfileFromBootstrap() {
+            const modes = this.installModesList();
+            const usable = (pid) => {
+                const mo = modes.find((x) => x.id === pid);
+                return mo && !mo.disabled ? pid : null;
+            };
+            const d = this.bootstrap || {};
+            let p = usable(d.suggested_profile);
+            if (!p) p = usable('docker_stack');
+            if (!p) p = usable('platform_env');
+            if (!p) p = usable('platform_manual');
+            if (p) this.installProfile = p;
         },
 
         summaryLines() {
@@ -493,9 +562,7 @@ function setupWizard() {
                 const res = await fetch('/api/installer/bootstrap');
                 const d = await res.json();
                 this.bootstrap = d;
-                if (d.suggested_profile === 'platform_env' && d.has_database_url) {
-                    this.installProfile = 'platform_env';
-                }
+                this.syncInstallProfileFromBootstrap();
             } catch (e) { /* varsayılan docker_stack */ }
         },
 
@@ -525,7 +592,10 @@ function setupWizard() {
         },
 
         canProceed() {
-            if (this.step === 1) return !!this.installProfile;
+            if (this.step === 1) {
+                const mo = this.installModesList().find((x) => x.id === this.installProfile);
+                return !!(this.installProfile && mo && !mo.disabled);
+            }
             if (this.step === 2) return this.domain && this.domain.includes('.');
             if (this.step === 3) {
                 return this.adminEmail && this.adminPassword && this.adminPassword === this.adminPassword2 && this.adminPassword.length >= 8;
@@ -533,7 +603,8 @@ function setupWizard() {
             if (this.step === 4) {
                 if (this.installProfile === 'platform_env') return !!this.bootstrap.has_database_url;
                 if (this.installProfile === 'platform_manual') {
-                    return !!(this.dbManual.host && this.dbManual.name && String(this.dbManual.user || '').trim());
+                    const filled = !!(this.dbManual.host && this.dbManual.name && String(this.dbManual.user || '').trim());
+                    return filled && this.dbTestOk;
                 }
                 return true;
             }
