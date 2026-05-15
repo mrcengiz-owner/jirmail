@@ -345,3 +345,18 @@ def logs_view(request):
         'JIR_LOCAL_KEY': get_jir_key(),
         'current_page': 'logs',
     })
+
+
+def settings_view(request):
+    """Kurulum sonrası sistem ayarları (Docker adları, yollar; veritabanı salt okunur)."""
+    if not is_installed():
+        return redirect('setup')
+    if not request.session.get('is_logged_in'):
+        return redirect('login')
+    if request.session.get('role') != 'FULL':
+        return redirect('mail_panel')
+
+    return render(request, 'pages/settings.html', {
+        'JIR_LOCAL_KEY': get_jir_key(),
+        'current_page': 'settings',
+    })

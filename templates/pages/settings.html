@@ -1,0 +1,233 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Ayarlar — JîrCode Mail{% endblock %}
+
+{% block extra_head %}
+<script>
+    window.JIR_KEY = "{{ JIR_LOCAL_KEY|escapejs }}";
+    function settingsPage() {
+        return {
+            loading: true,
+            saving: false,
+            error: '',
+            message: '',
+            is_installed: false,
+            instance_id: '',
+            installation_log: {},
+            serviceKeys: ['postgres', 'postfix', 'dovecot', 'redis', 'django', 'celery', 'celery_beat'],
+            serviceLabels: {
+                postgres: 'PostgreSQL',
+                postfix: 'Postfix',
+                dovecot: 'Dovecot',
+                redis: 'Redis',
+                django: 'Django / panel',
+                celery: 'Celery worker',
+                celery_beat: 'Celery beat',
+            },
+            formMap: {},
+            resolved: {},
+            paths: {
+                mail_data_path: '',
+                postfix_vmail_path: '',
+                dovecot_passdb_path: '',
+                backup_dir: '',
+            },
+            database_visible: {
+                engine: '',
+                host: '',
+                port: null,
+                name: '',
+                user: '',
+                password_configured: false,
+            },
+            async load() {
+                this.loading = true;
+                this.error = '';
+                this.message = '';
+                try {
+                    const res = await fetch('/api/management/system-settings', { credentials: 'same-origin' });
+                    const data = await res.json();
+                    if (data.status !== 'ok') {
+                        this.error = data.message || 'Yüklenemedi';
+                        this.loading = false;
+                        return;
+                    }
+                    this.is_installed = !!data.is_installed;
+                    this.instance_id = data.instance_id || '';
+                    this.installation_log = data.installation_log || {};
+                    this.resolved = data.docker_resolved || {};
+                    const stored = data.docker_container_map || {};
+                    this.formMap = {};
+                    for (const sk of this.serviceKeys) {
+                        this.formMap[sk] = (stored[sk] != null && String(stored[sk]).trim() !== '')
+                            ? String(stored[sk]).trim()
+                            : '';
+                    }
+                    this.paths.mail_data_path = data.mail_data_path || '';
+                    this.paths.postfix_vmail_path = data.postfix_vmail_path || '';
+                    this.paths.dovecot_passdb_path = data.dovecot_passdb_path || '';
+                    this.paths.backup_dir = data.backup_dir || '';
+                    this.database_visible = Object.assign(this.database_visible, data.database_visible || {});
+                } catch (e) {
+                    this.error = e.message || 'Ağ hatası';
+                } finally {
+                    this.loading = false;
+                }
+            },
+            async save() {
+                this.saving = true;
+                this.error = '';
+                this.message = '';
+                const mapPayload = {};
+                for (const sk of this.serviceKeys) {
+                    mapPayload[sk] = (this.formMap[sk] || '').trim();
+                }
+                try {
+                    const res = await fetch('/api/management/system-settings', {
+                        method: 'POST',
+                        credentials: 'same-origin',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-CSRFToken': window.getCsrfToken(),
+                        },
+                        body: JSON.stringify({
+                            docker_container_map: mapPayload,
+                            mail_data_path: this.paths.mail_data_path,
+                            postfix_vmail_path: this.paths.postfix_vmail_path,
+                            dovecot_passdb_path: this.paths.dovecot_passdb_path,
+                            backup_dir: this.paths.backup_dir,
+                        }),
+                    });
+                    const data = await res.json();
+                    if (data.status === 'ok') {
+                        this.message = data.message || 'Kaydedildi';
+                        await this.load();
+                    } else {
+                        this.error = data.message || 'Kayıt başarısız';
+                    }
+                } catch (e) {
+                    this.error = e.message || 'Ağ hatası';
+                } finally {
+                    this.saving = false;
+                }
+            },
+        };
+    }
+</script>
+{% endblock %}
+
+{% block content %}
+<div class="page" x-data="settingsPage()" x-init="load()">
+
+    <header class="page-header">
+        <div class="min-w-0">
+            <h1 class="section-title">Sistem ayarları</h1>
+            <p class="section-subtitle">Kurulum sonrası Docker adları ve yollar; veritabanı bilgisi salt okunur</p>
+        </div>
+        <button type="button" @click="load()" class="btn btn-secondary btn-sm" :disabled="loading">
+            Yenile
+        </button>
+    </header>
+
+    <template x-if="loading">
+        <div class="bento-card p-8 text-center text-slate-400 text-sm">Yükleniyor…</div>
+    </template>
+
+    <div x-show="!loading" x-cloak class="space-y-4 sm:space-y-6">
+
+        <div x-show="error" class="rounded-xl border border-danger-500/30 bg-danger-500/10 px-4 py-3 text-sm text-danger-200" x-text="error"></div>
+        <div x-show="message" class="rounded-xl border border-primary-500/30 bg-primary-500/10 px-4 py-3 text-sm text-primary-200" x-text="message"></div>
+
+        <!-- Kurulum durumu -->
+        <section class="bento-card p-4 sm:p-5 border border-slate-800/80">
+            <h2 class="text-sm font-semibold text-white mb-3">Kurulum durumu</h2>
+            <dl class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+                <div>
+                    <dt class="text-[10px] font-bold uppercase tracking-wider text-slate-500">Kurulu</dt>
+                    <dd class="text-slate-200 mt-0.5">
+                        <span class="inline-flex items-center gap-1.5" :class="is_installed ? 'text-success-400' : 'text-warning-400'">
+                            <span class="w-1.5 h-1.5 rounded-full" :class="is_installed ? 'bg-success-400' : 'bg-warning-400'"></span>
+                            <span x-text="is_installed ? 'Evet (panel kullanıma hazır)' : 'Hayır'"></span>
+                        </span>
+                    </dd>
+                </div>
+                <div>
+                    <dt class="text-[10px] font-bold uppercase tracking-wider text-slate-500">Instance ID</dt>
+                    <dd class="text-primary-300 font-mono text-xs mt-0.5 break-all" x-text="instance_id || '—'"></dd>
+                </div>
+                <div class="sm:col-span-2">
+                    <dt class="text-[10px] font-bold uppercase tracking-wider text-slate-500">Kurulum günlüğü (özet)</dt>
+                    <dd class="mt-1 text-xs text-slate-400 font-mono break-all">
+                        <span x-show="installation_log && installation_log.run_id">run_id: <span x-text="installation_log.run_id"></span></span>
+                        <span x-show="installation_log && installation_log.completed_at"> · <span x-text="installation_log.completed_at"></span></span>
+                        <span x-show="!installation_log || (!installation_log.run_id && !installation_log.completed_at)">Kayıt yok veya eski kurulum.</span>
+                    </dd>
+                </div>
+            </dl>
+        </section>
+
+        <!-- Veritabanı: salt okunur, görünür -->
+        <section class="bento-card p-4 sm:p-5 border border-slate-800/80">
+            <h2 class="text-sm font-semibold text-white mb-1">Veritabanı (salt okunur)</h2>
+            <p class="text-xs text-slate-500 mb-4">Parola ve bağlantı düzenlemesi bu sayfada yok; Coolify / ortam üzerinden yönetilir.</p>
+            <dl class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+                <div><dt class="text-[10px] font-bold uppercase text-slate-500">Motor</dt><dd class="text-slate-300 mt-0.5 font-mono text-xs" x-text="database_visible.engine || '—'"></dd></div>
+                <div><dt class="text-[10px] font-bold uppercase text-slate-500">Host</dt><dd class="text-slate-300 mt-0.5 font-mono text-xs" x-text="database_visible.host || '—'"></dd></div>
+                <div><dt class="text-[10px] font-bold uppercase text-slate-500">Port</dt><dd class="text-slate-300 mt-0.5 font-mono text-xs" x-text="database_visible.port != null ? database_visible.port : '—'"></dd></div>
+                <div><dt class="text-[10px] font-bold uppercase text-slate-500">Veritabanı</dt><dd class="text-slate-300 mt-0.5 font-mono text-xs" x-text="database_visible.name || '—'"></dd></div>
+                <div><dt class="text-[10px] font-bold uppercase text-slate-500">Kullanıcı</dt><dd class="text-slate-300 mt-0.5 font-mono text-xs" x-text="database_visible.user || '—'"></dd></div>
+                <div><dt class="text-[10px] font-bold uppercase text-slate-500">Parola</dt><dd class="text-slate-300 mt-0.5" x-text="database_visible.password_configured ? 'Tanımlı (gizli)' : 'Boş / bilinmiyor'"></dd></div>
+            </dl>
+        </section>
+
+        <!-- Docker konteyner adları -->
+        <section class="bento-card p-4 sm:p-5 border border-slate-800/80">
+            <h2 class="text-sm font-semibold text-white mb-1">Docker konteyner adları</h2>
+            <p class="text-xs text-slate-500 mb-4">
+                Coolify gibi ortamlarda gerçek ad <code class="text-primary-300">jir_postfix</code> değilse buraya tam konteyner adını yazın; boş bırakılan satır ortam / varsayılan çözümlemesine döner.
+                <a href="/api/management/docker-diagnostics" class="text-primary-400 hover:text-primary-300 underline ml-1" target="_blank" rel="noopener">Docker tanı (JSON)</a>
+            </p>
+            <div class="space-y-3">
+                <template x-for="sk in serviceKeys" :key="sk">
+                    <div>
+                        <label class="label text-xs" x-text="serviceLabels[sk] || sk"></label>
+                        <input type="text" class="input font-mono text-sm" x-model="formMap[sk]"
+                               :placeholder="'Çözülen: ' + (resolved[sk] || '—')">
+                    </div>
+                </template>
+            </div>
+        </section>
+
+        <!-- Dosya yolları -->
+        <section class="bento-card p-4 sm:p-5 border border-slate-800/80">
+            <h2 class="text-sm font-semibold text-white mb-4">Posta ve yedek yolları</h2>
+            <div class="space-y-3">
+                <div>
+                    <label class="label text-xs">Mail veri dizini</label>
+                    <input type="text" class="input font-mono text-sm" x-model="paths.mail_data_path">
+                </div>
+                <div>
+                    <label class="label text-xs">Postfix vmail_accounts</label>
+                    <input type="text" class="input font-mono text-sm" x-model="paths.postfix_vmail_path">
+                </div>
+                <div>
+                    <label class="label text-xs">Dovecot userdb</label>
+                    <input type="text" class="input font-mono text-sm" x-model="paths.dovecot_passdb_path">
+                </div>
+                <div>
+                    <label class="label text-xs">Yedek dizini</label>
+                    <input type="text" class="input font-mono text-sm" x-model="paths.backup_dir">
+                </div>
+            </div>
+        </section>
+
+        <div class="flex flex-wrap gap-2 justify-end">
+            <button type="button" class="btn btn-primary" @click="save()" :disabled="saving">
+                <span x-show="!saving">Kaydet</span>
+                <span x-show="saving">Kaydediliyor…</span>
+            </button>
+        </div>
+    </div>
+</div>
+{% endblock %}

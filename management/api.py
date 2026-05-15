@@ -14,6 +14,7 @@ import dj_database_url
 from datetime import datetime
 
 from .docker_containers import (
+    SERVICE_KEYS,
     all_resolved_container_names,
     merged_container_name,
     persist_container_alias,
@@ -30,6 +31,16 @@ class HealthStatusSchema(Schema):
     database: bool
     postfix: bool
     dovecot: bool
+
+
+class SystemSettingsUpdateSchema(Schema):
+    """Kurulum sonrası panel ayarları (veritabanı alanları bu endpoint ile değişmez)."""
+
+    docker_container_map: dict | None = None
+    mail_data_path: str | None = None
+    postfix_vmail_path: str | None = None
+    dovecot_passdb_path: str | None = None
+    backup_dir: str | None = None
 
 
 class LoginSchema(Schema):
@@ -394,6 +405,60 @@ _DOCKER_STACK_DISCOVERY = {
     },
 }
 
+# İsim/Compose etiketi bulunamadığında imaj satırında arama (Coolify uzun adları)
+_SERVICE_IMAGE_KEYWORDS: dict[str, tuple[str, ...]] = {
+    'postgres': ('postgres', 'postgis', 'timescale'),
+    'postfix': (
+        'postfix',
+        'docker-mailserver',
+        'mailu',
+        'exim',
+        'sendmail',
+        'boky/postfix',
+        'catatnight/postfix',
+    ),
+    'dovecot': ('dovecot', 'mailu/dovecot', 'mailu/imap', 'dovecot-imap'),
+    'redis': ('redis', 'valkey', 'keydb'),
+    'django': ('jir-mail', 'jir_mail', 'gunicorn'),
+    'celery': ('celery', 'jir-mail', 'jir_mail'),
+    'celery_beat': ('celery', 'beat', 'jir-mail', 'jir_mail'),
+}
+
+
+def _discover_container_by_image_keywords(client, service_key: str | None) -> str | None:
+    """İmaj adında servis ipucu — isim keşfi başarısızsa (ör. Coolify rastgele ad)."""
+    if not service_key:
+        return None
+    sk = service_key.strip().lower()
+    kws = _SERVICE_IMAGE_KEYWORDS.get(sk)
+    if not kws:
+        return None
+    junk = ('webpack', 'vite', 'nginx:')
+    best = None
+    best_sc = 0
+    for c in client.containers.list(all=True):
+        try:
+            img = (((c.attrs or {}).get('Config') or {}).get('Image') or '').lower()
+            nm = _normalize_docker_container_name(c.name).lower()
+        except Exception:
+            continue
+        if any(j in img for j in junk) and not any(k in img for k in kws):
+            continue
+        sc = 0
+        for kw in kws:
+            if kw in img:
+                sc += 24
+            if kw in nm:
+                sc += 12
+        if getattr(c, 'status', None) == 'running':
+            sc += 4
+        if sc > best_sc:
+            best_sc = sc
+            best = c
+    if best is None or best_sc < 15:
+        return None
+    return _normalize_docker_container_name(best.name)
+
 
 def _compose_service_name(c) -> str:
     try:
@@ -508,8 +573,17 @@ def _get_container_resolving_aliases(client, primary_name: str, url_key_lower: s
         return client.containers.get(primary_name), primary_name
     except docker.errors.NotFound:
         if not hints and not compose:
-            raise
+            sk_fb = service_key_from_container_url_segment(url_key_lower)
+            alt_kw = _discover_container_by_image_keywords(client, sk_fb)
+            if alt_kw:
+                return client.containers.get(alt_kw), alt_kw
+            raise docker.errors.NotFound(
+                f'Container {primary_name} not found'
+            ) from None
         alt = _discover_container_by_hints(client, hints, compose)
+        if not alt:
+            sk_fb = service_key_from_container_url_segment(url_key_lower)
+            alt = _discover_container_by_image_keywords(client, sk_fb)
         if not alt:
             raise docker.errors.NotFound(
                 f'Container {primary_name} not found'
@@ -535,6 +609,11 @@ def _resolve_service_container_name(default_name, display_name):
         alt = _discover_container_by_hints(client, hints, compose)
         if alt:
             return alt
+        sk = service_key_for_display_name(display_name)
+        if sk:
+            alt2 = _discover_container_by_image_keywords(client, sk)
+            if alt2:
+                return alt2
     except Exception:
         pass
     finally:
@@ -722,7 +801,8 @@ def docker_diagnostics(request):
         out['hint'] = (
             'Bu Docker API listesinde postfix/dovecot/postgres/redis adında konteyner yok. '
             'Mail servisleri başka bir sunucuda veya başka bir Docker host\'undaysa keşif çalışmaz — '
-            'Coolify\'da uygulama ortamına JIR_CONTAINER_POSTFIX ve JIR_CONTAINER_DOVECOT ile tam konteyner adlarını yazın.'
+            'Coolify\'da ortama JIR_CONTAINER_POSTFIX vb. yazın veya panelde /settings/ sayfasından '
+            'docker_container_map ile tam konteyner adlarını kaydedin.'
         )
     elif out.get('docker_error'):
         out['hint'] = (
@@ -731,6 +811,97 @@ def docker_diagnostics(request):
         )
 
     return out
+
+
+@router.get("/system-settings", summary="Kurulum sonrası sistem ayarları (FULL)")
+def get_system_settings(request):
+    if not request.session.get('is_logged_in'):
+        return {"status": "error", "message": "Oturum gerekli."}
+    if request.session.get('role') != 'FULL':
+        return {"status": "error", "message": "Bu sayfa için yönetici (FULL) yetkisi gerekir."}
+
+    config = SystemConfig.objects.first()
+    if not config:
+        return {"status": "error", "message": "SystemConfig bulunamadı."}
+
+    ilog = config.installation_log or {}
+    if not isinstance(ilog, dict):
+        ilog = {}
+
+    resolved = {sk: merged_container_name(sk) for sk in SERVICE_KEYS}
+    stored = read_stored_container_map()
+
+    return {
+        "status": "ok",
+        "is_installed": bool(config.is_installed),
+        "instance_id": str(config.instance_id),
+        "installation_log": ilog,
+        "docker_container_map": dict(stored),
+        "docker_resolved": resolved,
+        "mail_data_path": config.mail_data_path or "",
+        "postfix_vmail_path": config.postfix_vmail_path or "",
+        "dovecot_passdb_path": config.dovecot_passdb_path or "",
+        "backup_dir": config.backup_dir or "",
+        "database_visible": {
+            "engine": config.db_engine or "",
+            "host": config.db_host or "",
+            "port": int(config.db_port) if config.db_port else None,
+            "name": config.db_name or "",
+            "user": config.db_user or "",
+            "password_configured": bool((config.db_password or "").strip()),
+        },
+    }
+
+
+@router.post("/system-settings", summary="Sistem ayarlarını güncelle (FULL, DB hariç)")
+@csrf_exempt
+def update_system_settings(request, data: SystemSettingsUpdateSchema):
+    if not request.session.get('is_logged_in'):
+        return {"status": "error", "message": "Oturum gerekli."}
+    if request.session.get('role') != 'FULL':
+        return {"status": "error", "message": "Bu sayfa için yönetici (FULL) yetkisi gerekir."}
+
+    config = SystemConfig.objects.first()
+    if not config:
+        return {"status": "error", "message": "SystemConfig bulunamadı."}
+
+    fields: list[str] = []
+
+    if data.docker_container_map is not None:
+        m = dict(config.docker_container_map or {})
+        if not isinstance(m, dict):
+            m = {}
+        for k, v in data.docker_container_map.items():
+            kk = str(k).strip().lower()
+            if kk not in SERVICE_KEYS:
+                continue
+            vv = _normalize_docker_container_name(str(v))
+            if vv:
+                m[kk] = vv
+            else:
+                m.pop(kk, None)
+        config.docker_container_map = m
+        fields.append('docker_container_map')
+
+    if data.mail_data_path is not None:
+        config.mail_data_path = (data.mail_data_path or '').strip()[:500]
+        fields.append('mail_data_path')
+    if data.postfix_vmail_path is not None:
+        config.postfix_vmail_path = (data.postfix_vmail_path or '').strip()[:500]
+        fields.append('postfix_vmail_path')
+    if data.dovecot_passdb_path is not None:
+        config.dovecot_passdb_path = (data.dovecot_passdb_path or '').strip()[:500]
+        fields.append('dovecot_passdb_path')
+    if data.backup_dir is not None:
+        config.backup_dir = (data.backup_dir or '').strip()[:500]
+        fields.append('backup_dir')
+
+    if not fields:
+        return {"status": "error", "message": "Güncellenecek alan yok."}
+
+    fields.append('updated_at')
+    config.save(update_fields=fields)
+    return {"status": "ok", "message": "Ayarlar kaydedildi."}
 
 
 @router.get("/system-specs", response={200: SystemSpecsSchema}, summary="Sistem Özelliklerini Getir")
