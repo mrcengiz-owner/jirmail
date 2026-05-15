@@ -174,6 +174,24 @@
                         <p class="hint">Docker içindeki Postgres için otomatik üretildi.</p>
                     </div>
 
+                    <div x-show="installProfile === 'docker_stack'" class="bg-slate-900/70 rounded-xl p-3 sm:p-4 border border-slate-800 space-y-3">
+                        <span class="block text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Konteyner güncelleme</span>
+                        <label class="flex items-start gap-3 cursor-pointer">
+                            <input type="radio" name="stack_policy" value="smart" x-model="stackServicePolicy" class="mt-1 shrink-0 accent-primary-500">
+                            <span>
+                                <span class="text-sm text-white font-medium">Akıllı (önerilen)</span>
+                                <span class="block text-xs text-slate-400 mt-0.5">İmaj uyumsuz veya unhealthy ise konteyner kaldırılıp yeniden oluşturulur; uyumlu ve çalışanlar atlanır.</span>
+                            </span>
+                        </label>
+                        <label class="flex items-start gap-3 cursor-pointer">
+                            <input type="radio" name="stack_policy" value="force_recreate" x-model="stackServicePolicy" class="mt-1 shrink-0 accent-primary-500">
+                            <span>
+                                <span class="text-sm text-white font-medium">Her serviste sıfırdan</span>
+                                <span class="block text-xs text-slate-400 mt-0.5">Her jir_* servisi için mevcut konteyner silinip yeniden kurulur (isimli volume verileri korunur).</span>
+                            </span>
+                        </label>
+                    </div>
+
                     <div x-show="installProfile === 'platform_env'" class="rounded-xl border border-slate-800 bg-slate-900/60 p-4 space-y-2">
                         <p class="text-sm text-slate-300 font-medium">Ortam veritabanı</p>
                         <template x-if="bootstrap.has_database_url">
@@ -442,6 +460,7 @@ function setupWizard() {
         instanceId: '',
         jirKey: '',
         postgresPassword: '',
+        stackServicePolicy: 'smart',
 
         bootstrap: {
             has_database_url: false,
@@ -538,7 +557,12 @@ function setupWizard() {
 
         summaryLines() {
             if (this.installProfile === 'docker_stack') {
-                return ['Docker network ve volume hazırlığı', 'PostgreSQL 17, Redis 7, Postfix, Dovecot imajları', 'Migration ve admin hesabı', 'DNS / TLS adımları (TLS Docker gerektirir)'];
+                return [
+                    'Docker network ve volume hazırlığı',
+                    'Servisler sırayla: imaj çek → konteyner (akıllı veya zorunlu yenile) → sağlık doğrulama',
+                    'Migration ve admin hesabı',
+                    'DNS / TLS adımları (TLS Docker gerektirir)',
+                ];
             }
             if (this.installProfile === 'platform_env') {
                 return ['Docker orkestrasyonu yok', 'Mevcut PostgreSQL üzerinde migration', 'Admin hesabı ve SystemConfig', 'DNS yapılandırması'];
@@ -657,6 +681,9 @@ function setupWizard() {
                 dns_credentials: this.dnsCredentials,
                 install_profile: this.installProfile
             };
+            if (this.installProfile === 'docker_stack') {
+                payload.stack_service_policy = this.stackServicePolicy || 'smart';
+            }
             if (this.installProfile === 'platform_manual') {
                 payload.db_manual = {
                     host: this.dbManual.host,

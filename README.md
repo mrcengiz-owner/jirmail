@@ -15,6 +15,10 @@ Jîr-Mail, **Postfix + Dovecot + PostgreSQL** mail yığınını tek tıkla kuru
 - **Sistem Uyarıları** — CPU/RAM/disk/mail kuyruğu/quota threshold'ları, periyodik kontrol, otomatik alert üretimi
 - **Webmail UI** — 3 sütunlu Gmail tarzı kullanıcı paneli (IMAP entegrasyonu planlanan aşamada)
 
+## Coolify / PaaS üretim kontrolü
+
+Adım adım kontrol listesi: [docs/coolify-kontrol-listesi.md](docs/coolify-kontrol-listesi.md).
+
 ## Teknoloji Yığını
 
 **Backend**
@@ -70,6 +74,7 @@ docker compose up -d
 
 ```
 config/         Django settings, URL, Celery konfigürasyonu
+docs/           Coolify / PaaS üretim kontrol listesi
 core/           MailDomain, MailAccount, Backup modelleri + API
 management/    Admin operasyonları, sistem sağlık, container API
 saas/           SystemConfig, Alert, AlertThreshold modelleri
@@ -78,7 +83,7 @@ alerts/         Threshold tabanlı uyarı sistemi + Celery taskları
 jir_core/      Kurulum durumu middleware
 templates/    Django HTML şablonları (pages/, partials/)
 static/         Tailwind input.css, build edilmiş main.css, app.js
-dovecot/      Dovecot Docker imajı
+dovecot/      Dovecot imajı; `*.tpl` şablonlar + ortam (`DB_*`, `MAIL_DOMAIN`) — sırlar repoda yok
 ```
 
 ## Tailwind CSS Build

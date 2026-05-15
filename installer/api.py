@@ -22,6 +22,7 @@ from pydantic import Field
 from .models import InstallationRun, InstallationStep
 from .orchestrator import _resolve_profile_and_client, run_installation
 from .profiles import (
+    PROFILE_DOCKER_STACK,
     PROFILE_PLATFORM_MANUAL,
     install_modes_for_ui,
     normalize_install_profile,
@@ -64,6 +65,11 @@ class StartInstallSchema(Schema):
         ),
     )
     db_manual: Optional[DbManualSchema] = None
+    # docker_stack: servisleri sırayla kur; smart = uyumsuz/hasta ise konteyneri sil-yenile, force = her zaman sil-yenile
+    stack_service_policy: str = Field(
+        default='smart',
+        description='docker_stack için: smart | force_recreate',
+    )
 
 
 class TestDbSchema(Schema):
@@ -150,6 +156,10 @@ def start_install(request: HttpRequest, data: StartInstallSchema):
     except ValueError as exc:
         return {'status': 'error', 'message': str(exc)}
 
+    stack_policy = (data.stack_service_policy or 'smart').strip().lower()
+    if stack_policy not in ('smart', 'force_recreate'):
+        return {'status': 'error', 'message': 'stack_service_policy: smart veya force_recreate olmalı.'}
+
     if canonical_profile == PROFILE_PLATFORM_MANUAL:
         ok, msg = validate_manual_db_connection(db_manual_dict)
         if not ok:
@@ -181,6 +191,7 @@ def start_install(request: HttpRequest, data: StartInstallSchema):
         'dns_credentials': data.dns_credentials,
         'install_profile': canonical_profile,
         'db_manual': db_manual_dict,
+        'stack_service_policy': stack_policy if canonical_profile == PROFILE_DOCKER_STACK else 'smart',
     }
 
     run = InstallationRun.objects.create(config_snapshot=config, status='pending')

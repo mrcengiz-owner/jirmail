@@ -1,13 +1,12 @@
-# Dovecot PostgreSQL Authentication + Quota Configuration
-# Reads from jir_mail_prod database
+# Dovecot PostgreSQL — şablon (sırlar repoda yok).
+# Çalışma anında entrypoint: envsubst ile /etc/dovecot/dovecot-sql.conf.ext üretilir.
+# Gerekli ortam: DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASS
 
 driver = postgres
-connect = host=${DB_HOST:-82.153.241.171} port=${DB_PORT:-5432} dbname=${DB_NAME:-jir_mail_prod} user=${DB_USER:-postgres} password=${DB_PASS:-YwzYYQkUjO29REPbignRwVVyJnM3r8cBg5h7NE7kyvc0wMYg99Ccf5mGPMnpuig1}
+connect = host=$DB_HOST port=$DB_PORT dbname=$DB_NAME user=$DB_USER password=$DB_PASS
 
-# Password scheme - matches Django's bcrypt
 default_pass_scheme = bcrypt
 
-# User lookup with quota_bytes
 password_query = SELECT email as user, password_hash AS password, \
   '/var/mail/vhosts/%d/%n' AS userdb_home, \
   '/var/mail/vhosts/%d/%n' AS mail, \
@@ -15,7 +14,6 @@ password_query = SELECT email as user, password_hash AS password, \
   COALESCE(quota_bytes, 52428800) AS quota_bytes \
   FROM core_mailaccount WHERE email = '%u' AND is_active = true
 
-# Userdb with quota
 user_query = SELECT '/var/mail/vhosts/%d/%n' AS home, \
   '/var/mail/vhosts/%d/%n' AS mail, \
   5000 AS uid, 5000 AS gid, \

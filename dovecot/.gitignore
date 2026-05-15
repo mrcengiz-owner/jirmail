@@ -1,0 +1,3 @@
+# Yerelde yanlışlıkla üretilirse repoya girmesin (imaj içinde entrypoint üretir)
+dovecot-sql.conf.ext
+dovecot.conf

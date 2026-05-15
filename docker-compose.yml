@@ -161,6 +161,7 @@ services:
       - DB_NAME=${POSTGRES_DB:-jir_mail_prod}
       - DB_USER=${POSTGRES_USER:-postgres}
       - DB_PASS=${POSTGRES_PASSWORD}
+      - MAIL_DOMAIN=${MAIL_DOMAIN:-jircode.com}
     volumes:
       - dovecot_data:/etc/dovecot
       - mail_data:/var/mail

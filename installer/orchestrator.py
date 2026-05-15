@@ -4,10 +4,11 @@ Sırayla (Docker erişilebiliyorsa):
   1. Docker daemon erişimini doğrular
   2. Gerekli network'ü oluşturur
   3. Gerekli volume'ları oluşturur
-  4. Image'ları çeker
-  5. Container'ları başlatır (healthcheck bekler)
-  6. Django migrate çalıştırır
-  7. Admin hesabı ve SystemConfig oluşturur
+  4. Her servis için sırayla: image pull → (smart|force_recreate) konteyner
+     kararı ve uygulama → çalışır/sağlıklı doğrulama
+  5. Django migrate çalıştırır
+  6. Admin hesabı ve SystemConfig oluşturur
+  7. DNS kayıtları ve TLS sertifikası (yapılandırmaya göre)
 
 Docker soketi / API yoksa (Coolify, yönetilen PaaS): yalnızca migrasyon,
 admin hesabı, DNS/TLS adımları (TLS Docker gerektirirse adım atlanır)
@@ -38,6 +39,120 @@ from .sse import publish_event
 
 
 logger = logging.getLogger(__name__)
+
+STACK_POLICY_SMART = 'smart'
+STACK_POLICY_FORCE_RECREATE = 'force_recreate'
+
+
+def _image_matches_spec(cfg_image: str, want: str) -> bool:
+    """Docker Config.Image ile compose spec.image gevşek eşleşme (repo/tag)."""
+    if not cfg_image or not want:
+        return False
+    if cfg_image == want:
+        return True
+    if want in cfg_image:
+        return True
+    want_base = want.split('@')[0].rsplit(':', 1)[0].lower()
+    cfg_base = cfg_image.split('@')[0].rsplit(':', 1)[0].lower()
+    if want_base and cfg_base and (want_base in cfg_base or cfg_base in want_base):
+        return True
+    return False
+
+
+def _remove_container_by_name(client, container_name: str) -> None:
+    """Konteyneri durdur ve sil (named volume'lar korunur)."""
+    try:
+        c = client.containers.get(container_name)
+    except Exception:
+        return
+    try:
+        c.remove(force=True)
+    except Exception:
+        try:
+            c.stop(timeout=15)
+        except Exception:
+            pass
+        try:
+            c.remove(force=True)
+        except Exception:
+            pass
+
+
+def _stack_service_action(client, spec: ServiceSpec, policy: str) -> str:
+    """skip | start | recreate — konteyner yoksa recreate (yeni oluştur)."""
+    try:
+        c = client.containers.get(spec.name)
+    except Exception:
+        return 'recreate'
+
+    if policy == STACK_POLICY_FORCE_RECREATE:
+        _remove_container_by_name(client, spec.name)
+        return 'recreate'
+
+    c.reload()
+    cfg_img = (c.attrs.get('Config') or {}).get('Image') or ''
+    if not _image_matches_spec(cfg_img, spec.image):
+        _remove_container_by_name(client, spec.name)
+        return 'recreate'
+
+    state = c.attrs.get('State', {})
+    health = (state.get('Health') or {}).get('Status') if state.get('Health') else None
+    status = state.get('Status', getattr(c, 'status', ''))
+
+    if health == 'unhealthy':
+        _remove_container_by_name(client, spec.name)
+        return 'recreate'
+
+    if status == 'running' and health in (None, 'healthy', 'starting'):
+        return 'skip'
+
+    return 'start'
+
+
+def _create_container_from_spec(client, spec: ServiceSpec, recorder: StepRecorder) -> None:
+    """Yeni konteyner oluştur ve başlat."""
+    container_kwargs = {
+        'image': spec.image,
+        'name': spec.name,
+        'detach': True,
+        'restart_policy': {'Name': spec.restart_policy},
+        'network': spec.network,
+        'environment': spec.environment,
+        'volumes': spec.volumes,
+        'ports': spec.ports,
+    }
+    if spec.command:
+        container_kwargs['command'] = spec.command
+    if spec.hostname:
+        container_kwargs['hostname'] = spec.hostname
+    if spec.healthcheck:
+        container_kwargs['healthcheck'] = spec.healthcheck
+
+    container = client.containers.run(**container_kwargs)
+    recorder.log(f'Konteyner oluşturuldu: {spec.name} ({container.short_id}).')
+
+
+def _apply_stack_service_step(client, spec: ServiceSpec, policy: str, recorder: StepRecorder) -> str:
+    """Politikaya göre skip | start | recreate uygula."""
+    recorder.start()
+    try:
+        action = _stack_service_action(client, spec, policy)
+        recorder.log(f'Politika={policy} → eylem={action}')
+        if action == 'recreate':
+            _remove_container_by_name(client, spec.name)
+            _create_container_from_spec(client, spec, recorder)
+        elif action == 'start':
+            c = client.containers.get(spec.name)
+            c.start()
+            recorder.log(f'{spec.name} başlatıldı.')
+        else:
+            recorder.log(f'{spec.name} uyumlu ve çalışıyor — değiştirilmedi.')
+        recorder.finish(success=True)
+        return action
+    except Exception as exc:
+        recorder.log(f'HATA: {exc}')
+        recorder.finish(success=False, message=str(exc))
+        raise
 
 
 def _unix_socket_path_from_docker_host(docker_host: str) -> str | None:
@@ -261,45 +376,6 @@ def _pull_image(client, image: str, recorder: StepRecorder) -> None:
         raise
 
 
-def _start_container(client, spec: ServiceSpec, recorder: StepRecorder) -> None:
-    recorder.start()
-    try:
-        try:
-            existing = client.containers.get(spec.name)
-            recorder.log(f'Container {spec.name} mevcut (status: {existing.status}).')
-            if existing.status != 'running':
-                existing.start()
-                recorder.log(f'Container {spec.name} başlatıldı.')
-            else:
-                recorder.log(f'Container {spec.name} zaten çalışıyor.')
-        except Exception:
-            container_kwargs = {
-                'image': spec.image,
-                'name': spec.name,
-                'detach': True,
-                'restart_policy': {'Name': spec.restart_policy},
-                'network': spec.network,
-                'environment': spec.environment,
-                'volumes': spec.volumes,
-                'ports': spec.ports,
-            }
-            if spec.command:
-                container_kwargs['command'] = spec.command
-            if spec.hostname:
-                container_kwargs['hostname'] = spec.hostname
-            if spec.healthcheck:
-                container_kwargs['healthcheck'] = spec.healthcheck
-
-            container = client.containers.run(**container_kwargs)
-            recorder.log(f'Container {spec.name} oluşturuldu ve başlatıldı (id: {container.short_id}).')
-
-        recorder.finish(success=True)
-    except Exception as exc:
-        recorder.log(f'HATA: {exc}')
-        recorder.finish(success=False, message=str(exc))
-        raise
-
-
 def _wait_for_healthy(client, container_name: str, recorder: StepRecorder, timeout: int = 90) -> None:
     recorder.start()
     deadline = time.time() + timeout
@@ -324,7 +400,9 @@ def _wait_for_healthy(client, container_name: str, recorder: StepRecorder, timeo
                 if health == 'unhealthy':
                     recorder.log(f'{container_name} unhealthy oldu.')
                     recorder.finish(success=False, message='Container unhealthy')
-                    return
+                    raise RuntimeError(f'{container_name}: healthcheck unhealthy')
+            except RuntimeError:
+                raise
             except Exception as exc:
                 recorder.log(f'Health kontrol hatası: {exc}')
 
@@ -332,8 +410,11 @@ def _wait_for_healthy(client, container_name: str, recorder: StepRecorder, timeo
 
         recorder.log(f'{container_name} zaman aşımı içinde hazır olmadı.')
         recorder.finish(success=False, message='Timeout')
+        raise RuntimeError(f'{container_name}: healthcheck zaman aşımı ({timeout}s)')
     except Exception as exc:
-        recorder.finish(success=False, message=str(exc))
+        if recorder.step.status != 'failed':
+            recorder.finish(success=False, message=str(exc))
+        raise
 
 
 def _build_postgres_url_from_manual(dbm: dict) -> str:
@@ -625,20 +706,40 @@ def run_installation(run_id: str) -> None:
             _ensure_volumes(client, specs, _make_step(run, order, 'Volume hazırlığı',
                                                        'Persistent volume\'lar oluştur'))
 
+            policy_raw = (config.get('stack_service_policy') or STACK_POLICY_SMART).strip().lower()
+            if policy_raw not in (STACK_POLICY_SMART, STACK_POLICY_FORCE_RECREATE):
+                policy_raw = STACK_POLICY_SMART
+
             for spec in specs:
                 order += 1
                 _pull_image(client, spec.image, _make_step(
-                    run, order, f'Image: {spec.image}', f'Pull {spec.image}'))
+                    run, order, f'Image: {spec.image}', f'{spec.name} — pull'))
 
-            for spec in specs:
                 order += 1
-                _start_container(client, spec, _make_step(
-                    run, order, f'Container: {spec.name}', f'Start {spec.name}'))
+                _apply_stack_service_step(
+                    client,
+                    spec,
+                    policy_raw,
+                    _make_step(
+                        run,
+                        order,
+                        f'Servis: {spec.name}',
+                        f'Politika {policy_raw} — konteyner oluştur / güncelle / atla',
+                    ),
+                )
 
-                if spec.healthcheck:
-                    order += 1
-                    _wait_for_healthy(client, spec.name, _make_step(
-                        run, order, f'Healthcheck: {spec.name}', f'{spec.name} hazır olana kadar bekle'))
+                order += 1
+                _wait_for_healthy(
+                    client,
+                    spec.name,
+                    _make_step(
+                        run,
+                        order,
+                        f'Sağlık: {spec.name}',
+                        f'{spec.name} çalışır ve (varsa) health healthy olana kadar bekle',
+                    ),
+                    timeout=120,
+                )
 
             order += 1
             _run_migrations(_make_step(run, order, 'Veritabanı migration',

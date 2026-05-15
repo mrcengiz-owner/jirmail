@@ -5,6 +5,7 @@ Docker servis konteyner adları: SystemConfig.docker_container_map (kalıcı)
 from __future__ import annotations
 
 import logging
+import os
 from typing import Dict, FrozenSet
 
 from django.conf import settings
@@ -42,6 +43,17 @@ _DEFAULT_JIR = {
     'celery_beat': 'jir_celery_beat',
 }
 
+# os.environ içinde anahtar varsa (Coolify / .env) — DB otomatik keşfinden önce gelir
+_ENV_KEY_FOR_SERVICE = {
+    'postgres': 'JIR_CONTAINER_POSTGRES',
+    'postfix': 'JIR_CONTAINER_POSTFIX',
+    'dovecot': 'JIR_CONTAINER_DOVECOT',
+    'redis': 'JIR_CONTAINER_REDIS',
+    'django': 'JIR_CONTAINER_DJANGO',
+    'celery': 'JIR_CONTAINER_CELERY',
+    'celery_beat': 'JIR_CONTAINER_CELERY_BEAT',
+}
+
 
 def _normalize(name: str) -> str:
     if not name:
@@ -68,11 +80,18 @@ def read_stored_container_map() -> Dict[str, str]:
 
 
 def merged_container_name(service_key: str) -> str:
-    """Önce DB (SystemConfig), sonra Django settings (env)."""
+    """Çözüm sırası: 1) Ortamda açıkça JIR_CONTAINER_* (os.environ), 2) DB keşfi, 3) Django settings."""
     sk = (service_key or '').strip().lower()
-    stored = read_stored_container_map()
-    if sk in stored and stored[sk]:
-        return stored[sk]
+    env_k = _ENV_KEY_FOR_SERVICE.get(sk)
+    if env_k and env_k in os.environ:
+        raw = (os.environ.get(env_k) or '').strip()
+        if raw:
+            return _normalize(raw)
+
+    stored = read_stored_container_map().get(sk, '')
+    if stored:
+        return stored
+
     attr = _SETTINGS_ATTR.get(sk)
     if attr:
         v = getattr(settings, attr, None)
@@ -92,10 +111,13 @@ def all_resolved_container_names() -> FrozenSet[str]:
 
 
 def persist_container_alias(service_key: str, physical_name: str) -> None:
-    """Keşfedilen gerçek adı kalıcı kaydet (jir_* yerine)."""
+    """Keşfedilen gerçek adı kalıcı kaydet (jir_* yerine). Ortamda JIR_CONTAINER_* sabitlendiyse ezme."""
     sk = (service_key or '').strip().lower()
     pn = _normalize(physical_name)
     if not sk or not pn:
+        return
+    env_k = _ENV_KEY_FOR_SERVICE.get(sk)
+    if env_k and env_k in os.environ and (os.environ.get(env_k) or '').strip():
         return
     try:
         conf = SystemConfig.objects.first()

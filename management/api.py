@@ -17,6 +17,7 @@ from .docker_containers import (
     all_resolved_container_names,
     merged_container_name,
     persist_container_alias,
+    read_stored_container_map,
     service_key_for_display_name,
     service_key_from_container_url_segment,
 )
@@ -374,12 +375,111 @@ def _jir_stack_name_substrings(include_proxy=False):
     return out
 
 
-_DOCKER_SERVICE_HINTS = {
-    'PostgreSQL': ('postgres', 'postgresql'),
-    'Postfix': ('postfix',),
-    'Dovecot': ('dovecot',),
-    'Redis': ('redis',),
+_DOCKER_STACK_DISCOVERY = {
+    'PostgreSQL': {
+        'hints': ('postgres', 'postgresql'),
+        'compose': ('postgres', 'db', 'database'),
+    },
+    'Postfix': {
+        'hints': ('postfix', 'smtp', 'mta', 'exim', 'boky/postfix'),
+        'compose': ('postfix', 'smtp', 'mta', 'mail', 'mailer', 'msmtp'),
+    },
+    'Dovecot': {
+        'hints': ('dovecot', 'imap', 'pop3', 'lmtp'),
+        'compose': ('dovecot', 'imap', 'pop3', 'mail'),
+    },
+    'Redis': {
+        'hints': ('redis', 'valkey', 'keydb'),
+        'compose': ('redis', 'valkey', 'keydb', 'cache'),
+    },
 }
+
+
+def _compose_service_name(c) -> str:
+    try:
+        labs = (c.attrs or {}).get('Config', {}).get('Labels') or {}
+        if not isinstance(labs, dict):
+            return ''
+        return (labs.get('com.docker.compose.service') or '').strip().lower()
+    except Exception:
+        return ''
+
+
+def _discovery_cfg_for_url_key(url_key_lower: str) -> dict:
+    """URL segmenti → hints + compose (Coolify uzun adları için)."""
+    key = (url_key_lower or '').strip().lower()
+    disp_map = {
+        'postgresql': 'PostgreSQL',
+        'postgres': 'PostgreSQL',
+        'jir_postgres': 'PostgreSQL',
+        'postfix': 'Postfix',
+        'jir_postfix': 'Postfix',
+        'dovecot': 'Dovecot',
+        'jir_dovecot': 'Dovecot',
+        'redis': 'Redis',
+        'jir_redis': 'Redis',
+    }
+    disp = disp_map.get(key)
+    if disp:
+        return dict(_DOCKER_STACK_DISCOVERY[disp])
+    if 'postfix' in key or '-smtp-' in key or key.endswith('smtp'):
+        return dict(_DOCKER_STACK_DISCOVERY['Postfix'])
+    if 'dovecot' in key or 'imap' in key:
+        return dict(_DOCKER_STACK_DISCOVERY['Dovecot'])
+    if 'postgres' in key or 'postgresql' in key:
+        return dict(_DOCKER_STACK_DISCOVERY['PostgreSQL'])
+    if 'redis' in key or 'valkey' in key:
+        return dict(_DOCKER_STACK_DISCOVERY['Redis'])
+    return {'hints': (), 'compose': ()}
+
+
+def _hints_for_url_container_key(url_key_lower: str) -> tuple[str, ...] | None:
+    cfg = _discovery_cfg_for_url_key(url_key_lower)
+    h = tuple(cfg.get('hints') or ())
+    return h if h else None
+
+
+def _discover_container_by_hints(client, hints, compose_names=()):
+    hints = tuple(h.lower() for h in hints if h)
+    compose_names = tuple(n.lower() for n in (compose_names or ()) if n)
+    if not hints and not compose_names:
+        return None
+    best = None
+    best_score = -1
+    for c in client.containers.list(all=True):
+        nm = _normalize_docker_container_name(c.name).lower()
+        if nm and all(x not in nm for x in ('postfix', 'dovecot', 'smtp', 'imap', 'pop3', 'lmtp', 'mta', 'mail')):
+            if any(x in nm for x in ('django', 'gunicorn', 'celery', 'uvicorn', 'webpack', 'vite')):
+                continue
+        img = ''
+        try:
+            img = (((c.attrs or {}).get('Config') or {}).get('Image') or '').lower()
+        except Exception:
+            pass
+        svc = _compose_service_name(c)
+        sc = 0
+        for h in hints:
+            if h and h in nm:
+                sc += 12
+            if h and h in img:
+                sc += 8
+        for cn in compose_names:
+            if cn and cn == svc:
+                sc += 30
+            elif cn and cn in nm:
+                sc += 5
+        if sc > best_score:
+            best_score = sc
+            best = c
+        elif sc == best_score and sc > 0 and best is not None:
+            try:
+                if c.status == 'running' and getattr(best, 'status', None) != 'running':
+                    best = c
+            except Exception:
+                pass
+    if best is None or best_score < 6:
+        return None
+    return _normalize_docker_container_name(best.name)
 
 
 def _port_probe_host_for_service(display_name: str) -> str:
@@ -395,78 +495,21 @@ def _port_probe_host_for_service(display_name: str) -> str:
     return display_name.lower()
 
 
-def _discover_container_by_hints(client, hints):
-    hints = tuple(h.lower() for h in hints if h)
-    if not hints:
-        return None
-    matches = []
-    for c in client.containers.list(all=True):
-        nm = _normalize_docker_container_name(c.name).lower()
-        img = ''
-        try:
-            img = (((c.attrs or {}).get('Config') or {}).get('Image') or '').lower()
-        except Exception:
-            pass
-        if any(h in nm or h in img for h in hints):
-            matches.append(_normalize_docker_container_name(c.name))
-    if len(matches) == 1:
-        return matches[0]
-    if len(matches) > 1:
-        for name in matches:
-            try:
-                ct = client.containers.get(name)
-                if ct.status == 'running':
-                    return _normalize_docker_container_name(ct.name)
-            except Exception:
-                continue
-        return matches[0]
-    return None
-
-
-def _hints_for_url_container_key(url_key_lower: str) -> tuple[str, ...] | None:
-    """Sihirbaz / URL segmenti (postfix, jir_postfix) → Docker listesinde arama ipuçları."""
-    key = (url_key_lower or '').strip().lower()
-    pg = _DOCKER_SERVICE_HINTS['PostgreSQL']
-    pf = _DOCKER_SERVICE_HINTS['Postfix']
-    dv = _DOCKER_SERVICE_HINTS['Dovecot']
-    rd = _DOCKER_SERVICE_HINTS['Redis']
-    m = {
-        'postgresql': pg,
-        'postgres': pg,
-        'jir_postgres': pg,
-        'postfix': pf,
-        'jir_postfix': pf,
-        'dovecot': dv,
-        'jir_dovecot': dv,
-        'redis': rd,
-        'jir_redis': rd,
-    }
-    if key in m:
-        return m[key]
-    if 'postfix' in key:
-        return pf
-    if 'dovecot' in key:
-        return dv
-    if 'postgres' in key or 'postgresql' in key:
-        return pg
-    if 'redis' in key:
-        return rd
-    return None
-
-
 def _get_container_resolving_aliases(client, primary_name: str, url_key_lower: str):
     """Önce tam ad; yoksa ipuçlarıyla keşfedilen gerçek konteyner adı (Coolify vb.)."""
     import docker
 
     primary_name = _normalize_docker_container_name(primary_name)
-    hints = _hints_for_url_container_key(url_key_lower)
+    cfg = _discovery_cfg_for_url_key(url_key_lower)
+    hints = tuple(cfg.get('hints') or ())
+    compose = tuple(cfg.get('compose') or ())
 
     try:
         return client.containers.get(primary_name), primary_name
     except docker.errors.NotFound:
-        if not hints:
+        if not hints and not compose:
             raise
-        alt = _discover_container_by_hints(client, hints)
+        alt = _discover_container_by_hints(client, hints, compose)
         if not alt:
             raise docker.errors.NotFound(
                 f'Container {primary_name} not found'
@@ -475,9 +518,11 @@ def _get_container_resolving_aliases(client, primary_name: str, url_key_lower: s
 
 
 def _resolve_service_container_name(default_name, display_name):
-    """Önce ayarlı ad; yoksa imaj/isim ipuçlarıyla tek aday keşfi (Coolify vb.)."""
+    """Önce ayarlı ad; yoksa imaj/isim/Compose etiketi ile keşif (Coolify vb.)."""
     resolved = _normalize_docker_container_name(default_name)
-    hints = _DOCKER_SERVICE_HINTS.get(display_name, ())
+    cfg = _DOCKER_STACK_DISCOVERY.get(display_name) or {'hints': (), 'compose': ()}
+    hints = tuple(cfg.get('hints') or ())
+    compose = tuple(cfg.get('compose') or ())
     client = None
     try:
         client = _management_docker_client(3)
@@ -487,7 +532,7 @@ def _resolve_service_container_name(default_name, display_name):
     try:
         if check_service_in_docker(resolved):
             return resolved
-        alt = _discover_container_by_hints(client, hints)
+        alt = _discover_container_by_hints(client, hints, compose)
         if alt:
             return alt
     except Exception:
@@ -614,6 +659,78 @@ def check_system_requirements(request):
         "ports_blocked": ports_blocked,
         "services": services
     }
+
+
+@router.get("/docker-diagnostics", summary="Docker keşif tanısı (FULL oturum)")
+def docker_diagnostics(request):
+    """Panel hangi konteyner adlarını çözüyor; Docker listesinde postfix/dovecot vb. görünüyor mu."""
+    if not request.session.get('is_logged_in'):
+        return {"status": "error", "message": "Oturum gerekli."}
+    if request.session.get('role') != 'FULL':
+        return {"status": "error", "message": "Bu işlem için FULL yetkisi gerekir."}
+
+    out: dict = {
+        "status": "ok",
+        "docker_host": getattr(settings, 'DOCKER_HOST', ''),
+        "docker_ping": False,
+        "docker_error": None,
+        "merged_container_names": {},
+        "stored_docker_container_map": {},
+        "mail_related_containers": [],
+    }
+    for sk in ('postgres', 'postfix', 'dovecot', 'redis', 'django', 'celery', 'celery_beat'):
+        out['merged_container_names'][sk] = merged_container_name(sk)
+    out['stored_docker_container_map'] = read_stored_container_map()
+
+    client = None
+    try:
+        import docker
+        client = _management_docker_client(8)
+        client.ping()
+        out['docker_ping'] = True
+        for c in client.containers.list(all=True):
+            nm = (c.name or '').lower()
+            img = ''
+            try:
+                img = (((c.attrs or {}).get('Config') or {}).get('Image') or '').lower()
+            except Exception:
+                pass
+            if any(x in nm or x in img for x in (
+                'postfix', 'dovecot', 'smtp', 'imap', 'redis', 'postgres', 'jir_', 'mail',
+            )):
+                out['mail_related_containers'].append({
+                    'name': c.name,
+                    'status': getattr(c, 'status', ''),
+                    'image': (img or '')[:160],
+                    'compose_service': _compose_service_name(c),
+                })
+        out['mail_related_containers'] = sorted(
+            out['mail_related_containers'],
+            key=lambda x: (x.get('name') or '').lower(),
+        )[:60]
+    except Exception as exc:
+        out['docker_error'] = str(exc)
+        out['status'] = 'warning'
+    finally:
+        if client:
+            try:
+                client.close()
+            except Exception:
+                pass
+
+    if out.get('docker_ping') and not out.get('mail_related_containers'):
+        out['hint'] = (
+            'Bu Docker API listesinde postfix/dovecot/postgres/redis adında konteyner yok. '
+            'Mail servisleri başka bir sunucuda veya başka bir Docker host\'undaysa keşif çalışmaz — '
+            'Coolify\'da uygulama ortamına JIR_CONTAINER_POSTFIX ve JIR_CONTAINER_DOVECOT ile tam konteyner adlarını yazın.'
+        )
+    elif out.get('docker_error'):
+        out['hint'] = (
+            'Docker API erişilemiyor. DOCKER_HOST veya /var/run/docker.sock mount kontrol edin. '
+            'Erişim yoksa yalnızca ortam değişkeni ile sabit ad verilebilir.'
+        )
+
+    return out
 
 
 @router.get("/system-specs", response={200: SystemSpecsSchema}, summary="Sistem Özelliklerini Getir")
