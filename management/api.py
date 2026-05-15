@@ -382,6 +382,19 @@ _DOCKER_SERVICE_HINTS = {
 }
 
 
+def _port_probe_host_for_service(display_name: str) -> str:
+    """Docker ağında servis adı ile port dinleme; 'PostgreSQL'.lower() → postgresql hatası önlenir."""
+    if display_name == 'PostgreSQL':
+        return getattr(settings, 'POSTGRES_HOST', None) or 'postgres'
+    if display_name == 'Redis':
+        return getattr(settings, 'REDIS_HOST', None) or 'redis'
+    if display_name == 'Postfix':
+        return os.getenv('POSTFIX_SMTP_HOST', 'postfix')
+    if display_name == 'Dovecot':
+        return os.getenv('DOVECOT_IMAP_HOST', 'dovecot')
+    return display_name.lower()
+
+
 def _discover_container_by_hints(client, hints):
     hints = tuple(h.lower() for h in hints if h)
     if not hints:
@@ -522,8 +535,9 @@ def check_system_requirements(request):
             continue
 
         # 2. Docker başarısız veya container yoksa, port kontrolü
-        # Django Docker ağında ise service name ile kontrol et
-        is_listening = check_port_listening(port, host=name.lower())
+        # Django Docker ağında ise servis hostname'i (postgres, redis, …) ile dene
+        probe_host = _port_probe_host_for_service(name)
+        is_listening = check_port_listening(port, host=probe_host)
 
         if not is_listening:
             # Fallback: localhost üzerinden de dene
