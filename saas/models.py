@@ -45,6 +45,13 @@ class SystemConfig(models.Model):
 
     installation_log = models.JSONField(default=dict, blank=True)
 
+    # Coolify vb.: gerçek Docker konteyner adları (postfix, dovecot, … anahtarları)
+    docker_container_map = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text='Örn. {"postfix":"stack-postfix-abc","dovecot":"stack-dovecot-xyz"}',
+    )
+
     updated_at = models.DateTimeField(auto_now=True)
 
     def get_database_config(self):

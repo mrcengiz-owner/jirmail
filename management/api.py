@@ -13,6 +13,13 @@ import subprocess
 import dj_database_url
 from datetime import datetime
 
+from .docker_containers import (
+    all_resolved_container_names,
+    merged_container_name,
+    persist_container_alias,
+    service_key_for_display_name,
+    service_key_from_container_url_segment,
+)
 
 router = Router()
 
@@ -348,15 +355,8 @@ def _management_docker_client(timeout=10):
 
 
 def _static_jir_container_names():
-    return frozenset({
-        getattr(settings, 'JIR_CONTAINER_POSTGRES', 'jir_postgres'),
-        getattr(settings, 'JIR_CONTAINER_POSTFIX', 'jir_postfix'),
-        getattr(settings, 'JIR_CONTAINER_DOVECOT', 'jir_dovecot'),
-        getattr(settings, 'JIR_CONTAINER_REDIS', 'jir_redis'),
-        getattr(settings, 'JIR_CONTAINER_DJANGO', 'jir_django'),
-        getattr(settings, 'JIR_CONTAINER_CELERY', 'jir_celery'),
-        getattr(settings, 'JIR_CONTAINER_CELERY_BEAT', 'jir_celery_beat'),
-    })
+    """İzin verilen konteyner adları (env + SystemConfig.docker_container_map)."""
+    return all_resolved_container_names()
 
 
 def _jir_stack_name_substrings(include_proxy=False):
@@ -551,28 +551,20 @@ def check_system_requirements(request):
 
     services = []
     docker_services = {
-        'PostgreSQL': {
-            'container': getattr(settings, 'JIR_CONTAINER_POSTGRES', 'jir_postgres'),
-            'port': 5432,
-        },
-        'Postfix': {
-            'container': getattr(settings, 'JIR_CONTAINER_POSTFIX', 'jir_postfix'),
-            'port': 25,
-        },
-        'Dovecot': {
-            'container': getattr(settings, 'JIR_CONTAINER_DOVECOT', 'jir_dovecot'),
-            'port': 993,
-        },
-        'Redis': {
-            'container': getattr(settings, 'JIR_CONTAINER_REDIS', 'jir_redis'),
-            'port': 6379,
-        },
+        'PostgreSQL': {'port': 5432},
+        'Postfix': {'port': 25},
+        'Dovecot': {'port': 993},
+        'Redis': {'port': 6379},
     }
 
     docker_host = getattr(settings, 'DOCKER_HOST', None)
 
     for name, info in docker_services.items():
-        container_name = _resolve_service_container_name(info['container'], name)
+        sk = service_key_for_display_name(name)
+        merged_before = merged_container_name(sk) if sk else ''
+        container_name = _resolve_service_container_name(merged_before, name)
+        if sk and container_name and container_name != merged_before:
+            persist_container_alias(sk, container_name)
         port = info['port']
 
         # 1. Önce Docker container kontrolü (en güvenilir)
@@ -845,28 +837,25 @@ def container_action(request, container_name, action):
         return {"status": "error", "message": "Invalid action. Use start, stop, or restart."}
 
     container_map = {
-        'postgresql': getattr(settings, 'JIR_CONTAINER_POSTGRES', 'jir_postgres'),
-        'postgres': getattr(settings, 'JIR_CONTAINER_POSTGRES', 'jir_postgres'),
-        'postfix': getattr(settings, 'JIR_CONTAINER_POSTFIX', 'jir_postfix'),
-        'dovecot': getattr(settings, 'JIR_CONTAINER_DOVECOT', 'jir_dovecot'),
-        'redis': getattr(settings, 'JIR_CONTAINER_REDIS', 'jir_redis'),
-        'django': getattr(settings, 'JIR_CONTAINER_DJANGO', 'jir_django'),
-        'celery': getattr(settings, 'JIR_CONTAINER_CELERY', 'jir_celery'),
-        'celery_beat': getattr(settings, 'JIR_CONTAINER_CELERY_BEAT', 'jir_celery_beat'),
+        'postgresql': merged_container_name('postgres'),
+        'postgres': merged_container_name('postgres'),
+        'postfix': merged_container_name('postfix'),
+        'dovecot': merged_container_name('dovecot'),
+        'redis': merged_container_name('redis'),
+        'django': merged_container_name('django'),
+        'celery': merged_container_name('celery'),
+        'celery_beat': merged_container_name('celery_beat'),
     }
-    # Eski dashboard / istemciler sabit jir_* adı gönderirse ayarlardaki gerçek ada çevir
-    for legacy_key, attr in (
-        ('jir_postgres', 'JIR_CONTAINER_POSTGRES'),
-        ('jir_postfix', 'JIR_CONTAINER_POSTFIX'),
-        ('jir_dovecot', 'JIR_CONTAINER_DOVECOT'),
-        ('jir_redis', 'JIR_CONTAINER_REDIS'),
-        ('jir_django', 'JIR_CONTAINER_DJANGO'),
-        ('jir_celery', 'JIR_CONTAINER_CELERY'),
-        ('jir_celery_beat', 'JIR_CONTAINER_CELERY_BEAT'),
+    for legacy_key, sk in (
+        ('jir_postgres', 'postgres'),
+        ('jir_postfix', 'postfix'),
+        ('jir_dovecot', 'dovecot'),
+        ('jir_redis', 'redis'),
+        ('jir_django', 'django'),
+        ('jir_celery', 'celery'),
+        ('jir_celery_beat', 'celery_beat'),
     ):
-        container_map[legacy_key] = _normalize_docker_container_name(
-            getattr(settings, attr, legacy_key)
-        )
+        container_map[legacy_key] = merged_container_name(sk)
 
     raw = _normalize_docker_container_name(container_name)
     lk = raw.lower()
@@ -895,6 +884,8 @@ def container_action(request, container_name, action):
             if not _management_container_pass_through_allowed(client, physical_name):
                 return {"status": "error", "message": f"Keşfedilen konteyner için işlem tanımlı değil: {physical_name}"}
 
+        sk_disc = service_key_from_container_url_segment(lk)
+
         if action == 'start':
             try:
                 container.start()
@@ -903,6 +894,8 @@ def container_action(request, container_name, action):
                 if 'already started' in err or 'already running' in err or '304' in str(e):
                     return {"status": "success", "message": f"{physical_name} zaten çalışıyor", "action": "noop"}
                 raise
+            if sk_disc and physical_name != actual_name:
+                persist_container_alias(sk_disc, physical_name)
             return {"status": "success", "message": f"{physical_name} başlatıldı", "action": "start"}
         elif action == 'stop':
             try:
@@ -912,9 +905,13 @@ def container_action(request, container_name, action):
                 if 'not running' in err or 'is not running' in err:
                     return {"status": "success", "message": f"{physical_name} zaten durmuş", "action": "noop"}
                 raise
+            if sk_disc and physical_name != actual_name:
+                persist_container_alias(sk_disc, physical_name)
             return {"status": "success", "message": f"{physical_name} durduruldu", "action": "stop"}
         elif action == 'restart':
             container.restart(timeout=10)
+            if sk_disc and physical_name != actual_name:
+                persist_container_alias(sk_disc, physical_name)
             return {"status": "success", "message": f"{physical_name} yeniden başlatıldı", "action": "restart"}
 
     except ImportError:
@@ -1075,6 +1072,25 @@ class MailAccountSchema(Schema):
 def restart_container(request, container_name: str):
     """Belirtilen Docker container'ını yeniden başlatır."""
     raw = _normalize_docker_container_name(container_name)
+    lk = raw.lower()
+    quick_map = {
+        'postgresql': merged_container_name('postgres'),
+        'postgres': merged_container_name('postgres'),
+        'postfix': merged_container_name('postfix'),
+        'dovecot': merged_container_name('dovecot'),
+        'redis': merged_container_name('redis'),
+        'django': merged_container_name('django'),
+        'celery': merged_container_name('celery'),
+        'celery_beat': merged_container_name('celery_beat'),
+        'jir_postgres': merged_container_name('postgres'),
+        'jir_postfix': merged_container_name('postfix'),
+        'jir_dovecot': merged_container_name('dovecot'),
+        'jir_redis': merged_container_name('redis'),
+        'jir_django': merged_container_name('django'),
+        'jir_celery': merged_container_name('celery'),
+        'jir_celery_beat': merged_container_name('celery_beat'),
+    }
+    target = quick_map.get(lk, raw)
     allowed_static = _static_jir_container_names()
 
     client = None
@@ -1090,7 +1106,7 @@ def restart_container(request, container_name: str):
                 pass
         return {"status": "error", "message": f"Docker'a bağlanılamadı: {str(e)}"}
 
-    if raw not in allowed_static and not _management_container_pass_through_allowed(client, raw):
+    if target not in allowed_static and not _management_container_pass_through_allowed(client, target):
         try:
             client.close()
         except Exception:
@@ -1098,14 +1114,31 @@ def restart_container(request, container_name: str):
         return {"status": "error", "message": f"Container '{container_name}' izin listesinde değil."}
 
     try:
-        container = client.containers.get(raw)
+        import docker
+        container, physical = _get_container_resolving_aliases(client, target, lk)
+        if physical != target and physical not in allowed_static:
+            if not _management_container_pass_through_allowed(client, physical):
+                try:
+                    client.close()
+                except Exception:
+                    pass
+                return {"status": "error", "message": f"Keşfedilen konteyner izin listesinde değil: {physical}"}
         container.restart(timeout=10)
+        sk_disc = service_key_from_container_url_segment(lk)
+        if sk_disc and physical != target:
+            persist_container_alias(sk_disc, physical)
         client.close()
         return {
             "status": "success",
-            "message": f"'{raw}' container'ı yeniden başlatıldı.",
-            "container": raw
+            "message": f"'{physical}' container'ı yeniden başlatıldı.",
+            "container": physical
         }
+    except docker.errors.NotFound:
+        try:
+            client.close()
+        except Exception:
+            pass
+        return {"status": "error", "message": f"Container {target} not found"}
     except Exception as e:
         try:
             client.close()
