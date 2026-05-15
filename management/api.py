@@ -423,6 +423,57 @@ def _discover_container_by_hints(client, hints):
     return None
 
 
+def _hints_for_url_container_key(url_key_lower: str) -> tuple[str, ...] | None:
+    """Sihirbaz / URL segmenti (postfix, jir_postfix) → Docker listesinde arama ipuçları."""
+    key = (url_key_lower or '').strip().lower()
+    pg = _DOCKER_SERVICE_HINTS['PostgreSQL']
+    pf = _DOCKER_SERVICE_HINTS['Postfix']
+    dv = _DOCKER_SERVICE_HINTS['Dovecot']
+    rd = _DOCKER_SERVICE_HINTS['Redis']
+    m = {
+        'postgresql': pg,
+        'postgres': pg,
+        'jir_postgres': pg,
+        'postfix': pf,
+        'jir_postfix': pf,
+        'dovecot': dv,
+        'jir_dovecot': dv,
+        'redis': rd,
+        'jir_redis': rd,
+    }
+    if key in m:
+        return m[key]
+    if 'postfix' in key:
+        return pf
+    if 'dovecot' in key:
+        return dv
+    if 'postgres' in key or 'postgresql' in key:
+        return pg
+    if 'redis' in key:
+        return rd
+    return None
+
+
+def _get_container_resolving_aliases(client, primary_name: str, url_key_lower: str):
+    """Önce tam ad; yoksa ipuçlarıyla keşfedilen gerçek konteyner adı (Coolify vb.)."""
+    import docker
+
+    primary_name = _normalize_docker_container_name(primary_name)
+    hints = _hints_for_url_container_key(url_key_lower)
+
+    try:
+        return client.containers.get(primary_name), primary_name
+    except docker.errors.NotFound:
+        if not hints:
+            raise
+        alt = _discover_container_by_hints(client, hints)
+        if not alt:
+            raise docker.errors.NotFound(
+                f'Container {primary_name} not found'
+            ) from None
+        return client.containers.get(alt), alt
+
+
 def _resolve_service_container_name(default_name, display_name):
     """Önce ayarlı ad; yoksa imaj/isim ipuçlarıyla tek aday keşfi (Coolify vb.)."""
     resolved = _normalize_docker_container_name(default_name)
@@ -835,7 +886,14 @@ def container_action(request, container_name, action):
         if actual_name not in allowed_static and not _management_container_pass_through_allowed(client, actual_name):
             return {"status": "error", "message": f"Bu konteyner için işlem tanımlı değil: {actual_name}"}
 
-        container = client.containers.get(actual_name)
+        try:
+            container, physical_name = _get_container_resolving_aliases(client, actual_name, lk)
+        except docker.errors.NotFound:
+            return {"status": "error", "message": f"Container {actual_name} not found"}
+
+        if physical_name != actual_name and physical_name not in allowed_static:
+            if not _management_container_pass_through_allowed(client, physical_name):
+                return {"status": "error", "message": f"Keşfedilen konteyner için işlem tanımlı değil: {physical_name}"}
 
         if action == 'start':
             try:
@@ -843,21 +901,21 @@ def container_action(request, container_name, action):
             except docker.errors.APIError as e:
                 err = str(e).lower()
                 if 'already started' in err or 'already running' in err or '304' in str(e):
-                    return {"status": "success", "message": f"{actual_name} zaten çalışıyor", "action": "noop"}
+                    return {"status": "success", "message": f"{physical_name} zaten çalışıyor", "action": "noop"}
                 raise
-            return {"status": "success", "message": f"{actual_name} başlatıldı", "action": "start"}
+            return {"status": "success", "message": f"{physical_name} başlatıldı", "action": "start"}
         elif action == 'stop':
             try:
                 container.stop(timeout=10)
             except docker.errors.APIError as e:
                 err = str(e).lower()
                 if 'not running' in err or 'is not running' in err:
-                    return {"status": "success", "message": f"{actual_name} zaten durmuş", "action": "noop"}
+                    return {"status": "success", "message": f"{physical_name} zaten durmuş", "action": "noop"}
                 raise
-            return {"status": "success", "message": f"{actual_name} durduruldu", "action": "stop"}
+            return {"status": "success", "message": f"{physical_name} durduruldu", "action": "stop"}
         elif action == 'restart':
             container.restart(timeout=10)
-            return {"status": "success", "message": f"{actual_name} yeniden başlatıldı", "action": "restart"}
+            return {"status": "success", "message": f"{physical_name} yeniden başlatıldı", "action": "restart"}
 
     except ImportError:
         return {"status": "error", "message": "Docker module not installed. Install with: pip install docker"}
