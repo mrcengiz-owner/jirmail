@@ -691,6 +691,36 @@ def _apply_system_config_database(config_obj, config: dict, recorder: StepRecord
     recorder.log('SystemConfig veritabanı alanları Docker Compose (jir_postgres) için ayarlandı.')
 
 
+def _run_mail_auto_setup(config: dict, client, recorder: StepRecorder) -> None:
+    """Postfix/Dovecot + panel ağını otomatik hizala; sonucu config['mail_connectivity'] içine yaz."""
+    from installer.mail_connectivity import auto_setup_mail_services
+
+    recorder.start()
+    try:
+        skip_busy = bool(config.get('stack_skip_busy_host_ports', True))
+        result = auto_setup_mail_services(
+            config,
+            docker_client=client,
+            skip_busy_ports=skip_busy,
+        )
+        config['mail_connectivity'] = result
+        for line in result.get('messages') or []:
+            recorder.log(line)
+        if result.get('success'):
+            ep = result.get('mail_endpoints') or {}
+            recorder.log(
+                f'Mail otomatik: SMTP {ep.get("smtp_host")}:{ep.get("smtp_port")}, '
+                f'IMAP {ep.get("imap_host")}:{ep.get("imap_port")}'
+            )
+            recorder.finish(success=True)
+        else:
+            recorder.log(result.get('error') or 'Mail otomatik kurulum tamamlanamadı.')
+            recorder.finish(success=False, message=result.get('error'))
+    except Exception as exc:
+        recorder.log(f'HATA: {exc}')
+        recorder.finish(success=False, message=str(exc))
+
+
 def _create_admin_account(config: dict, recorder: StepRecorder) -> None:
     recorder.start()
     try:
@@ -731,10 +761,23 @@ def _create_admin_account(config: dict, recorder: StepRecorder) -> None:
         config_obj.instance_id = config.get('instance_id') or config_obj.instance_id
         config_obj.jir_local_key = config.get('jir_local_key', config_obj.jir_local_key)
         _apply_system_config_database(config_obj, config, recorder)
-        config_obj.installation_log = {
+        mail_conn = config.get('mail_connectivity') or {}
+        log_payload: dict = {
             'run_id': str(recorder.run.run_id),
             'completed_at': timezone.now().isoformat(),
         }
+        if mail_conn.get('mail_endpoints'):
+            log_payload['mail_endpoints'] = mail_conn['mail_endpoints']
+            log_payload['mail_auto_setup'] = {
+                'success': mail_conn.get('success'),
+                'messages': (mail_conn.get('messages') or [])[-30:],
+            }
+        config_obj.installation_log = log_payload
+        dmap = mail_conn.get('docker_container_map') or {}
+        if dmap:
+            merged = dict(config_obj.docker_container_map or {})
+            merged.update({str(k): str(v) for k, v in dmap.items() if k and v})
+            config_obj.docker_container_map = merged
         config_obj.save()
         recorder.log('SystemConfig kaydedildi (is_installed=True).')
         recorder.finish(success=True)
@@ -815,6 +858,12 @@ def run_installation(run_id: str) -> None:
                 )
 
             order += 1
+            _run_mail_auto_setup(config, client, _make_step(
+                run, order, 'Mail bağlantısı',
+                'Panel konteynerini jir_network\'e bağla; SMTP/IMAP erişimini doğrula',
+            ))
+
+            order += 1
             _run_migrations(_make_step(run, order, 'Veritabanı migration',
                                         'Django migrate çalıştır'))
 
@@ -845,8 +894,7 @@ def run_installation(run_id: str) -> None:
             if profile == PROFILE_PLATFORM_ENV:
                 managed_rec.log(
                     'DATABASE_URL ile mevcut PostgreSQL kullanılıyor. '
-                    'Postfix/Dovecot: `python manage.py provision_mail_stack --print-compose` veya '
-                    '`provision_mail_stack --apply-docker` (Docker soketi varsa).'
+                    'Postfix/Dovecot kurulum sihirbazında veya aşağıdaki adımda otomatik yapılır.'
                 )
             else:
                 managed_rec.log(
@@ -854,6 +902,25 @@ def run_installation(run_id: str) -> None:
                     'Uygulama ortamındaki DATABASE_URL aynı veritabanına işaret etmelidir (Coolify).'
                 )
             managed_rec.finish(success=True)
+
+            order += 1
+            opt_client = _get_docker_client_optional()
+            mail_step = _make_step(
+                run, order, 'Mail servisleri',
+                'Postfix/Dovecot kurulumu ve panel ağ bağlantısı (otomatik)',
+            )
+            if opt_client:
+                _run_mail_auto_setup(config, opt_client, mail_step)
+                try:
+                    opt_client.close()
+                except Exception:
+                    pass
+            else:
+                mail_step.start()
+                mail_step.log(
+                    'Docker API yok — mail kurulumu sihirbazın Mail adımında denenmiş olmalı.'
+                )
+                mail_step.finish(success=True)
 
             order += 1
             sub_url = None

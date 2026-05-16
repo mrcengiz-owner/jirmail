@@ -289,11 +289,11 @@
             <!-- 5: Mail servisleri -->
             <div x-show="step === 5" x-transition.opacity>
                 <h2 class="text-lg sm:text-xl font-semibold text-white mb-1">Mail servisleri</h2>
-                <p class="text-slate-500 text-sm mb-5">SMTP ve IMAP erişimini doğrular; ortam uygunsa Postfix ve Dovecot kurulumunu başlatabilirsiniz.</p>
+                <p class="text-slate-500 text-sm mb-5">Postfix ve Dovecot otomatik kurulur; panel aynı Docker ağına bağlanır. Manuel SMTP ayarı gerekmez.</p>
 
-                <div x-show="mailLoading" class="text-center py-10 text-slate-400 text-sm">Durum kontrol ediliyor…</div>
+                <div x-show="mailLoading || mailProvisionLoading" class="text-center py-10 text-slate-400 text-sm">Durum kontrol ediliyor…</div>
 
-                    <div x-show="!mailLoading && mailStatus" class="space-y-4">
+                    <div x-show="!mailLoading && !mailProvisionLoading && mailStatus" class="space-y-4">
                         <div x-show="mailStatus.hints && mailStatus.hints.length"
                              class="rounded-xl border border-slate-700/80 bg-slate-900/80 p-4 space-y-2">
                             <p class="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Ne anlama geliyor?</p>
@@ -307,7 +307,7 @@
                         <svg class="w-5 h-5 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
                         </svg>
-                        <p>Bu modda Postfix ve Dovecot tam kurulum akışında oluşturulur. Aşağıdaki sonuçlar yalnızca şu anki sunucu durumu için bilgilendirmedir.</p>
+                        <p>Tam kurulumda tüm servisler oluşturulur; bu adımda panel mail ağına bağlanır (Docker API varsa).</p>
                     </div>
 
                     <div class="rounded-xl border border-slate-800 bg-slate-900/60 p-4 space-y-3 text-sm">
@@ -350,27 +350,6 @@
                         </div>
                     </div>
 
-                    <div x-show="installProfile === 'platform_env' && mailStatus.can_auto_provision && !mailStatus.mail_ready"
-                         class="space-y-3 rounded-xl border border-slate-800 bg-slate-900/50 p-4">
-                        <p class="text-sm text-slate-300 font-medium">Otomatik kurulum</p>
-                        <p class="text-xs text-slate-500">Docker ve DATABASE_URL hazırsa aşağıdaki düğme ile Postfix ve Dovecot konteynerleri oluşturulur. Postgres ile aynı Docker ağında olmaları için genelde <code class="text-primary-400">MAIL_STACK_DOCKER_NETWORK</code> veya burada ağı belirtin.</p>
-                        <div>
-                            <label for="mail-docker-net" class="label">Docker ağı (isteğe bağlı)</label>
-                            <input id="mail-docker-net" type="text" x-model="mailDockerNetwork"
-                                   placeholder="Örn. coolify — boşsa ortam değişkeni kullanılır"
-                                   autocapitalize="off" spellcheck="false" class="input">
-                        </div>
-                        <button type="button" class="btn btn-primary btn-sm"
-                                @click="provisionMailStack()"
-                                :disabled="mailProvisionLoading || !domain">
-                            <span x-show="!mailProvisionLoading">Postfix ve Dovecot’u kur</span>
-                            <span x-show="mailProvisionLoading" class="inline-flex items-center gap-2">
-                                <svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg>
-                                Kuruluyor…
-                            </span>
-                        </button>
-                    </div>
-
                     <div x-show="mailProvisionMessages"
                          class="rounded-xl border border-slate-800 bg-slate-950/80 p-3">
                         <p class="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-2">Kurulum çıktısı</p>
@@ -379,7 +358,9 @@
 
                     <div class="flex flex-wrap items-center gap-2">
                         <button type="button" class="btn btn-secondary btn-sm"
-                                @click="refreshMailStatus()" :disabled="mailLoading">Yeniden kontrol et</button>
+                                @click="runMailAutoSetup()" :disabled="mailLoading || mailProvisionLoading || !domain">Tekrar dene</button>
+                        <button type="button" class="btn btn-secondary btn-sm"
+                                @click="refreshMailStatus()" :disabled="mailLoading || mailProvisionLoading">Durumu yenile</button>
                         <span x-show="mailStatus.mail_ready" class="text-xs text-success-400 font-medium">Mail uçları hazır görünüyor.</span>
                     </div>
 
@@ -648,8 +629,8 @@ function setupWizard() {
         mailProvisionLoading: false,
         mailSkipped: false,
         mailProvisionOk: false,
-        mailDockerNetwork: '',
         mailProvisionMessages: '',
+        mailProvisionAttempted: false,
 
         profileLabel() {
             const m = this.installModesList().find((x) => x.id === this.installProfile);
@@ -834,13 +815,12 @@ function setupWizard() {
                 return true;
             }
             if (this.step === 5) {
-                if (this.mailLoading) return false;
+                if (this.mailLoading || this.mailProvisionLoading) return false;
                 if (!this.mailStatus) return false;
-                if (this.installProfile === 'docker_stack') return true;
                 if (this.mailStatus.mail_ready) return true;
+                if (this.mailProvisionAttempted) return true;
+                if (this.installProfile === 'docker_stack') return true;
                 if (this.mailSkipped) return true;
-                if (this.mailProvisionOk) return true;
-                if (!this.mailStatus.can_auto_provision) return true;
                 return false;
             }
             return true;
@@ -875,18 +855,20 @@ function setupWizard() {
             }
         },
 
-        async provisionMailStack() {
+        async runMailAutoSetup() {
+            if (!this.domain) return;
             this.mailProvisionLoading = true;
             this.mailProvisionMessages = '';
+            this.mailProvisionAttempted = true;
             const prevMainErr = this.errorMessage;
             try {
-                const res = await fetch('/api/installer/mail-stack-provision', {
+                const res = await fetch('/api/installer/mail-auto-setup', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         domain: this.domain,
                         mail_hostname: 'mail.' + this.domain,
-                        docker_network: (this.mailDockerNetwork || '').trim(),
+                        install_profile: this.installProfile,
                         skip_busy_ports: true
                     })
                 });
@@ -896,10 +878,8 @@ function setupWizard() {
                 if (data.success) {
                     this.mailProvisionOk = true;
                     if (prevMainErr && !data.error) this.errorMessage = '';
-                } else if (data.mode === 'no_docker') {
-                    this.errorMessage = data.error || 'Docker API yok — üretilen YAML’ı Coolify’da ayrı stack olarak deploy edin.';
                 } else {
-                    this.errorMessage = data.error || 'Mail kurulumu başarısız.';
+                    this.errorMessage = data.error || 'Otomatik mail kurulumu tamamlanamadı. Tekrar deneyin veya kurulum son adımda yenilenecek.';
                 }
                 await this.refreshMailStatus();
             } catch (e) {
@@ -916,9 +896,10 @@ function setupWizard() {
                 this.mailSkipped = false;
                 this.mailProvisionOk = false;
                 this.mailProvisionMessages = '';
+                this.mailProvisionAttempted = false;
             }
             this.step++;
-            if (prev === 4) this.refreshMailStatus();
+            if (prev === 4) this.runMailAutoSetup();
         },
 
         async testDb() {

@@ -52,8 +52,9 @@ class Command(BaseCommand):
                 nets = c.get('network_ips') or {}
                 net_s = ', '.join(f'{n}={ip}' for n, ip in sorted(nets.items())) or '(ağ IP yok)'
                 svc = c.get('compose_service') or '-'
+                panel_tag = '  [PANEL]' if c.get('is_panel') else ''
                 self.stdout.write(
-                    f'  • {c.get("name")}  [{c.get("status")}]  compose:{svc}\n'
+                    f'  • {c.get("name")}{panel_tag}  [{c.get("status")}]  compose:{svc}\n'
                     f'    image: {c.get("image", "")[:100]}\n'
                     f'    networks: {net_s}'
                 )
@@ -74,6 +75,14 @@ class Command(BaseCommand):
         hint = report.get('network_overlap_hint') or ''
         if hint:
             self.stdout.write(self.style.WARNING(f'Ağ notu: {hint}'))
+            self.stdout.write('')
+
+        conn = report.get('network_connectivity') or {}
+        fixes = conn.get('recommended_fixes') or []
+        if fixes:
+            self.stdout.write(self.style.MIGRATE_HEADING('Önerilen düzeltmeler:'))
+            for i, line in enumerate(fixes, 1):
+                self.stdout.write(f'  {i}. {line}')
             self.stdout.write('')
 
         self.stdout.write(self.style.HTTP_INFO('Coolify için örnek env (kopyala — gerçek konteyner adlarını listeden seç):'))

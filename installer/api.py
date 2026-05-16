@@ -4,7 +4,8 @@ Endpoint'ler:
     GET  /api/installer/bootstrap           Ortam yetenekleri + install_modes + önerilen profil
     POST /api/installer/test-db           PostgreSQL bağlantı testi (kurulum öncesi)
     GET  /api/installer/mail-stack-status Mail SMTP/IMAP + Docker durumu (sihirbaz)
-    POST /api/installer/mail-stack-provision Postfix+Dovecot Docker kurulumu (sihirbaz)
+    POST /api/installer/mail-auto-setup        Postfix+Dovecot + panel ağı (otomatik)
+    POST /api/installer/mail-stack-provision   (mail-auto-setup ile aynı)
     POST /api/installer/start             Kurulum çalışmasını başlatır (run_id döner)
     ...
 
@@ -23,6 +24,7 @@ from pydantic import Field
 
 from .models import InstallationRun, InstallationStep
 from .orchestrator import _resolve_profile_and_client, run_installation
+from .mail_connectivity import auto_setup_mail_services
 from .mail_stack import collect_installer_mail_stack_status, provision_mail_stack_docker
 from .port_check import scan_mail_stack_ports
 from .profiles import (
@@ -184,15 +186,37 @@ class MailStackProvisionSchema(Schema):
 @csrf_exempt
 def mail_stack_provision(request: HttpRequest, data: MailStackProvisionSchema):
     dom = (data.domain or '').strip()
-    mh = (data.mail_hostname or '').strip()
-    net = (data.docker_network or '').strip()
-    return provision_mail_stack_docker(
-        skip_busy_ports=bool(data.skip_busy_ports),
-        pull_images=True,
-        mail_domain_override=dom or None,
-        mail_hostname_override=mh or None,
-        docker_network_override=net or None,
-    )
+    mh = (data.mail_hostname or '').strip() or (f'mail.{dom}' if dom else '')
+    cfg = {
+        'domain': dom,
+        'mail_hostname': mh,
+        'stack_skip_busy_host_ports': bool(data.skip_busy_ports),
+    }
+    if (data.docker_network or '').strip():
+        os.environ['MAIL_STACK_DOCKER_NETWORK'] = data.docker_network.strip()
+    return auto_setup_mail_services(cfg, skip_busy_ports=bool(data.skip_busy_ports))
+
+
+class MailAutoSetupSchema(Schema):
+    domain: str = ''
+    mail_hostname: str = ''
+    install_profile: str = 'platform_env'
+    skip_busy_ports: bool = True
+
+
+@router.post('/mail-auto-setup', summary='Mail stack + panel ağı (sihirbaz, otomatik)')
+@csrf_exempt
+def mail_auto_setup(request: HttpRequest, data: MailAutoSetupSchema):
+    """Postfix/Dovecot kur, paneli jir_network'e bağla, TCP doğrula."""
+    dom = (data.domain or '').strip()
+    mh = (data.mail_hostname or '').strip() or (f'mail.{dom}' if dom else '')
+    cfg = {
+        'domain': dom,
+        'mail_hostname': mh,
+        'install_profile': data.install_profile,
+        'stack_skip_busy_host_ports': bool(data.skip_busy_ports),
+    }
+    return auto_setup_mail_services(cfg, skip_busy_ports=bool(data.skip_busy_ports))
 
 
 @router.post('/start', summary='Kurulumu başlat')
@@ -432,38 +456,3 @@ def tls_request(request: HttpRequest, data: TLSRequestSchema):
         return result
     except Exception as exc:
         return {'success': False, 'message': str(exc)}
-
-
-@router.get('/mail-stack-status', summary='Mail servisleri durumu (sihirbaz)')
-def mail_stack_status(request: HttpRequest, domain: str = '', install_profile: str = ''):
-    """SMTP/IMAP kontrolü, Docker konteyner durumu ve otomatik kurulum uygunluğu."""
-    try:
-        canonical = normalize_install_profile(install_profile or 'docker_stack')
-    except ValueError:
-        canonical = 'docker_stack'
-    return collect_installer_mail_stack_status(
-        wizard_domain=domain.strip(),
-        install_profile=canonical,
-    )
-
-
-class MailStackProvisionSchema(Schema):
-    domain: str = ''
-    mail_hostname: str = ''
-    docker_network: str = ''
-    skip_busy_ports: bool = True
-
-
-@router.post('/mail-stack-provision', summary='Postfix+Dovecot kur (Docker)')
-@csrf_exempt
-def mail_stack_provision(request: HttpRequest, data: MailStackProvisionSchema):
-    dom = (data.domain or '').strip()
-    mh = (data.mail_hostname or '').strip()
-    net = (data.docker_network or '').strip()
-    return provision_mail_stack_docker(
-        skip_busy_ports=bool(data.skip_busy_ports),
-        pull_images=True,
-        mail_domain_override=dom or None,
-        mail_hostname_override=mh or None,
-        docker_network_override=net or None,
-    )
