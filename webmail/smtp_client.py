@@ -76,6 +76,13 @@ def send_mail(account, password: str, *, to: list[str] | str, subject: str, body
                 'SMTP_HOST=127.0.0.1 ekleyin; Postfix konteynerinde 587 hosta publish edilmiş olmalı. '
                 'Coolify’da panel konteyneri ile aynı Docker ağında çalıştırın veya gerçek postfix host adını yazın.'
             )
+        else:
+            hint += (
+                'Konteyner içi DNS’te bu ad yok: Postfix genelde ayrı servis veya farklı compose adıyla gelir. '
+                'Coolify’da uygulamanın ortamına SMTP_HOST=<Postfix’e ulaşan iç hostname> yazın '
+                '(aynı stack’te Compose `service` adı, örn. `postfix`), gerekirse JIR_CONTAINER_POSTFIX ile '
+                'gerçek konteyner adını eşleştirin veya iki servisi ortak Docker ağına alın.'
+            )
         return {'success': False, 'message': f'{exc}{hint}'}
     except ConnectionRefusedError:
         return {
