@@ -84,16 +84,21 @@
                 <h2 class="text-lg sm:text-xl font-semibold text-white mb-1">Kurulum modu</h2>
                 <p class="text-slate-500 text-sm mb-5">Ortamınıza uygun yolu seçin; devre dışı seçenekler sunucuda gerekli erişim yoksa kilitlenir.</p>
 
+                <label class="flex items-start gap-3 cursor-pointer rounded-xl border border-slate-800 bg-slate-900/50 p-3 mb-4">
+                    <input type="checkbox" x-model="relaxModeLocks" class="mt-0.5 shrink-0 accent-primary-500">
+                    <span class="text-xs text-slate-400 leading-relaxed">
+                        <span class="text-slate-300 font-medium">Gelişmiş:</span>
+                        Kontrol yanlış olabilir (ör. uzak Docker). Kapalı seçenekleri seçebilmem için kilidi gevşet.
+                        Soket bağlı değilse seçseniz bile <strong>kurulum</strong> aşamasında Docker yok uyarısı alırsınız.
+                    </span>
+                </label>
+
                 <div class="space-y-3">
                     <template x-for="mode in installModesList()" :key="mode.id">
                         <button type="button"
-                                @click="!mode.disabled && selectInstallMode(mode.id)"
-                                :disabled="mode.disabled"
-                                :class="mode.disabled
-                                    ? 'opacity-50 cursor-not-allowed border-slate-800/80 bg-slate-900/40'
-                                    : (installProfile === mode.id
-                                        ? 'ring-2 ring-primary-500 border-primary-500/50 bg-primary-500/10'
-                                        : 'border-slate-800 bg-slate-900/60 hover:border-slate-700 cursor-pointer')"
+                                @click="pickInstallMode(mode)"
+                                :disabled="mode.disabled && !relaxModeLocks"
+                                :class="installModeCardClass(mode)"
                                 class="w-full text-left rounded-xl border p-4 transition-all">
                             <p class="font-semibold text-white" x-text="mode.title"></p>
                             <p class="text-xs text-slate-400 mt-1" x-text="mode.subtitle"></p>
@@ -288,7 +293,15 @@
 
                 <div x-show="mailLoading" class="text-center py-10 text-slate-400 text-sm">Durum kontrol ediliyor…</div>
 
-                <div x-show="!mailLoading && mailStatus" class="space-y-4">
+                    <div x-show="!mailLoading && mailStatus" class="space-y-4">
+                        <div x-show="mailStatus.hints && mailStatus.hints.length"
+                             class="rounded-xl border border-slate-700/80 bg-slate-900/80 p-4 space-y-2">
+                            <p class="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Ne anlama geliyor?</p>
+                            <template x-for="(hint, hi) in mailStatus.hints" :key="hi">
+                                <p class="text-xs text-slate-300 leading-relaxed" x-text="hint"></p>
+                            </template>
+                        </div>
+
                     <div x-show="installProfile === 'docker_stack'"
                          class="rounded-xl border border-info-500/25 bg-info-500/10 p-4 text-sm text-info-200/95 flex gap-2.5">
                         <svg class="w-5 h-5 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -321,11 +334,14 @@
                                   x-text="mailStatus.docker_available ? 'Kullanılabilir' : 'Yok / erişilemiyor'"></span>
                         </div>
                         <div class="flex flex-wrap items-center justify-between gap-2">
-                            <span class="text-slate-400">PostgreSQL (DATABASE_URL)</span>
-                            <span class="font-medium"
-                                  :class="mailStatus.has_database_url ? 'text-success-400' : 'text-danger-400'"
-                                  x-text="mailStatus.has_database_url ? 'Tanımlı' : 'Tanımlı değil'"></span>
+                            <span class="text-slate-400">DATABASE_URL</span>
+                            <span class="font-medium text-right max-w-[60%]"
+                                  :class="mailStatus.has_database_url ? 'text-success-400' : (mailStatus.django_uses_postgresql ? 'text-amber-400' : 'text-danger-400')"
+                                  x-text="mailStatus.has_database_url ? 'Tanımlı' : (mailStatus.django_uses_postgresql ? 'Ortamda yok (PG kullanılıyor olabilir)' : 'Tanımlı değil')"></span>
                         </div>
+                        <p class="text-[10px] text-slate-600 -mt-2" x-show="!mailStatus.has_database_url">
+                            Mail stack otomatik kurulumu için ortamda <code class="text-slate-500">DATABASE_URL</code> gerekir.
+                        </p>
                         <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-2 border-t border-slate-800 text-xs text-slate-500">
                             <p><span class="text-slate-600">Postfix:</span> <span class="text-slate-300 font-mono" x-text="mailStatus.postfix_container"></span>
                                 — <span x-text="mailStatus.postfix_running ? 'çalışıyor' : 'çalışmıyor'"></span></p>
@@ -594,6 +610,7 @@ function setupWizard() {
         postgresPassword: '',
         stackServicePolicy: 'smart',
         stackSkipBusyHostPorts: true,
+        relaxModeLocks: false,
 
         bootstrap: {
             has_database_url: false,
@@ -680,6 +697,36 @@ function setupWizard() {
                 this.dbTestOk = false;
                 this.dbTestMessage = '';
             }
+        },
+
+        installModeCardClass(mode) {
+            const locked = mode.disabled && !this.relaxModeLocks;
+            const selected = this.installProfile === mode.id;
+            const relaxedSelectable = mode.disabled && this.relaxModeLocks;
+            if (locked) {
+                return 'opacity-50 cursor-not-allowed border-slate-800/80 bg-slate-900/40';
+            }
+            if (selected) {
+                return 'ring-2 ring-primary-500 border-primary-500/50 bg-primary-500/10';
+            }
+            if (relaxedSelectable) {
+                return 'border-amber-600/45 bg-amber-950/20 hover:border-amber-500/55 cursor-pointer';
+            }
+            return 'border-slate-800 bg-slate-900/60 hover:border-slate-700 cursor-pointer';
+        },
+
+        pickInstallMode(mode) {
+            if (mode.disabled && !this.relaxModeLocks) return;
+            if (mode.disabled && this.relaxModeLocks) {
+                var msg = 'Bu mod için ortamda gerekli erişim doğrulanamadı.';
+                if (mode.id === 'docker_stack') {
+                    msg += ' Coolify\'da tam stack için konteynere Docker soketi bağlanmalı; yoksa kurulum başlarında hata verir.';
+                } else if (mode.id === 'platform_env') {
+                    msg += ' DATABASE_URL olmadan kurulum reddedilir.';
+                }
+                if (!window.confirm(msg + '\n\nYine de bu modu seçmek istiyor musunuz?')) return;
+            }
+            this.selectInstallMode(mode.id);
         },
 
         syncInstallProfileFromBootstrap() {
@@ -771,7 +818,8 @@ function setupWizard() {
         canProceed() {
             if (this.step === 1) {
                 const mo = this.installModesList().find((x) => x.id === this.installProfile);
-                return !!(this.installProfile && mo && !mo.disabled);
+                if (!mo || !this.installProfile) return false;
+                return !mo.disabled || this.relaxModeLocks;
             }
             if (this.step === 2) return this.domain && this.domain.includes('.');
             if (this.step === 3) {

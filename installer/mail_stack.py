@@ -395,6 +395,9 @@ def collect_installer_mail_stack_status(
     cap = probe_capabilities()
     docker_available = bool(cap.get('docker_available'))
     has_db_url = bool((os.getenv('DATABASE_URL') or '').strip())
+    in_docker = bool(getattr(settings, 'IN_DOCKER', False))
+    db_engine = str((settings.DATABASES.get('default') or {}).get('ENGINE') or '')
+    django_uses_postgresql = 'postgresql' in db_engine
 
     smtp_host, smtp_port = resolve_mail_endpoint(
         'postfix', int(getattr(settings, 'SMTP_PORT', 587)), auth_submission=True
@@ -442,6 +445,39 @@ def collect_installer_mail_stack_status(
     except Exception as exc:
         params_preview = {'error': str(exc)}
 
+    hints: list[str] = []
+    if prof == 'docker_stack' and not mail_ready:
+        hints.append(
+            'Tam Docker kurulumunda Postfix ve Dovecot henüz yoksa tüm satırlar kırmızı görünebilir; '
+            'bu adım bilgilendirme amaçlıdır, kurulum sihirbazını tamamladığınızda servisler oluşturulur.'
+        )
+    if in_docker and not (os.getenv('SMTP_HOST') or os.getenv('POSTFIX_SMTP_HOST') or '').strip():
+        hints.append(
+            f'SMTP/IMAP denemesi dahili servis adı ({smtp_host} / {imap_host}) üzerinden yapılır; '
+            'konteynerler çalışmıyorsa veya farklı isimdeyse “erişilemiyor” normaldir.'
+        )
+    if not docker_available and in_docker:
+        hints.append(
+            'Docker API bu konteynerde kapalı olabilir (Coolify’da soket mount edilmemiş). '
+            'Otomatik mail kurulumu için Docker erişimi veya `provision_mail_stack --print-compose` ile ayrı stack gerekir.'
+        )
+    if prof == 'platform_env' and not mail_ready and not can_auto and not docker_available:
+        hints.append(
+            'Ortam veritabanı modunda otomatik Postfix/Dovecot için hem Docker API hem DATABASE_URL gerekir; '
+            'biri eksikse kurulumdan sonra compose veya CLI ile mail stack ekleyin.'
+        )
+    if not has_db_url:
+        if django_uses_postgresql:
+            hints.append(
+                'Mail stack (otomatik Postfix/Dovecot) şu an yalnızca ortam değişkeni DATABASE_URL ile çalışır. '
+                'Coolify’da uygulama veritabanı bağlı olsa bile bu değişken yoksa burada “tanımlı değil” görünür; '
+                'ortam değişkenlerine DATABASE_URL ekleyin.'
+            )
+        elif 'sqlite' in db_engine:
+            hints.append(
+                'Şu an SQLite kullanılıyor; üretim mail kurulumu için PostgreSQL ve DATABASE_URL tanımlanmalıdır.'
+            )
+
     return {
         'smtp_host': smtp_host,
         'smtp_port': smtp_port,
@@ -451,6 +487,8 @@ def collect_installer_mail_stack_status(
         'imap_ok': imap_ok,
         'docker_available': docker_available,
         'has_database_url': has_db_url,
+        'django_uses_postgresql': django_uses_postgresql,
+        'in_docker': in_docker,
         'postfix_container': pf_name,
         'dovecot_container': dv_name,
         'postfix_running': postfix_running,
@@ -459,6 +497,7 @@ def collect_installer_mail_stack_status(
         'can_auto_provision': can_auto,
         'install_profile': prof or install_profile,
         'params_preview': params_preview,
+        'hints': hints,
     }
 
 

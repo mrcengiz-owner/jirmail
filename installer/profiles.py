@@ -135,7 +135,13 @@ def install_modes_for_ui(cap: Dict[str, Any]) -> List[Dict[str, Any]]:
                 else (
                     'JIR_MANAGED_INSTALL=1: Docker orkestrasyonu bilinçli olarak kapalı.'
                     if forced
-                    else 'Docker API erişilemiyor. Tam stack için DOCKER_HOST veya /var/run/docker.sock gerekir.'
+                    else (
+                        'Bu mod kurulum sırasında sunucuya Docker ile konteyner açmak için Docker API gerektirir. '
+                        'Coolify’da uygulama servisinizde /var/run/docker.sock genelde yoktur → bu seçenek kilitlenir. '
+                        'Çözüm: (1) Coolify Service → Volume: host /var/run/docker.sock → container /var/run/docker.sock '
+                        '(yalnız güvendiğiniz sunucuda; güvenlik riskidir), veya (2) “Ortam veritabanı” + Postgres/mail için '
+                        'ayrı Coolify Compose veya Dockerfile stack kullanın.'
+                    )
                 )
             ),
         },
