@@ -281,8 +281,105 @@
                 </div>
             </div>
 
-            <!-- 5: DNS -->
+            <!-- 5: Mail servisleri -->
             <div x-show="step === 5" x-transition.opacity>
+                <h2 class="text-lg sm:text-xl font-semibold text-white mb-1">Mail servisleri</h2>
+                <p class="text-slate-500 text-sm mb-5">SMTP ve IMAP erişimini doğrular; ortam uygunsa Postfix ve Dovecot kurulumunu başlatabilirsiniz.</p>
+
+                <div x-show="mailLoading" class="text-center py-10 text-slate-400 text-sm">Durum kontrol ediliyor…</div>
+
+                <div x-show="!mailLoading && mailStatus" class="space-y-4">
+                    <div x-show="installProfile === 'docker_stack'"
+                         class="rounded-xl border border-info-500/25 bg-info-500/10 p-4 text-sm text-info-200/95 flex gap-2.5">
+                        <svg class="w-5 h-5 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                        </svg>
+                        <p>Bu modda Postfix ve Dovecot tam kurulum akışında oluşturulur. Aşağıdaki sonuçlar yalnızca şu anki sunucu durumu için bilgilendirmedir.</p>
+                    </div>
+
+                    <div class="rounded-xl border border-slate-800 bg-slate-900/60 p-4 space-y-3 text-sm">
+                        <div class="flex flex-wrap items-center justify-between gap-2">
+                            <span class="text-slate-400">SMTP (submission)</span>
+                            <span class="font-medium tabular-nums"
+                                  :class="mailStatus.smtp_ok ? 'text-success-400' : 'text-danger-400'"
+                                  x-text="mailStatus.smtp_ok ? 'Erişilebilir' : 'Kapalı / erişilemiyor'"></span>
+                        </div>
+                        <p class="text-[11px] text-slate-500 font-mono -mt-1"
+                           x-text="(mailStatus.smtp_host || '—') + ':' + (mailStatus.smtp_port || '')"></p>
+                        <div class="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-800">
+                            <span class="text-slate-400">IMAP (TLS)</span>
+                            <span class="font-medium tabular-nums"
+                                  :class="mailStatus.imap_ok ? 'text-success-400' : 'text-danger-400'"
+                                  x-text="mailStatus.imap_ok ? 'Erişilebilir' : 'Kapalı / erişilemiyor'"></span>
+                        </div>
+                        <p class="text-[11px] text-slate-500 font-mono -mt-1"
+                           x-text="(mailStatus.imap_host || '—') + ':' + (mailStatus.imap_port || '')"></p>
+                        <div class="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-800">
+                            <span class="text-slate-400">Docker API</span>
+                            <span class="font-medium"
+                                  :class="mailStatus.docker_available ? 'text-success-400' : 'text-slate-500'"
+                                  x-text="mailStatus.docker_available ? 'Kullanılabilir' : 'Yok / erişilemiyor'"></span>
+                        </div>
+                        <div class="flex flex-wrap items-center justify-between gap-2">
+                            <span class="text-slate-400">PostgreSQL (DATABASE_URL)</span>
+                            <span class="font-medium"
+                                  :class="mailStatus.has_database_url ? 'text-success-400' : 'text-danger-400'"
+                                  x-text="mailStatus.has_database_url ? 'Tanımlı' : 'Tanımlı değil'"></span>
+                        </div>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-2 border-t border-slate-800 text-xs text-slate-500">
+                            <p><span class="text-slate-600">Postfix:</span> <span class="text-slate-300 font-mono" x-text="mailStatus.postfix_container"></span>
+                                — <span x-text="mailStatus.postfix_running ? 'çalışıyor' : 'çalışmıyor'"></span></p>
+                            <p><span class="text-slate-600">Dovecot:</span> <span class="text-slate-300 font-mono" x-text="mailStatus.dovecot_container"></span>
+                                — <span x-text="mailStatus.dovecot_running ? 'çalışıyor' : 'çalışmıyor'"></span></p>
+                        </div>
+                    </div>
+
+                    <div x-show="installProfile === 'platform_env' && mailStatus.can_auto_provision && !mailStatus.mail_ready"
+                         class="space-y-3 rounded-xl border border-slate-800 bg-slate-900/50 p-4">
+                        <p class="text-sm text-slate-300 font-medium">Otomatik kurulum</p>
+                        <p class="text-xs text-slate-500">Docker ve DATABASE_URL hazırsa aşağıdaki düğme ile Postfix ve Dovecot konteynerleri oluşturulur. Postgres ile aynı Docker ağında olmaları için genelde <code class="text-primary-400">MAIL_STACK_DOCKER_NETWORK</code> veya burada ağı belirtin.</p>
+                        <div>
+                            <label for="mail-docker-net" class="label">Docker ağı (isteğe bağlı)</label>
+                            <input id="mail-docker-net" type="text" x-model="mailDockerNetwork"
+                                   placeholder="Örn. coolify — boşsa ortam değişkeni kullanılır"
+                                   autocapitalize="off" spellcheck="false" class="input">
+                        </div>
+                        <button type="button" class="btn btn-primary btn-sm"
+                                @click="provisionMailStack()"
+                                :disabled="mailProvisionLoading || !domain">
+                            <span x-show="!mailProvisionLoading">Postfix ve Dovecot’u kur</span>
+                            <span x-show="mailProvisionLoading" class="inline-flex items-center gap-2">
+                                <svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg>
+                                Kuruluyor…
+                            </span>
+                        </button>
+                    </div>
+
+                    <div x-show="mailProvisionMessages"
+                         class="rounded-xl border border-slate-800 bg-slate-950/80 p-3">
+                        <p class="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-2">Kurulum çıktısı</p>
+                        <pre class="install-log text-slate-400 whitespace-pre-wrap max-h-40 overflow-y-auto custom-scrollbar" x-text="mailProvisionMessages"></pre>
+                    </div>
+
+                    <div class="flex flex-wrap items-center gap-2">
+                        <button type="button" class="btn btn-secondary btn-sm"
+                                @click="refreshMailStatus()" :disabled="mailLoading">Yeniden kontrol et</button>
+                        <span x-show="mailStatus.mail_ready" class="text-xs text-success-400 font-medium">Mail uçları hazır görünüyor.</span>
+                    </div>
+
+                    <label x-show="installProfile !== 'docker_stack' && !mailStatus.mail_ready"
+                           class="flex items-start gap-3 cursor-pointer rounded-xl border border-slate-800 bg-slate-900/40 p-4">
+                        <input type="checkbox" x-model="mailSkipped" class="mt-1 shrink-0 accent-primary-500">
+                        <span class="text-sm text-slate-300">
+                            Mail konteynerleri olmadan devam et
+                            <span class="block text-xs text-slate-500 mt-1">Kurulumdan sonra <code class="text-primary-400">provision_mail_stack</code> veya yönetim API’si ile tamamlayabilirsiniz.</span>
+                        </span>
+                    </label>
+                </div>
+            </div>
+
+            <!-- 6: DNS -->
+            <div x-show="step === 6" x-transition.opacity>
                 <h2 class="text-lg sm:text-xl font-semibold text-white mb-1">DNS sağlayıcı</h2>
                 <p class="text-slate-500 text-sm mb-5">MX, SPF, DKIM, DMARC yönetimi</p>
 
@@ -332,8 +429,8 @@
                 </div>
             </div>
 
-            <!-- 6: Özet -->
-            <div x-show="step === 6" x-transition.opacity>
+            <!-- 7: Özet -->
+            <div x-show="step === 7" x-transition.opacity>
                 <h2 class="text-lg sm:text-xl font-semibold text-white mb-1">Özet</h2>
                 <p class="text-slate-500 text-sm mb-5">Seçiminize göre yapılacaklar</p>
 
@@ -355,6 +452,10 @@
                             <span class="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">DNS</span>
                             <p class="text-white font-medium capitalize" x-text="dnsProvider"></p>
                         </div>
+                        <div class="sm:col-span-2">
+                            <span class="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Mail</span>
+                            <p class="text-white font-medium text-sm" x-text="mailSummaryLine()"></p>
+                        </div>
                     </div>
                 </div>
 
@@ -368,8 +469,8 @@
                 </div>
             </div>
 
-            <!-- 7: İlerleme -->
-            <div x-show="step === 7" x-transition.opacity>
+            <!-- 8: İlerleme -->
+            <div x-show="step === 8" x-transition.opacity>
                 <h2 class="text-lg sm:text-xl font-semibold text-white mb-1">Kurulum çalışıyor</h2>
                 <p class="text-slate-500 text-sm mb-5">Arka plan adımları</p>
 
@@ -434,22 +535,22 @@
             </div>
 
             <div class="flex items-center justify-between gap-2 mt-6 pt-5 border-t border-slate-800">
-                <button type="button" x-show="step > 1 && step < 7" @click="step--" class="btn btn-secondary">
+                <button type="button" x-show="step > 1 && step < 8" @click="step--" class="btn btn-secondary">
                     <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
                     </svg>
                     Geri
                 </button>
-                <div x-show="step === 1 || step === 7" class="w-0"></div>
+                <div x-show="step === 1 || step === 8" class="w-0"></div>
 
-                <button type="button" x-show="step < 6" @click="nextStep()" :disabled="!canProceed()" class="btn btn-primary ml-auto">
+                <button type="button" x-show="step < 7" @click="nextStep()" :disabled="!canProceed()" class="btn btn-primary ml-auto">
                     İlerle
                     <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
                     </svg>
                 </button>
 
-                <button type="button" x-show="step === 6 && overallStatus !== 'running'" @click="startInstall()" class="btn btn-primary ml-auto">
+                <button type="button" x-show="step === 7 && overallStatus !== 'running'" @click="startInstall()" class="btn btn-primary ml-auto">
                     Kurulumu başlat
                     <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
@@ -457,7 +558,7 @@
                 </button>
             </div>
 
-            <div x-show="errorMessage && step !== 7"
+            <div x-show="errorMessage && step !== 8"
                  x-cloak
                  class="mt-4 bg-danger-500/10 border border-danger-500/20 rounded-xl p-3 flex items-start gap-2.5">
                 <svg class="h-5 w-5 text-danger-400 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -479,8 +580,8 @@
 function setupWizard() {
     return {
         step: 1,
-        totalSteps: 7,
-        stepLabels: ['Mod', 'Domain', 'Admin', 'Güvenlik', 'DNS', 'Özet', 'Kurulum'],
+        totalSteps: 8,
+        stepLabels: ['Mod', 'Domain', 'Admin', 'Güvenlik', 'Mail', 'DNS', 'Özet', 'Kurulum'],
 
         installProfile: 'docker_stack',
         domain: '',
@@ -525,7 +626,13 @@ function setupWizard() {
         eventSource: null,
         pollInterval: null,
 
-        profileLabel() {
+        mailStatus: null,
+        mailLoading: false,
+        mailProvisionLoading: false,
+        mailSkipped: false,
+        mailProvisionOk: false,
+        mailDockerNetwork: '',
+        mailProvisionMessages: '',
             const m = this.installModesList().find((x) => x.id === this.installProfile);
             if (m) return m.title;
             if (this.installProfile === 'docker_stack') return 'Docker ile tam kurulum';
@@ -590,6 +697,7 @@ function setupWizard() {
         summaryLines() {
             if (this.installProfile === 'docker_stack') {
                 return [
+                    'Mail adımında SMTP/IMAP durumu bilgilendirilir (Postfix/Dovecot kurulumda oluşturulur)',
                     'Docker network ve volume hazırlığı',
                     'Servisler sırayla: imaj çek → konteyner (akıllı veya zorunlu yenile) → sağlık doğrulama',
                     'Migration ve admin hesabı',
@@ -597,9 +705,20 @@ function setupWizard() {
                 ];
             }
             if (this.installProfile === 'platform_env') {
-                return ['Docker orkestrasyonu yok', 'Mevcut PostgreSQL üzerinde migration', 'Admin hesabı ve SystemConfig', 'DNS yapılandırması'];
+                return [
+                    'Mail adımında SMTP/IMAP kontrolü ve mümkünse otomatik Postfix/Dovecot',
+                    'Mevcut PostgreSQL üzerinde migration',
+                    'Admin hesabı ve SystemConfig',
+                    'DNS yapılandırması',
+                ];
             }
-            return ['Docker orkestrasyonu yok', 'Girdiğiniz PostgreSQL ile migration (alt süreç)', 'Admin hesabı ve SystemConfig', 'Coolify DATABASE_URL aynı DB olmalı', 'DNS yapılandırması'];
+            return [
+                'Mail adımında SMTP/IMAP kontrolü (kurulumdan sonra `provision_mail_stack` ile tamamlanabilir)',
+                'Girdiğiniz PostgreSQL ile migration (alt süreç)',
+                'Admin hesabı ve SystemConfig',
+                'Coolify DATABASE_URL aynı DB olmalı',
+                'DNS yapılandırması',
+            ];
         },
 
         async init() {
@@ -664,11 +783,92 @@ function setupWizard() {
                 }
                 return true;
             }
+            if (this.step === 5) {
+                if (this.mailLoading) return false;
+                if (!this.mailStatus) return false;
+                if (this.installProfile === 'docker_stack') return true;
+                if (this.mailStatus.mail_ready) return true;
+                if (this.mailSkipped) return true;
+                if (this.mailProvisionOk) return true;
+                if (!this.mailStatus.can_auto_provision) return true;
+                return false;
+            }
             return true;
         },
 
+        mailSummaryLine() {
+            if (this.installProfile === 'docker_stack') {
+                return 'Tam kurulumda Postfix/Dovecot oluşturulacak';
+            }
+            if (!this.mailStatus) return '—';
+            if (this.mailStatus.mail_ready) return 'SMTP/IMAP hazır';
+            if (this.mailSkipped) return 'Atlandı — sonra tamamlanabilir';
+            if (this.mailProvisionOk) return 'Kurulum tetiklendi — bağlantı için yeniden kontrol';
+            if (this.mailStatus.can_auto_provision) return 'Bekliyor — kur veya atla';
+            return 'Otomatik kurulum uygun değil — sonra YAML/CLI';
+        },
+
+        async refreshMailStatus() {
+            this.mailLoading = true;
+            try {
+                const q = new URLSearchParams({
+                    domain: this.domain || '',
+                    install_profile: this.installProfile || 'docker_stack'
+                });
+                const res = await fetch('/api/installer/mail-stack-status?' + q.toString());
+                this.mailStatus = await res.json();
+            } catch (e) {
+                this.mailStatus = null;
+                this.errorMessage = 'Mail durumu alınamadı: ' + (e.message || String(e));
+            } finally {
+                this.mailLoading = false;
+            }
+        },
+
+        async provisionMailStack() {
+            this.mailProvisionLoading = true;
+            this.mailProvisionMessages = '';
+            const prevMainErr = this.errorMessage;
+            try {
+                const res = await fetch('/api/installer/mail-stack-provision', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        domain: this.domain,
+                        mail_hostname: 'mail.' + this.domain,
+                        docker_network: (this.mailDockerNetwork || '').trim(),
+                        skip_busy_ports: true
+                    })
+                });
+                const data = await res.json();
+                const msgs = data.messages || [];
+                if (msgs.length) this.mailProvisionMessages = msgs.join('\n');
+                if (data.success) {
+                    this.mailProvisionOk = true;
+                    if (prevMainErr && !data.error) this.errorMessage = '';
+                } else if (data.mode === 'no_docker') {
+                    this.errorMessage = data.error || 'Docker API yok — üretilen YAML’ı Coolify’da ayrı stack olarak deploy edin.';
+                } else {
+                    this.errorMessage = data.error || 'Mail kurulumu başarısız.';
+                }
+                await this.refreshMailStatus();
+            } catch (e) {
+                this.errorMessage = 'Mail kurulum isteği başarısız: ' + (e.message || String(e));
+            } finally {
+                this.mailProvisionLoading = false;
+            }
+        },
+
         nextStep() {
-            if (this.canProceed()) this.step++;
+            if (!this.canProceed()) return;
+            const prev = this.step;
+            if (prev === 4) {
+                this.mailSkipped = false;
+                this.mailProvisionOk = false;
+                this.mailProvisionMessages = '';
+            }
+            this.step++;
+            if (prev === 4) this.refreshMailStatus();
         },
 
         async testDb() {
@@ -740,7 +940,7 @@ function setupWizard() {
                 }
                 if (data.status === 'success') {
                     this.runId = data.run_id;
-                    this.step = 7;
+                    this.step = 8;
                     this.overallStatus = 'running';
                     this.openStream();
                 } else {

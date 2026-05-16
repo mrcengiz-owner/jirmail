@@ -249,11 +249,11 @@ def collect_deploy_readiness(*, session_role: str | None = None) -> dict[str, An
         overall = _worst_status(overall, p_st)
 
     # —— SMTP / IMAP erişilebilirlik ——
-    for sk, label, default_port in (
-        ('postfix', 'SMTP (Postfix)', 587),
-        ('dovecot', 'IMAP (Dovecot)', 993),
+    for sk, label, default_port, kw in (
+        ('postfix', 'SMTP submission (Postfix 587)', int(getattr(settings, 'SMTP_PORT', 587)), {'auth_submission': True}),
+        ('dovecot', 'IMAP (Dovecot)', int(getattr(settings, 'IMAP_PORT', 993)), {}),
     ):
-        host, port = resolve_mail_endpoint(sk, default_port)
+        host, port = resolve_mail_endpoint(sk, default_port, **kw)
         reachable = tcp_reachable(host, port, timeout=2.0)
         m_st = CHECK_OK if reachable else CHECK_ERR
         m_msg = f'{label}: {host}:{port} — {"erişilebilir" if reachable else "erişilemiyor"}.'

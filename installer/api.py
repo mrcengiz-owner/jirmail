@@ -1,9 +1,11 @@
 """Installer için django-ninja router.
 
 Endpoint'ler:
-    GET  /api/installer/bootstrap      Ortam yetenekleri + install_modes + önerilen profil
-    POST /api/installer/test-db        PostgreSQL bağlantı testi (kurulum öncesi)
-    POST /api/installer/start          Kurulum çalışmasını başlatır (run_id döner)
+    GET  /api/installer/bootstrap           Ortam yetenekleri + install_modes + önerilen profil
+    POST /api/installer/test-db           PostgreSQL bağlantı testi (kurulum öncesi)
+    GET  /api/installer/mail-stack-status Mail SMTP/IMAP + Docker durumu (sihirbaz)
+    POST /api/installer/mail-stack-provision Postfix+Dovecot Docker kurulumu (sihirbaz)
+    POST /api/installer/start             Kurulum çalışmasını başlatır (run_id döner)
     ...
 
 install_profile: canonical değerler docker_stack | platform_env | platform_manual
@@ -21,6 +23,7 @@ from pydantic import Field
 
 from .models import InstallationRun, InstallationStep
 from .orchestrator import _resolve_profile_and_client, run_installation
+from .mail_stack import collect_installer_mail_stack_status, provision_mail_stack_docker
 from .port_check import scan_mail_stack_ports
 from .profiles import (
     PROFILE_DOCKER_STACK,
@@ -155,6 +158,41 @@ def test_db_connection(request: HttpRequest, data: TestDbSchema):
         return {'success': True, 'message': 'Bağlantı başarılı.'}
     except Exception as exc:
         return {'success': False, 'message': str(exc)}
+
+
+@router.get('/mail-stack-status', summary='Mail servisleri durumu (sihirbaz)')
+def mail_stack_status(request: HttpRequest, domain: str = '', install_profile: str = ''):
+    """SMTP/IMAP kontrolü, Docker konteyner durumu ve otomatik kurulum uygunluğu."""
+    try:
+        canonical = normalize_install_profile(install_profile or 'docker_stack')
+    except ValueError:
+        canonical = 'docker_stack'
+    return collect_installer_mail_stack_status(
+        wizard_domain=domain.strip(),
+        install_profile=canonical,
+    )
+
+
+class MailStackProvisionSchema(Schema):
+    domain: str = ''
+    mail_hostname: str = ''
+    docker_network: str = ''
+    skip_busy_ports: bool = True
+
+
+@router.post('/mail-stack-provision', summary='Postfix+Dovecot kur (Docker)')
+@csrf_exempt
+def mail_stack_provision(request: HttpRequest, data: MailStackProvisionSchema):
+    dom = (data.domain or '').strip()
+    mh = (data.mail_hostname or '').strip()
+    net = (data.docker_network or '').strip()
+    return provision_mail_stack_docker(
+        skip_busy_ports=bool(data.skip_busy_ports),
+        pull_images=True,
+        mail_domain_override=dom or None,
+        mail_hostname_override=mh or None,
+        docker_network_override=net or None,
+    )
 
 
 @router.post('/start', summary='Kurulumu başlat')
@@ -394,3 +432,38 @@ def tls_request(request: HttpRequest, data: TLSRequestSchema):
         return result
     except Exception as exc:
         return {'success': False, 'message': str(exc)}
+
+
+@router.get('/mail-stack-status', summary='Mail servisleri durumu (sihirbaz)')
+def mail_stack_status(request: HttpRequest, domain: str = '', install_profile: str = ''):
+    """SMTP/IMAP kontrolü, Docker konteyner durumu ve otomatik kurulum uygunluğu."""
+    try:
+        canonical = normalize_install_profile(install_profile or 'docker_stack')
+    except ValueError:
+        canonical = 'docker_stack'
+    return collect_installer_mail_stack_status(
+        wizard_domain=domain.strip(),
+        install_profile=canonical,
+    )
+
+
+class MailStackProvisionSchema(Schema):
+    domain: str = ''
+    mail_hostname: str = ''
+    docker_network: str = ''
+    skip_busy_ports: bool = True
+
+
+@router.post('/mail-stack-provision', summary='Postfix+Dovecot kur (Docker)')
+@csrf_exempt
+def mail_stack_provision(request: HttpRequest, data: MailStackProvisionSchema):
+    dom = (data.domain or '').strip()
+    mh = (data.mail_hostname or '').strip()
+    net = (data.docker_network or '').strip()
+    return provision_mail_stack_docker(
+        skip_busy_ports=bool(data.skip_busy_ports),
+        pull_images=True,
+        mail_domain_override=dom or None,
+        mail_hostname_override=mh or None,
+        docker_network_override=net or None,
+    )

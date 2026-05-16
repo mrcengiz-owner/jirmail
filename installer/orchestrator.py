@@ -832,7 +832,8 @@ def run_installation(run_id: str) -> None:
             if profile == PROFILE_PLATFORM_ENV:
                 managed_rec.log(
                     'DATABASE_URL ile mevcut PostgreSQL kullanılıyor. '
-                    'Postfix/Dovecot vb. ayrı dağıtımlarda tanımlanmalıdır.'
+                    'Postfix/Dovecot: `python manage.py provision_mail_stack --print-compose` veya '
+                    '`provision_mail_stack --apply-docker` (Docker soketi varsa).'
                 )
             else:
                 managed_rec.log(

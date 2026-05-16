@@ -743,6 +743,15 @@ def check_system_requirements(request):
 @router.get("/docker-diagnostics", summary="Docker keşif tanısı (FULL oturum)")
 def docker_diagnostics(request):
     """Panel hangi konteyner adlarını çözüyor; Docker listesinde postfix/dovecot vb. görünüyor mu."""
+    from management.coolify_discovery import (
+        mail_tcp_endpoints,
+        network_ips_from_attrs,
+        network_overlap_hint,
+        relevant_platform_env,
+        suggested_coolify_env_block,
+    )
+    from management.deploy_readiness import detect_deployment_platform
+
     if not request.session.get('is_logged_in'):
         return {"status": "error", "message": "Oturum gerekli."}
     if request.session.get('role') != 'FULL':
@@ -777,11 +786,23 @@ def docker_diagnostics(request):
             if any(x in nm or x in img for x in (
                 'postfix', 'dovecot', 'smtp', 'imap', 'redis', 'postgres', 'jir_', 'mail',
             )):
+                try:
+                    c.reload()
+                    attrs = c.attrs or {}
+                except Exception:
+                    attrs = (c.attrs or {})
+                nets = network_ips_from_attrs(attrs)
+                img_full = ''
+                try:
+                    img_full = (((attrs.get('Config') or {}).get('Image') or img or '') or '').lower()
+                except Exception:
+                    img_full = img or ''
                 out['mail_related_containers'].append({
                     'name': c.name,
                     'status': getattr(c, 'status', ''),
-                    'image': (img or '')[:160],
+                    'image': img_full[:160],
                     'compose_service': _compose_service_name(c),
+                    'network_ips': nets,
                 })
         out['mail_related_containers'] = sorted(
             out['mail_related_containers'],
@@ -800,15 +821,23 @@ def docker_diagnostics(request):
     if out.get('docker_ping') and not out.get('mail_related_containers'):
         out['hint'] = (
             'Bu Docker API listesinde postfix/dovecot/postgres/redis adında konteyner yok. '
-            'Mail servisleri başka bir sunucuda veya başka bir Docker host\'undaysa keşif çalışmaz — '
-            'Coolify\'da ortama JIR_CONTAINER_POSTFIX vb. yazın veya panelde /settings/ sayfasından '
-            'docker_container_map ile tam konteyner adlarını kaydedin.'
+            'Harici Postgres kullanıyorsanız: `python manage.py provision_mail_stack --print-compose` ile YAML üretin '
+            've Coolify’da ayrı stack olarak deploy edin. '
+            'Mail servisleri başka sunucudaysa SMTP_HOST/IMAP_HOST kullanın.'
         )
     elif out.get('docker_error'):
         out['hint'] = (
             'Docker API erişilemiyor. DOCKER_HOST veya /var/run/docker.sock mount kontrol edin. '
             'Erişim yoksa yalnızca ortam değişkeni ile sabit ad verilebilir.'
         )
+
+    out['deployment_platform'] = detect_deployment_platform()
+    out['platform_env_summary'] = relevant_platform_env()
+    out['mail_tcp'] = mail_tcp_endpoints()
+    out['suggested_env_snippet'] = suggested_coolify_env_block({'containers': out['mail_related_containers']})
+    oh = network_overlap_hint(out['mail_related_containers'])
+    if oh:
+        out['network_overlap_hint'] = oh
 
     return out
 
@@ -825,6 +854,34 @@ def deploy_readiness_api(request):
 
     report = collect_deploy_readiness()
     return {"status": "ok", **report}
+
+
+@router.get("/mail-stack-compose", summary="Postfix+Dovecot için compose YAML (FULL)")
+def mail_stack_compose_api(request):
+    """DATABASE_URL + MAIL_DOMAIN ile Coolify’a yapıştırılabilir docker-compose üretir."""
+    if not request.session.get('is_logged_in'):
+        return {"status": "error", "message": "Oturum gerekli."}
+    if request.session.get('role') != 'FULL':
+        return {"status": "error", "message": "Bu işlem için yönetici (FULL) yetkisi gerekir."}
+
+    from installer.mail_stack import (
+        mail_stack_instructions_markdown,
+        mail_stack_params_from_env,
+        mail_stack_params_summary,
+        render_mail_stack_compose_yaml,
+    )
+
+    try:
+        p = mail_stack_params_from_env()
+    except Exception as exc:
+        return {"status": "error", "message": str(exc)}
+
+    return {
+        "status": "ok",
+        "compose_yaml": render_mail_stack_compose_yaml(p),
+        "params": mail_stack_params_summary(p),
+        "instructions_md": mail_stack_instructions_markdown(),
+    }
 
 
 @router.get("/system-settings", summary="Kurulum sonrası sistem ayarları (FULL)")
