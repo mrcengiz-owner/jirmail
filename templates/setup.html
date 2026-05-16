@@ -633,6 +633,8 @@ function setupWizard() {
         mailProvisionOk: false,
         mailDockerNetwork: '',
         mailProvisionMessages: '',
+
+        profileLabel() {
             const m = this.installModesList().find((x) => x.id === this.installProfile);
             if (m) return m.title;
             if (this.installProfile === 'docker_stack') return 'Docker ile tam kurulum';
