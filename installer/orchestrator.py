@@ -250,14 +250,30 @@ def _get_docker_client_optional():
         return None
 
 
+def _msg_docker_daemon_unreachable() -> str:
+    return (
+        'Docker daemon API’sine bu süreçten ulaşılamıyor (unix:///var/run/docker.sock veya '
+        '`DOCKER_HOST`). Coolify için: servisi düzenleyin → Volume ekleyin: host '
+        '`/var/run/docker.sock`, mount path `/var/run/docker.sock` → yeniden deploy (yalnız '
+        'güvendiğiniz VPS; soket paylaşımı risklidir). Veya sihirbazda Postgres için '
+        '“Ortam veritabanı (DATABASE_URL)” veya “Manuel PostgreSQL” kullanın.'
+    )
+
+
+def _msg_docker_stack_profile_no_api() -> str:
+    return (
+        '“Docker ile tam kurulum” seçildi ancak konteynerden Docker API kullanılamıyor; bu mod '
+        'kurulumda imaj/containers oluşturmak için zorunludur. Coolify çoğu uygulama servisinde '
+        'Docker soketini vermez — mount etmedikçe bu hata oluşur. Soketi bağlayın (yukarıdaki '
+        'yol) veya kurulumu “Ortam DATABASE_URL” / “Manuel PostgreSQL” ile tekrarlayın.'
+    )
+
+
 def _get_docker_client():
     """Docker SDK client — yoksa RuntimeError (geri uyumluluk)."""
     client = _get_docker_client_optional()
     if client is None:
-        raise RuntimeError(
-            'Docker daemon erişilemiyor. Coolify / PaaS için DATABASE_URL tanımlayın '
-            '(yönetilen kurulum) veya /var/run/docker.sock mount edin / DOCKER_HOST ayarlayın.'
-        )
+        raise RuntimeError(_msg_docker_daemon_unreachable())
     return client
 
 
@@ -286,10 +302,7 @@ def _resolve_profile_and_client(config: dict):
     if p == PROFILE_DOCKER_STACK:
         c = _get_docker_client_optional()
         if c is None:
-            raise RuntimeError(
-                '“Docker ile tam kurulum” seçildi ancak Docker API erişilemiyor. '
-                'Docker soketini mount edin veya platform / ortam veritabanı modunu seçin.'
-            )
+            raise RuntimeError(_msg_docker_stack_profile_no_api())
         return PROFILE_DOCKER_STACK, c
     if p == PROFILE_PLATFORM_ENV:
         if not os.getenv('DATABASE_URL', '').strip():
