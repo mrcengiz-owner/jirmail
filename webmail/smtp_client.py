@@ -22,7 +22,11 @@ def send_mail(account, password: str, *, to: list[str] | str, subject: str, body
 
     attachments: [{'filename': 'a.pdf', 'mime_type': 'application/pdf', 'content': bytes}]
     """
-    host, port = resolve_mail_endpoint('postfix', int(getattr(settings, 'SMTP_PORT', 587)))
+    host, port = resolve_mail_endpoint(
+        'postfix',
+        int(getattr(settings, 'SMTP_PORT', 587)),
+        auth_submission=True,
+    )
 
     msg = EmailMessage()
     msg['From'] = formataddr((account.email.split('@')[0], account.email))
@@ -73,18 +77,42 @@ def send_mail(account, password: str, *, to: list[str] | str, subject: str, body
                 'Coolify’da panel konteyneri ile aynı Docker ağında çalıştırın veya gerçek postfix host adını yazın.'
             )
         return {'success': False, 'message': f'{exc}{hint}'}
-    except (ConnectionRefusedError, OSError) as exc:
-        if isinstance(exc, ConnectionRefusedError) or getattr(exc, 'errno', None) in (111, 61, 10061):
+    except ConnectionRefusedError:
+        return {
+            'success': False,
+            'message': (
+                f'{host}:{port} bağlantısı reddedildi. '
+                f'Postfix konteyneri çalışıyor mu? (`docker ps | grep postfix`) '
+                f'Host publish yoksa .env: SMTP_HOST=<köprü IP> veya kurulumda 587 host portunu '
+                f'açıp jir_postfix\'i yeniden oluşturun. Docker IP: '
+                f'`docker inspect jir_postfix --format "{{{{json .NetworkSettings.Networks}}}}"`'
+            ),
+        }
+    except smtplib.SMTPException as exc:
+        # Python 3.12+: SMTPNotSupportedError aynı zamanda OSError alt sınıfıdır;
+        # geniş OSError bloğunda yakalanıp yeniden fırlatılmamalı.
+        if isinstance(exc, smtplib.SMTPNotSupportedError):
             return {
                 'success': False,
                 'message': (
-                    f'{host}:{port} bağlantısı reddedildi. '
-                    f'Postfix konteyneri çalışıyor mu? (`docker ps | grep postfix`) '
-                    f'Host publish yoksa .env: SMTP_HOST=<köprü IP> veya kurulumda 587/25 portlarını boşaltıp '
-                    f'jir_postfix\'i yeniden oluşturun. Docker IP: '
-                    f'`docker inspect jir_postfix --format "{{{{json .NetworkSettings.Networks}}}}"`'
+                    'SMTP sunucusu kimlik doğrulama (AUTH) sunmuyor veya yanlış dinleyiciye '
+                    f'bağlanılıyor ({host}:{port}). Gönderim için genelde **587 (submission)** '
+                    've SASL gerekir; 25 çoğu kurulumda istemci girişi kabul etmez. '
+                    '.env içinde SMTP_HOST ve SMTP_PORT=587 doğrulayın; Postfix tarafında '
+                    '`submission` / `smtpd_sasl_auth_enable` açık olmalı.'
                 ),
             }
-        raise
+        return {'success': False, 'message': str(exc)}
+    except OSError as exc:
+        errno = getattr(exc, 'errno', None)
+        if errno in (111, 61, 10061):
+            return {
+                'success': False,
+                'message': (
+                    f'{host}:{port} bağlantısı reddedildi (errno {errno}). '
+                    'Postfix çalışıyor mu ve submission portu erişilebilir mi kontrol edin.'
+                ),
+            }
+        return {'success': False, 'message': str(exc)}
     except Exception as exc:
         return {'success': False, 'message': str(exc)}

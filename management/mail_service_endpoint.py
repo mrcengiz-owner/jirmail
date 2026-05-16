@@ -101,8 +101,18 @@ def _env_host_port(service_key: str, default_port: int) -> tuple[str, int] | Non
     return host, port
 
 
-def resolve_mail_endpoint(service_key: str, default_port: int) -> tuple[str, int]:
-    """Mail servisi (host, port): env → Docker DNS adı → localhost → köprü IP."""
+def resolve_mail_endpoint(
+    service_key: str,
+    default_port: int,
+    *,
+    auth_submission: bool = False,
+) -> tuple[str, int]:
+    """Mail servisi (host, port): env → Docker DNS adı → localhost → köprü IP.
+
+    auth_submission=True (SMTP LOGIN gönderimi): yalnızca submission portu (örn. 587)
+    denenir; 25'e düşülmez — çoğu kurulumda 25 AUTH sunmaz ve Python 3.12'de
+    SMTPNotSupportedError üretir.
+    """
     sk = service_key.strip().lower()
     env_hp = _env_host_port(sk, default_port)
     if env_hp:
@@ -112,11 +122,12 @@ def resolve_mail_endpoint(service_key: str, default_port: int) -> tuple[str, int
         name = merged_container_name(sk) or f'jir_{sk}'
         return name, default_port
 
-    ports_to_try = [default_port]
-    if sk == 'postfix' and default_port not in (25,):
-        ports_to_try.append(25)
-    elif sk == 'postfix' and default_port == 587:
-        ports_to_try = [587, 25]
+    if sk == 'postfix' and auth_submission:
+        ports_to_try = [default_port]
+    else:
+        ports_to_try = [default_port]
+        if sk == 'postfix' and default_port not in (25,):
+            ports_to_try.append(25)
 
     for port in ports_to_try:
         if tcp_reachable('127.0.0.1', port):

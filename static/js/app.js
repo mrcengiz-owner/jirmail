@@ -1013,6 +1013,14 @@
                 loadingMails: false,
                 eventSource: null,
                 _mailRefreshTimer: null,
+                _searchTimer: null,
+                _folderLabels: {
+                    inbox: 'Gelen Kutusu',
+                    starred: 'Yıldızlı',
+                    sent: 'Gönderilen',
+                    drafts: 'Taslaklar',
+                    trash: 'Çöp Kutusu'
+                },
 
                 init: function() {
                     var self = this;
@@ -1022,14 +1030,26 @@
                         self.selectedMail = null;
                         self.fetchMails();
                     });
+                    var stopSearchWatch = this.$watch('searchQuery', function() {
+                        if (self._searchTimer) clearTimeout(self._searchTimer);
+                        self._searchTimer = setTimeout(function() {
+                            self._searchTimer = null;
+                            self.page = 1;
+                            self.selectedMail = null;
+                            self.fetchMails();
+                        }, 400);
+                    });
                     this.openStream();
                     return function() {
-                        if (typeof stopFolderWatch === 'function') {
-                            stopFolderWatch();
-                        }
+                        if (typeof stopFolderWatch === 'function') stopFolderWatch();
+                        if (typeof stopSearchWatch === 'function') stopSearchWatch();
                         if (self._mailRefreshTimer) {
                             clearTimeout(self._mailRefreshTimer);
                             self._mailRefreshTimer = null;
+                        }
+                        if (self._searchTimer) {
+                            clearTimeout(self._searchTimer);
+                            self._searchTimer = null;
                         }
                         if (self.eventSource) {
                             try { self.eventSource.close(); } catch(e) {}
@@ -1038,11 +1058,23 @@
                     };
                 },
 
+                switchFolder: function(name) {
+                    this.currentFolder = name;
+                    this.mobileView = 'list';
+                    this.selectedMail = null;
+                    this.page = 1;
+                },
+
+                folderLabel: function() {
+                    return this._folderLabels[this.currentFolder] || this.currentFolder;
+                },
+
                 imapFolder: function() {
                     return FOLDER_MAP[this.currentFolder] || 'INBOX';
                 },
 
-                fetchMails: async function() {
+                fetchMails: async function(allowSync) {
+                    if (allowSync === undefined) allowSync = true;
                     this.loadingMails = true;
                     try {
                         var url = '/api/mail/messages?folder=' + encodeURIComponent(this.imapFolder()) +
@@ -1081,8 +1113,10 @@
                         this.hasMore = (this.page * this.pageSize) < (data.total || 0);
                         this.updateUnread();
 
-                        if (this.mails.length === 0 && this.page === 1 && this.currentFolder === 'inbox') {
+                        if (allowSync && this.mails.length === 0 && this.page === 1 &&
+                            !this.searchQuery && this.currentFolder !== 'starred') {
                             await this.syncInbox();
+                            return this.fetchMails(false);
                         }
                     } catch(e) {
                         console.error('Mail fetch error:', e);

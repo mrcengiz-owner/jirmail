@@ -42,3 +42,6 @@ staticfiles/
 *.egg-info/
 dist/
 build/
+
+# Node (repo'da frontend bundler yok; yanlışlıkla oluşan dizinler)
+node_modules/

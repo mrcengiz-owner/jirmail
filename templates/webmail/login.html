@@ -1,0 +1,87 @@
+{% extends 'webmail/base.html' %}
+{% load static %}
+
+{% block title %}Webmail Giriş — JîrCode{% endblock %}
+
+{% block body %}
+<div class="auth-container">
+    <div class="auth-card">
+        <div class="text-center mb-8 sm:mb-10">
+            <img src="{% static 'brand/logo-icon.svg' %}" alt="JîrCode"
+                 class="w-16 h-16 sm:w-20 sm:h-20 mx-auto mb-4 rounded-2xl shadow-2xl shadow-primary-500/30">
+            <h1 class="jir-wordmark text-2xl sm:text-3xl text-white">
+                Jîr<span class="jir-text-gradient">Code</span>
+                <span class="text-emerald-400 text-base sm:text-lg font-medium ml-1.5 tracking-[0.2em]">WEBMAIL</span>
+            </h1>
+            <p class="text-slate-500 mt-2 text-sm sm:text-base">Posta kutunuza güvenli erişim</p>
+        </div>
+
+        <div class="card" x-data="webmailLoginForm()">
+            <h2 class="text-lg sm:text-xl font-semibold text-white mb-1">Giriş yap</h2>
+            <p class="text-sm text-slate-500 mb-6">Mail hesabınızla oturum açın</p>
+
+            <form @submit.prevent="login()" novalidate class="space-y-5">
+                <div>
+                    <label for="email" class="label">E-posta</label>
+                    <input id="email" type="email" x-model="email" autocomplete="username" required
+                           placeholder="siz@domain.com" class="input" :class="emailError ? 'input-error' : ''">
+                </div>
+                <div>
+                    <label for="password" class="label">Şifre</label>
+                    <input id="password" type="password" x-model="password" autocomplete="current-password" required
+                           placeholder="••••••••" class="input" :class="passwordError ? 'input-error' : ''">
+                </div>
+                <div x-show="errorMessage" x-cloak class="rounded-xl bg-danger-500/10 border border-danger-500/20 px-4 py-3 text-sm text-danger-300" x-text="errorMessage"></div>
+                <button type="submit" :disabled="isLoading" class="btn btn-primary w-full">
+                    <span x-text="isLoading ? 'Giriş yapılıyor...' : 'Webmail\'e gir'"></span>
+                </button>
+            </form>
+        </div>
+
+        <p class="text-center text-slate-600 text-sm mt-6">
+            <a href="{% url 'login' %}" class="text-primary-400 hover:text-primary-300 font-medium">Yönetim paneli girişi</a>
+        </p>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+function webmailLoginForm() {
+    return {
+        email: '',
+        password: '',
+        isLoading: false,
+        errorMessage: '',
+        emailError: false,
+        passwordError: false,
+        async login() {
+            this.emailError = false;
+            this.passwordError = false;
+            this.errorMessage = '';
+            if (!this.email) { this.emailError = true; this.errorMessage = 'E-posta gerekli'; return; }
+            if (!this.password) { this.passwordError = true; this.errorMessage = 'Şifre gerekli'; return; }
+            this.isLoading = true;
+            try {
+                const csrfToken = (document.querySelector('meta[name="csrf-token"]') || {}).content || '';
+                const res = await fetch('/login-success/', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
+                    body: JSON.stringify({ email: this.email, password: this.password })
+                });
+                const data = await res.json();
+                if (data.status === 'success') {
+                    window.location.href = data.redirect_url || '/webmail/';
+                } else {
+                    this.errorMessage = data.message || 'Giriş başarısız.';
+                }
+            } catch (e) {
+                this.errorMessage = 'Sunucuya bağlanılamıyor.';
+            } finally {
+                this.isLoading = false;
+            }
+        }
+    };
+}
+</script>
+{% endblock %}

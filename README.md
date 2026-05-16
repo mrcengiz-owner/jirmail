@@ -49,7 +49,7 @@ python manage.py check_deploy --fail-on-error
 **Frontend**
 - Django Templates (SSR)
 - Alpine.js 3.x (reaktif UI)
-- Tailwind CSS 3.4 (local build, JIT)
+- Saf CSS (`static/css/main.css` + `brand.css`) — ek bileşenler için doğrudan CSS veya yeni bir stylesheet ekleyin
 
 **Altyapı**
 - Docker Compose (django, celery, celery-beat, postgres, redis, postfix, dovecot, docker-proxy)
@@ -63,9 +63,6 @@ python manage.py check_deploy --fail-on-error
 python -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
-
-npm install
-npm run build
 
 python manage.py migrate
 python manage.py runserver
@@ -96,17 +93,16 @@ backup/         Yedekleme/restore API
 alerts/         Threshold tabanlı uyarı sistemi + Celery taskları
 jir_core/      Kurulum durumu middleware
 templates/    Django HTML şablonları (pages/, partials/)
-static/         Tailwind input.css, build edilmiş main.css, app.js
+static/       main.css (tek stylesheet kaynağı), brand.css, app.js
 dovecot/      Dovecot imajı; `*.tpl` şablonlar + ortam (`DB_*`, `MAIL_DOMAIN`) — sırlar repoda yok
 ```
 
-## Tailwind CSS Build
+## Stil (saf CSS)
 
-```bash
-npm run watch        # Geliştirme — değişiklikleri otomatik yeniden derle
-npm run build        # Tek seferlik build
-npm run build:prod   # Minified production build
-```
+Arayüz stilleri `static/css/main.css` içindedir (önceki Tailwind çıktısı tek dosyada konsolide edilmiştir). Yeni görünüm veya bileşen eklerken:
+
+1. `main.css` sonuna kurallar ekleyebilir veya `static/css/` altında yeni bir `.css` oluşturup `templates/base.html` içinde `{% static %}` ile bağlayabilirsiniz.
+2. Şablonda **yeni** “utility” benzeri sınıf adları kullanırsanız, bunların karşılığı `main.css` içinde tanımlı olmalıdır; otomatik derleme adımı yoktur.
 
 ## Lisans
 

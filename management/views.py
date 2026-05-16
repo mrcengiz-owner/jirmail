@@ -52,7 +52,7 @@ def require_full_access(view_func):
     """Decorator that checks if user has FULL role."""
     def wrapper(request, *args, **kwargs):
         if request.session.get('role') != 'FULL':
-            return redirect('mail_panel')
+            return redirect('webmail:inbox')
         return view_func(request, *args, **kwargs)
     return wrapper
 
@@ -126,23 +126,19 @@ def login(request):
         role = request.session.get('role')
         if role == 'FULL':
             return redirect('dashboard')
-        return redirect('mail_panel')
+        return redirect('webmail:inbox')
 
     return render(request, 'login.html')
 
 
 @require_http_methods(["GET"])
 def mail_panel(request):
-    """User Panel - Gmail style 3-column"""
+    """Eski URL — izole webmail portalına yönlendir."""
     if not is_installed():
         return redirect('setup')
     if not request.session.get('is_logged_in'):
         return redirect('login')
-
-    email = request.session.get('email', 'user@example.com')
-    return render(request, 'mail_panel.html', {
-        'email': email,
-    })
+    return redirect('webmail:inbox')
 
 
 @require_http_methods(["POST"])
@@ -199,7 +195,7 @@ def login_success(request):
         if account.role == 'FULL':
             redirect_url = '/dashboard/'
         else:
-            redirect_url = '/mail-panel/'
+            redirect_url = '/webmail/'
 
         return JsonResponse({
             'status': 'success',
@@ -235,7 +231,7 @@ def domains_view(request):
     if not request.session.get('is_logged_in'):
         return redirect('login')
     if request.session.get('role') != 'FULL':
-        return redirect('mail_panel')
+        return redirect('webmail:inbox')
 
     try:
         from core.models import MailDomain
@@ -279,7 +275,7 @@ def accounts_view(request):
     if not request.session.get('is_logged_in'):
         return redirect('login')
     if request.session.get('role') != 'FULL':
-        return redirect('mail_panel')
+        return redirect('webmail:inbox')
 
     try:
         from core.models import MailDomain
@@ -309,7 +305,7 @@ def containers_view(request):
     if not request.session.get('is_logged_in'):
         return redirect('login')
     if request.session.get('role') != 'FULL':
-        return redirect('mail_panel')
+        return redirect('webmail:inbox')
 
     return render(request, 'pages/containers.html', {
         'JIR_LOCAL_KEY': get_jir_key(),
@@ -324,7 +320,7 @@ def backups_view(request):
     if not request.session.get('is_logged_in'):
         return redirect('login')
     if request.session.get('role') != 'FULL':
-        return redirect('mail_panel')
+        return redirect('webmail:inbox')
 
     return render(request, 'pages/backups.html', {
         'JIR_LOCAL_KEY': get_jir_key(),
@@ -339,7 +335,7 @@ def logs_view(request):
     if not request.session.get('is_logged_in'):
         return redirect('login')
     if request.session.get('role') != 'FULL':
-        return redirect('mail_panel')
+        return redirect('webmail:inbox')
 
     return render(request, 'pages/logs.html', {
         'JIR_LOCAL_KEY': get_jir_key(),
@@ -354,7 +350,7 @@ def settings_view(request):
     if not request.session.get('is_logged_in'):
         return redirect('login')
     if request.session.get('role') != 'FULL':
-        return redirect('mail_panel')
+        return redirect('webmail:inbox')
 
     return render(request, 'pages/settings.html', {
         'JIR_LOCAL_KEY': get_jir_key(),

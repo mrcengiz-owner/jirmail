@@ -1,5 +1,5 @@
 from django.contrib import admin
-from django.urls import path
+from django.urls import path, include
 from django.shortcuts import redirect
 from django.http import HttpResponse
 from django.conf import settings
@@ -13,10 +13,11 @@ from installer.api import router as installer_router
 from installer.api import install_stream
 from webmail.api import router as webmail_router
 from webmail.api import mail_stream
+from webmail.portal_views import mail_panel_redirect
 from monitoring.api import router as monitoring_router
 from monitoring.api import logs_stream
 from management.views import (
-    dashboard, setup, login, mail_panel, login_success, logout_view,
+    dashboard, setup, login, login_success, logout_view,
     domains_view, accounts_view, containers_view, backups_view, logs_view, settings_view,
 )
 from management.views import is_installed as check_installed
@@ -66,7 +67,8 @@ urlpatterns = [
     path('login/', login, name='login'),
     path('login-success/', login_success, name='login_success'),
     path('logout/', logout_view, name='logout'),
-    path('mail-panel/', mail_panel, name='mail_panel'),
+    path('webmail/', include('webmail.urls')),
+    path('mail-panel/', mail_panel_redirect, name='mail_panel'),
     path('favicon.ico', favicon),
     path('.well-known/<path:path>', well_known),
     path('', root_redirect, name='root'),

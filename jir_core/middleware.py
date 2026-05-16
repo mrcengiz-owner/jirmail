@@ -21,16 +21,19 @@ class JirInstallMiddleware:
 
         is_logged_in = request.session.get('is_logged_in', False)
 
-        protected_paths = ['/master-panel/', '/mail-panel/', '/dashboard/', '/domains/', '/accounts/', '/containers/', '/backups/', '/logs/', '/settings/', '/api/content/']
-        auth_paths = ['/login/', '/setup/', '/api/health', '/api/login', '/api/test-db', '/api/setup-complete']
+        protected_paths = ['/master-panel/', '/mail-panel/', '/webmail/', '/dashboard/', '/domains/', '/accounts/', '/containers/', '/backups/', '/logs/', '/settings/', '/api/content/']
+        auth_paths = ['/login/', '/webmail/login/', '/setup/', '/api/health', '/api/login', '/api/test-db', '/api/setup-complete']
 
         path = request.path
 
         if not is_logged_in:
-            for protected in protected_paths:
-                if path.startswith(protected):
-                    from django.shortcuts import redirect
-                    return redirect('login')
+            if not any(path.startswith(auth) for auth in auth_paths):
+                for protected in protected_paths:
+                    if path.startswith(protected):
+                        from django.shortcuts import redirect
+                        if path.startswith('/webmail/'):
+                            return redirect('webmail:login')
+                        return redirect('login')
 
         response = self.get_response(request)
         return response
