@@ -150,9 +150,10 @@ services:
       POSTFIX_smtpd_helo_restrictions: permit
       DB_HOST: postgres
       DB_PORT: "5432"
+      POSTGRES_DB: ${POSTGRES_DB:-jir_mail_prod}
       DB_NAME: ${POSTGRES_DB:-jir_mail_prod}
       DB_USER: ${POSTGRES_USER:-postgres}
-      DB_PASS: ${POSTGRES_PASSWORD}
+      DB_PASS: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD zorunlu}
       POSTFIX_smtpd_tls_cert_file: /etc/jir-mail/tls/server.crt
       POSTFIX_smtpd_tls_key_file: /etc/jir-mail/tls/server.key
       POSTFIX_smtpd_tls_CAfile: /etc/jir-mail/tls/ca.crt

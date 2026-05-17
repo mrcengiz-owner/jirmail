@@ -3,11 +3,14 @@
 set -e
 
 DOMAIN="${MAIL_DOMAIN:-mail.local}"
+DB_HOST="${DB_HOST:-postgres}"
+DB_PORT="${DB_PORT:-5432}"
+DB_NAME="${DB_NAME:-${POSTGRES_DB:-jir_mail_prod}}"
+DB_USER="${DB_USER:-postgres}"
 export DB_HOST DB_PORT DB_NAME DB_USER DB_PASS MAIL_DOMAIN
 
-echo "[jirmail-postfix] Inbound MX (domain=${DOMAIN})"
+echo "[jirmail-postfix] Inbound MX (domain=${DOMAIN}, db=${DB_NAME})"
 
-# boky/postfix: gönderen domain kısıtı — Gmail "Sender address rejected" verir
 postconf -e 'smtpd_sender_restrictions=permit'
 postconf -e 'smtpd_client_restrictions=permit'
 postconf -e 'smtpd_helo_restrictions=permit'
@@ -16,16 +19,28 @@ postconf -e 'smtpd_tls_auth_only=no'
 postconf -e 'smtpd_recipient_restrictions=permit_mynetworks,permit_sasl_authenticated,reject_unauth_destination'
 postconf -e 'smtpd_relay_restrictions=permit_mynetworks,permit_sasl_authenticated,reject_unauth_destination'
 
-# Eski boky gönderen tabloları devre dışı
 rm -f /etc/postfix/allowed_senders /etc/postfix/allowed_senders.db 2>/dev/null || true
 
-# Postgres → sanal posta kutuları (hesap eklenince otomatik; postmap gerekmez)
-TPL="${JIR_POSTFIX_TEMPLATES:-/usr/share/jir-mail/postfix-templates}"
-envsubst '$DB_HOST $DB_PORT $DB_NAME $DB_USER $DB_PASS' \
-  <"$TPL/pgsql-virtual-mailboxes.cf.tpl" >/etc/postfix/pgsql-virtual-mailboxes.cf
-envsubst '$DB_HOST $DB_PORT $DB_NAME $DB_USER $DB_PASS' \
-  <"$TPL/pgsql-virtual-domains.cf.tpl" >/etc/postfix/pgsql-virtual-domains.cf
-chmod 600 /etc/postfix/pgsql-virtual-*.cf
+# Postfix pgsql: hosts= tek satır + envsubst şifreyi host= sanıyor → çok satırlı yaz
+_write_pgsql_cf() {
+  _dest="$1"
+  _query="$2"
+  {
+    printf 'hosts = %s\n' "$DB_HOST"
+    printf 'port = %s\n' "$DB_PORT"
+    printf 'user = %s\n' "$DB_USER"
+    printf 'password = %s\n' "$DB_PASS"
+    printf 'dbname = %s\n' "$DB_NAME"
+    printf 'query = %s\n' "$_query"
+  } >"$_dest"
+  chmod 600 "$_dest"
+}
+
+_write_pgsql_cf /etc/postfix/pgsql-virtual-mailboxes.cf \
+  "SELECT CONCAT(a.email, ' ', d.name, '/', a.username, '/') AS mailbox FROM core_mailaccount a INNER JOIN core_maildomain d ON d.id = a.domain_id WHERE a.is_active = true AND d.is_active = true"
+
+_write_pgsql_cf /etc/postfix/pgsql-virtual-domains.cf \
+  "SELECT name FROM core_maildomain WHERE is_active = true"
 
 postconf -e "virtual_mailbox_domains=pgsql:/etc/postfix/pgsql-virtual-domains.cf"
 postconf -e 'virtual_mailbox_maps=pgsql:/etc/postfix/pgsql-virtual-mailboxes.cf'
@@ -40,4 +55,4 @@ if postconf -Mf submission/inet >/dev/null 2>&1; then
 fi
 
 postfix reload 2>/dev/null || true
-echo "[jirmail-postfix] pgsql virtual maps aktif"
+echo "[jirmail-postfix] pgsql virtual maps aktif (dbname=${DB_NAME})"

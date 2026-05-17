@@ -20,7 +20,8 @@ from ninja import Router, Schema
 
 from core.models import MailAccount
 from .imap_client import (
-    delete_message, fetch_message_body, move_message, set_flag, sync_folder_metadata,
+    delete_message, fetch_message_body, move_message, resolve_imap_folder, set_flag,
+    sync_folder_metadata, sync_standard_folders,
 )
 from .models import MailFolder, MailMessageCache, MailOutboundLog
 from .smtp_client import send_mail
@@ -112,13 +113,37 @@ def list_folders(request: HttpRequest):
     }
 
 
+def _find_folder_row(account, folder: str):
+    """DB'de klasör satırı — tam ad veya alias ile."""
+    folder_obj = MailFolder.objects.filter(account=account, name=folder).first()
+    if folder_obj:
+        return folder_obj
+    key = (folder or 'INBOX').lower().split('/')[-1].replace('.', '')
+    from webmail.imap_client import FOLDER_ALIASES
+    for candidate in FOLDER_ALIASES.get(key, [folder]):
+        folder_obj = MailFolder.objects.filter(account=account, name=candidate).first()
+        if folder_obj:
+            return folder_obj
+    return None
+
+
 @router.get('/messages', summary='Mesaj listesi (metadata, sayfalı)')
 def list_messages(request: HttpRequest, folder: str = 'INBOX', page: int = 1, page_size: int = 50, q: str = ''):
-    account, _ = _get_account_and_password(request)
+    account, password = _get_account_and_password(request)
     if not account:
         return {'success': False, 'message': 'Oturum yok'}
 
-    folder_obj = MailFolder.objects.filter(account=account, name=folder).first()
+    folder_obj = _find_folder_row(account, folder)
+    if password and folder_obj is None and not q and page == 1:
+        try:
+            imap_folder = resolve_imap_folder(account, password, folder)
+            sync_folder_metadata(account, password, imap_folder, limit=200)
+            folder_obj = _find_folder_row(account, folder) or MailFolder.objects.filter(
+                account=account, name=imap_folder
+            ).first()
+        except Exception:
+            pass
+
     if not folder_obj:
         if account and folder.lower() in ('sent', 'sent messages', 'inbox.sent'):
             outbound = _outbound_as_messages(account, limit=page_size)
@@ -383,15 +408,13 @@ def sync_all(request: HttpRequest):
     if not account:
         return {'success': False, 'message': 'Oturum yok'}
 
-    folders = ['INBOX', 'Sent', 'Drafts', 'Trash']
-    results = []
-    errors = []
-    for folder in folders:
-        try:
-            results.append(sync_folder_metadata(account, password, folder, limit=200))
-        except Exception as exc:
-            errors.append({'folder': folder, 'error': str(exc)})
+    try:
+        batch = sync_standard_folders(account, password, limit=200)
+    except Exception as exc:
+        return {'success': False, 'message': str(exc)}
 
+    results = batch.get('synced', [])
+    errors = batch.get('errors', [])
     if not results and errors:
         return {'success': False, 'message': errors[0]['error'], 'errors': errors}
 

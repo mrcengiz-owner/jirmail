@@ -128,6 +128,41 @@ def _parse_envelope_to_meta(envelope, raw_size: int, flags: list) -> dict:
     }
 
 
+# UI klasör adı → IMAP'ta olası isimler
+FOLDER_ALIASES = {
+    'inbox': ['INBOX'],
+    'sent': ['Sent', 'Sent Messages', 'INBOX.Sent', '.Sent'],
+    'drafts': ['Drafts', 'INBOX.Drafts', '.Drafts'],
+    'trash': ['Trash', 'INBOX.Trash', '.Trash', 'Deleted Messages'],
+}
+
+
+def list_imap_folder_names(account, password: str) -> list[str]:
+    with imap_connection(account, password) as client:
+        return [entry[2] for entry in client.list_folders()]
+
+
+def resolve_imap_folder(account, password: str, folder: str) -> str:
+    """Webmail klasör adını sunucudaki gerçek IMAP klasörüne eşle."""
+    wanted = (folder or 'INBOX').strip()
+    try:
+        available = list_imap_folder_names(account, password)
+    except Exception:
+        return wanted
+
+    if wanted in available:
+        return wanted
+
+    key = wanted.lower().split('/')[-1].replace('.', '')
+    for candidate in FOLDER_ALIASES.get(key, [wanted]):
+        if candidate in available:
+            return candidate
+        for name in available:
+            if name.lower() == candidate.lower() or name.lower().endswith('/' + candidate.lower()):
+                return name
+    return wanted
+
+
 def sync_folder_metadata(account, password: str, folder_name: str = 'INBOX', *, limit: int = 200) -> dict:
     """Folder içindeki son N mesajın metadata'sını DB cache'e alır."""
     from .models import MailFolder, MailMessageCache
@@ -177,6 +212,24 @@ def sync_folder_metadata(account, password: str, folder_name: str = 'INBOX', *, 
         folder_obj.save(update_fields=['unread'])
 
     return {'folder': folder_name, 'fetched': fetched, 'unread': unread_count}
+
+
+def sync_standard_folders(account, password: str, *, limit: int = 200) -> dict:
+    """INBOX + Sent + Drafts + Trash — sunucudaki gerçek klasör adlarıyla."""
+    seen = set()
+    results = []
+    errors = []
+    for ui_key in ('inbox', 'sent', 'drafts', 'trash'):
+        try:
+            seed = FOLDER_ALIASES[ui_key][0]
+            imap_name = resolve_imap_folder(account, password, seed)
+            if imap_name in seen:
+                continue
+            seen.add(imap_name)
+            results.append(sync_folder_metadata(account, password, imap_name, limit=limit))
+        except Exception as exc:
+            errors.append({'folder': ui_key, 'error': str(exc)})
+    return {'synced': results, 'errors': errors}
 
 
 def fetch_message_body(account, password: str, folder_name: str, uid: int) -> dict:

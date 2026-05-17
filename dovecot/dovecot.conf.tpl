@@ -55,8 +55,8 @@ userdb {
 
 plugin {
   quota = maildir:User quota
-  # userdb alanı küçük harf: %{userdb:...} (Userdb → Unknown variable hatası)
-  quota_rule = *:storage=%{userdb:quota_bytes}
+  # Sabit kota — %{userdb:...} Alpine Dovecot 2.3'te plugin aşamasında genişlemiyor
+  quota_rule = *:storage=2G
   quota_rule2 = *:messages=0
   quota_exceeded = 552 5.2.2 Mailbox full
 }

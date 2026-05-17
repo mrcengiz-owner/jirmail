@@ -1,2 +1,6 @@
-hosts = host=$DB_HOST port=$DB_PORT dbname=$DB_NAME user=$DB_USER password=$DB_PASS
+hosts = postgres
+port = 5432
+user = postgres
+password = CHANGE_ME
+dbname = jir_mail_prod
 query = SELECT name FROM core_maildomain WHERE is_active = true
