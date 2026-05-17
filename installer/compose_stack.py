@@ -6,34 +6,21 @@ import os
 from pathlib import Path
 from typing import Any
 
-from installer.mail_connectivity import (
-    _ensure_runtime_mail_ca,
-    apply_mail_connectivity_to_system_config,
-    auto_setup_mail_services,
-)
-from installer.mail_pki import (
-    MAIL_TLS_MOUNT,
-    ensure_mail_pki_files,
-    load_mail_pki_from_directory,
-)
+from installer.compose_mode import ensure_runtime_mail_ca, is_compose_stack
+from installer.mail_pki import MAIL_TLS_MOUNT, ensure_mail_pki_files
 
 logger = logging.getLogger(__name__)
 
-
-def is_compose_stack() -> bool:
-    """Docker Compose ile deploy: ayrı Docker API kurulumu yok."""
-    flag = os.getenv('JIR_COMPOSE_STACK', '').strip().lower()
-    if flag in ('1', 'true', 'yes', 'on'):
-        return True
-    if flag in ('0', 'false', 'no', 'off'):
-        return False
-    smtp = os.getenv('SMTP_HOST', '').strip()
-    imap = os.getenv('IMAP_HOST', '').strip()
-    return smtp in ('postfix', 'jir_postfix') and imap in ('dovecot', 'jir_dovecot')
+__all__ = ['is_compose_stack', 'bootstrap_compose_stack']
 
 
 def bootstrap_compose_stack(config: dict[str, Any]) -> dict[str, Any]:
-    """Compose içinde: PKI + migrate hazır varsayımı; yalnızca mail TLS doğrula."""
+    """Compose içinde: PKI + mail TLS doğrula (servisler compose ile zaten ayakta)."""
+    from installer.mail_connectivity import (
+        apply_mail_connectivity_to_system_config,
+        auto_setup_mail_services,
+    )
+
     messages: list[str] = []
     domain = (config.get('domain') or os.getenv('MAIL_DOMAIN') or 'mail.local').strip()
     mail_hostname = (config.get('mail_hostname') or os.getenv('MAIL_HOSTNAME') or f'mail.{domain}').strip()
@@ -60,7 +47,7 @@ def bootstrap_compose_stack(config: dict[str, Any]) -> dict[str, Any]:
             'messages': messages,
         }
 
-    _ensure_runtime_mail_ca(pki_ca_pem)
+    ensure_runtime_mail_ca(pki_ca_pem)
 
     mail_cfg = {
         **config,

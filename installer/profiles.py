@@ -67,7 +67,7 @@ def probe_capabilities() -> Dict[str, Any]:
     """Bootstrap için: Docker API ve DATABASE_URL varlığı (ping ile)."""
     from django.conf import settings
 
-    from installer.compose_stack import is_compose_stack
+    from installer.compose_mode import is_compose_stack
     from installer.db_url import has_database_url as _has_db_url
 
     if is_compose_stack():
