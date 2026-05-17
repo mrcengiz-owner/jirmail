@@ -170,12 +170,23 @@ services:
       - jir_network
 
 volumes:
+  # Mevcut sunucu volume'ları (jir_* ) — veri kaybı olmasın diye external
   postgres_data:
+    external: true
+    name: jir_postgres_data
   redis_data:
+    external: true
+    name: jir_redis_data
   postfix_data:
+    external: true
+    name: jir_postfix_data
   mail_data:
-  config_data:
+    external: true
+    name: jir_mail_data
   jir_mail_tls:
+    external: true
+    name: jir_mail_tls
+  config_data:
 
 networks:
   jir_network:
