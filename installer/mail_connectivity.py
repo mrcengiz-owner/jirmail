@@ -288,9 +288,14 @@ def auto_setup_mail_services(
     need_provision = False
     if client is not None:
         need_provision = _needs_mail_provision(client, smtp_host, imap_host)
-    if config.get('stack_already_provisioned') and _mail_containers_running(client):
+    if config.get('stack_already_provisioned'):
         need_provision = False
-        messages.append('Mail konteynerleri docker_stack bootstrap ile zaten kuruldu.')
+        if compose_only:
+            messages.append('Mail servisleri Compose stack ile zaten çalışıyor.')
+        elif client is not None and _mail_containers_running(client):
+            messages.append('Mail konteynerleri docker_stack bootstrap ile zaten kuruldu.')
+        else:
+            messages.append('Mail stack zaten provision edildi (compose).')
     if need_provision and client is not None:
         if dovecot_container_needs_rebuild(client, imap_host):
             messages.append('Dovecot özel imajına yükseltiliyor (PostgreSQL passdb)…')

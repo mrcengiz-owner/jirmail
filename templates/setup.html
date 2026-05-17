@@ -305,6 +305,14 @@
                             </template>
                         </div>
 
+                    <div x-show="installProfile === 'compose_stack'"
+                         class="rounded-xl border border-success-500/25 bg-success-500/10 p-4 text-sm text-success-200/95 flex gap-2.5">
+                        <svg class="w-5 h-5 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                        </svg>
+                        <p>Compose stack: Postfix ve Dovecot zaten çalışıyor. Bu adımda yalnızca SMTP/IMAP ve dahili TLS doğrulanır; Docker API gerekmez.</p>
+                    </div>
+
                     <div x-show="installProfile === 'docker_stack'"
                          class="rounded-xl border border-info-500/25 bg-info-500/10 p-4 text-sm text-info-200/95 flex gap-2.5">
                         <svg class="w-5 h-5 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -867,6 +875,7 @@ function setupWizard() {
                 const mo = this.installModesList().find((x) => x.id === this.installProfile);
                 if (!mo || !this.installProfile) return false;
                 if (mo.disabled) return false;
+                if (this.bootstrap.compose_stack) return true;
                 if (this.bootstrap.docker_available) return this.stackBootstrapOk;
                 return true;
             }
@@ -885,7 +894,10 @@ function setupWizard() {
             if (this.step === 5) {
                 if (this.mailLoading || this.mailProvisionLoading) return false;
                 if (!this.mailStatus) return false;
-                return !!this.mailStatus.mail_ready;
+                if (this.mailStatus.mail_ready) return true;
+                if (this.installProfile === 'compose_stack' && this.mailStatus.smtp_ok && this.mailStatus.imap_ok) return true;
+                if (this.installProfile === 'compose_stack' && this.mailStatus.smtp_ok && this.mailProvisionOk) return true;
+                return false;
             }
             return true;
         },

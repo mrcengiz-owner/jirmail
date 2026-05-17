@@ -33,6 +33,7 @@ from .mail_pki import ensure_mail_pki_volume
 from .models import InstallationRun, InstallationStep
 from .port_check import filter_publish_ports
 from .profiles import (
+    PROFILE_COMPOSE_STACK,
     PROFILE_DOCKER_STACK,
     PROFILE_PLATFORM_ENV,
     PROFILE_PLATFORM_MANUAL,
@@ -345,6 +346,15 @@ def _resolve_profile_and_client(config: dict):
     except ValueError as exc:
         raise RuntimeError(str(exc)) from exc
 
+    if p == PROFILE_COMPOSE_STACK:
+        from installer.compose_mode import is_compose_stack
+
+        if not is_compose_stack():
+            raise RuntimeError(
+                '“Docker Compose” profili için JIR_COMPOSE_STACK=1 ve SMTP_HOST/IMAP_HOST '
+                '(postfix, dovecot) ortam değişkenleri gerekir.'
+            )
+        return PROFILE_COMPOSE_STACK, None
     if p == PROFILE_DOCKER_STACK:
         c = _get_docker_client_optional()
         if c is None:

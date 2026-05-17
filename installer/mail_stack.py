@@ -436,11 +436,13 @@ def collect_installer_mail_stack_status(
     """Sihirbaz mail adımı: SMTP/IMAP erişimi, Docker ve otomatik kurulum uygunluğu."""
     from django.conf import settings
 
+    from installer.compose_mode import is_compose_stack
     from installer.profiles import probe_capabilities
     from management.docker_containers import merged_container_name
     from management.mail_service_endpoint import resolve_mail_endpoint, tcp_reachable
 
     cap = probe_capabilities()
+    compose_mode = bool(cap.get('compose_stack')) or is_compose_stack()
     docker_available = bool(cap.get('docker_available'))
     has_db_url = has_database_url()
     in_docker = bool(getattr(settings, 'IN_DOCKER', False))
@@ -461,15 +463,19 @@ def collect_installer_mail_stack_status(
     imap_ok = False
     if tcp_reachable(smtp_host, smtp_port, timeout=2.5):
         smtp_ok = verify_smtp_starttls(smtp_host, smtp_port, timeout=4.0)
+    imap_timeout = 12.0 if compose_mode else 4.0
     if tcp_reachable(imap_host, imap_port, timeout=2.5):
-        imap_ok = verify_imap_tls(imap_host, imap_port, timeout=4.0)
+        imap_ok = verify_imap_tls(imap_host, imap_port, timeout=imap_timeout, log_failure=compose_mode)
 
     pf_name = merged_container_name('postfix')
     dv_name = merged_container_name('dovecot')
 
     postfix_running = False
     dovecot_running = False
-    if docker_available:
+    if compose_mode:
+        postfix_running = tcp_reachable(smtp_host, smtp_port, timeout=2.5)
+        dovecot_running = tcp_reachable(imap_host, imap_port, timeout=2.5)
+    elif docker_available:
         try:
             from installer.orchestrator import _get_docker_client_optional
 
@@ -489,7 +495,9 @@ def collect_installer_mail_stack_status(
     prof = (install_profile or '').strip().lower()
     can_auto = False
     if not mail_ready:
-        if prof not in ('docker_stack', 'platform_manual'):
+        if compose_mode or prof == 'compose_stack':
+            can_auto = False
+        elif prof not in ('docker_stack', 'platform_manual'):
             can_auto = bool(docker_available and has_db_url)
 
     dom_override = (wizard_domain or '').strip() or None
@@ -525,7 +533,12 @@ def collect_installer_mail_stack_status(
             f'SMTP/IMAP denemesi dahili servis adı ({smtp_host} / {imap_host}) üzerinden yapılır; '
             'konteynerler çalışmıyorsa veya farklı isimdeyse “erişilemiyor” normaldir.'
         )
-    if not docker_available and in_docker:
+    if compose_mode and not mail_ready:
+        hints.append(
+            'Compose modu: servisler docker-compose.yml ile çalışıyor. IMAP kapalıysa: '
+            'docker logs jir_dovecot — auth (pgsql) ve 993 dinleyici kontrol edin; ardından “Durumu yenile”.'
+        )
+    if not docker_available and in_docker and not compose_mode:
         hints.append(
             'Docker API bu konteynerde kapalı olabilir (Coolify’da soket mount edilmemiş). '
             'Otomatik mail kurulumu için Docker erişimi veya `provision_mail_stack --print-compose` ile ayrı stack gerekir.'
@@ -547,6 +560,7 @@ def collect_installer_mail_stack_status(
             )
 
     return {
+        'compose_stack': compose_mode,
         'smtp_host': smtp_host,
         'smtp_port': smtp_port,
         'smtp_ok': smtp_ok,

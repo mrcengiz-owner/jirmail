@@ -11,11 +11,13 @@ from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
+PROFILE_COMPOSE_STACK = 'compose_stack'
 PROFILE_DOCKER_STACK = 'docker_stack'
 PROFILE_PLATFORM_ENV = 'platform_env'
 PROFILE_PLATFORM_MANUAL = 'platform_manual'
 
 CANONICAL_PROFILES = frozenset({
+    PROFILE_COMPOSE_STACK,
     PROFILE_DOCKER_STACK,
     PROFILE_PLATFORM_ENV,
     PROFILE_PLATFORM_MANUAL,
@@ -41,10 +43,11 @@ PROFILE_ALIASES: Dict[str, str] = {
     'external_postgres': PROFILE_PLATFORM_MANUAL,
     'manual': PROFILE_PLATFORM_MANUAL,
     'manual_postgres': PROFILE_PLATFORM_MANUAL,
-    # Tam stack
-    'compose': PROFILE_DOCKER_STACK,
+    # Tam stack (Compose öncelikli)
+    'compose': PROFILE_COMPOSE_STACK,
     'docker': PROFILE_DOCKER_STACK,
-    'full_stack': PROFILE_DOCKER_STACK,
+    'full_stack': PROFILE_COMPOSE_STACK,
+    'compose_stack': PROFILE_COMPOSE_STACK,
 }
 
 

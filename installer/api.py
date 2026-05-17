@@ -9,7 +9,7 @@ Endpoint'ler:
     POST /api/installer/start             Kurulum çalışmasını başlatır (run_id döner)
     ...
 
-install_profile: canonical değerler docker_stack | platform_env | platform_manual
+install_profile: canonical compose_stack | docker_stack | platform_env | platform_manual
 veya alias (ör. coolify, dokploy, cpanel → aynı canonical yollara normalize edilir).
 """
 import os
@@ -207,10 +207,13 @@ def test_db_connection(request: HttpRequest, data: TestDbSchema):
 @router.get('/mail-stack-status', summary='Mail servisleri durumu (sihirbaz)')
 def mail_stack_status(request: HttpRequest, domain: str = '', install_profile: str = ''):
     """SMTP/IMAP kontrolü, Docker konteyner durumu ve otomatik kurulum uygunluğu."""
+    from installer.compose_mode import is_compose_stack
+
+    default_profile = 'compose_stack' if is_compose_stack() else 'docker_stack'
     try:
-        canonical = normalize_install_profile(install_profile or 'docker_stack')
+        canonical = normalize_install_profile(install_profile or default_profile)
     except ValueError:
-        canonical = 'docker_stack'
+        canonical = default_profile
     return collect_installer_mail_stack_status(
         wizard_domain=domain.strip(),
         install_profile=canonical,

@@ -2,6 +2,7 @@
 import unittest
 
 from installer.profiles import (
+    PROFILE_COMPOSE_STACK,
     PROFILE_DOCKER_STACK,
     PROFILE_PLATFORM_ENV,
     PROFILE_PLATFORM_MANUAL,
@@ -16,9 +17,16 @@ class InstallerProfilesTest(unittest.TestCase):
         self.assertEqual(normalize_install_profile('Dokploy'), PROFILE_PLATFORM_ENV)
         self.assertEqual(normalize_install_profile('cpanel'), PROFILE_PLATFORM_MANUAL)
         self.assertEqual(normalize_install_profile('docker'), PROFILE_DOCKER_STACK)
+        self.assertEqual(normalize_install_profile('compose'), PROFILE_COMPOSE_STACK)
+        self.assertEqual(normalize_install_profile('full_stack'), PROFILE_COMPOSE_STACK)
 
     def test_normalize_canonical_roundtrip(self):
-        for p in (PROFILE_DOCKER_STACK, PROFILE_PLATFORM_ENV, PROFILE_PLATFORM_MANUAL):
+        for p in (
+            PROFILE_COMPOSE_STACK,
+            PROFILE_DOCKER_STACK,
+            PROFILE_PLATFORM_ENV,
+            PROFILE_PLATFORM_MANUAL,
+        ):
             self.assertEqual(normalize_install_profile(p), p)
             self.assertEqual(normalize_install_profile(p.upper()), p)
 
@@ -34,6 +42,10 @@ class InstallerProfilesTest(unittest.TestCase):
             normalize_install_profile('   ')
 
     def test_suggested_profile_order(self):
+        self.assertEqual(
+            suggested_profile_from_capabilities({'compose_stack': True}),
+            PROFILE_COMPOSE_STACK,
+        )
         self.assertEqual(
             suggested_profile_from_capabilities(
                 {'has_database_url': True, 'docker_available': False}
