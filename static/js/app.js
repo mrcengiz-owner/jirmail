@@ -92,7 +92,37 @@
     // ========================================================================
     window.getCsrfToken = function() {
         var meta = document.querySelector('meta[name="csrf-token"]');
-        return meta ? meta.content : '';
+        if (meta && meta.content) return meta.content;
+        var m = document.cookie.match(/(?:^|;\s*)csrftoken=([^;]+)/);
+        return m ? decodeURIComponent(m[1]) : '';
+    };
+
+    window.jirLogout = function(redirectUrl) {
+        var token = window.getCsrfToken();
+        var body = new URLSearchParams();
+        if (token) body.append('csrfmiddlewaretoken', token);
+        fetch('/logout/', {
+            method: 'POST',
+            headers: { 'X-CSRFToken': token },
+            credentials: 'same-origin',
+            body: body
+        }).finally(function() {
+            window.location.href = redirectUrl || '/login/';
+        });
+    };
+
+    window.jirWebmailLogout = function() {
+        var token = window.getCsrfToken();
+        var body = new URLSearchParams();
+        if (token) body.append('csrfmiddlewaretoken', token);
+        fetch('/webmail/logout/', {
+            method: 'POST',
+            headers: { 'X-CSRFToken': token },
+            credentials: 'same-origin',
+            body: body
+        }).finally(function() {
+            window.location.href = '/webmail/login/';
+        });
     };
 
     // ========================================================================

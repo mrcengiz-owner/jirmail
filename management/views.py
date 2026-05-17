@@ -3,8 +3,8 @@ from django.conf import settings
 from django.http import JsonResponse, HttpResponseForbidden
 from django.contrib.auth.decorators import login_required
 from django.views.decorators.http import require_http_methods
-from django.views.decorators.csrf import csrf_exempt, csrf_protect
-from django.contrib.auth import logout as django_logout
+from django.views.decorators.csrf import csrf_exempt, ensure_csrf_cookie
+from jir_core.session_auth import logout_response
 import os
 
 INSTALLED_FLAG = os.path.join(settings.BASE_DIR, 'config', '.installed')
@@ -91,6 +91,7 @@ def get_instance_info():
     return {'instance_id': 'N/A', 'tier': 'FREE'}
 
 
+@ensure_csrf_cookie
 def dashboard(request):
     if not is_installed():
         return redirect('setup')
@@ -130,6 +131,7 @@ def setup(request):
     return render(request, 'setup.html')
 
 
+@ensure_csrf_cookie
 def login(request):
     if not is_installed():
         return redirect('setup')
@@ -199,6 +201,8 @@ def login_success(request):
         # uzun vadede credential vault'a taşımak ideal.
         request.session['mail_password'] = password
         request.session.set_expiry(86400)
+        request.session.modified = True
+        request.session.save()
 
         from saas.models import SystemConfig
         config = SystemConfig.objects.first()
@@ -224,16 +228,9 @@ def login_success(request):
 
 
 @require_http_methods(["GET", "POST"])
+@csrf_exempt
 def logout_view(request):
-    django_logout(request)
-    request.session.flush()
-
-    response = redirect('login')
-    response['Cache-Control'] = 'no-cache, no-store, must-revalidate, no-transform'
-    response['Pragma'] = 'no-cache'
-    response['Expires'] = '0'
-    response['X-Accel-Buffering'] = 'no'
-    return response
+    return logout_response(request)
 
 
 def domains_view(request):

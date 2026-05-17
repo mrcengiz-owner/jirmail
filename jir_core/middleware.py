@@ -24,6 +24,7 @@ class JirInstallMiddleware:
         protected_paths = ['/master-panel/', '/mail-panel/', '/webmail/', '/dashboard/', '/domains/', '/accounts/', '/containers/', '/backups/', '/logs/', '/settings/', '/api/content/']
         auth_paths = [
             '/login/', '/webmail/login/', '/setup/',
+            '/logout/', '/webmail/logout/',
             '/api/health', '/api/login', '/api/test-db', '/api/setup-complete',
             '/api/installer/',
         ]

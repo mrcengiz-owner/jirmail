@@ -1,11 +1,12 @@
 """Webmail portal — admin panelden izole arayüz (/webmail/)."""
 from __future__ import annotations
 
-from django.contrib.auth import logout as django_logout
 from django.http import HttpResponseRedirect
 from django.shortcuts import redirect, render
+from django.views.decorators.csrf import csrf_exempt, ensure_csrf_cookie
 from django.views.decorators.http import require_http_methods
 
+from jir_core.session_auth import logout_response
 from management.views import is_installed
 
 
@@ -29,6 +30,7 @@ def _require_webmail_session(view_func):
 
 
 @require_http_methods(['GET'])
+@ensure_csrf_cookie
 @_require_webmail_session
 def inbox(request):
     return render(
@@ -43,6 +45,7 @@ def inbox(request):
 
 
 @require_http_methods(['GET'])
+@ensure_csrf_cookie
 @_require_installed
 def login_view(request):
     if request.session.get('is_logged_in'):
@@ -51,11 +54,10 @@ def login_view(request):
 
 
 @require_http_methods(['GET', 'POST'])
+@csrf_exempt
 @_require_installed
 def logout_view(request):
-    django_logout(request)
-    request.session.flush()
-    return redirect('webmail:login')
+    return logout_response(request)
 
 
 @require_http_methods(['GET'])

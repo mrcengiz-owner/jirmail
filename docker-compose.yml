@@ -21,6 +21,8 @@ services:
       CELERY_RESULT_BACKEND: redis://redis:6379/0
       MAIL_DOMAIN: ${MAIL_DOMAIN:-jircode.com}
       MAIL_HOSTNAME: ${MAIL_HOSTNAME:-mail.jircode.com}
+      PUBLIC_URL: ${PUBLIC_URL:-https://${MAIL_HOSTNAME:-mail.jircode.com}}
+      CSRF_TRUSTED_ORIGINS: ${CSRF_TRUSTED_ORIGINS:-https://${MAIL_HOSTNAME:-mail.jircode.com}}
       SMTP_HOST: postfix
       SMTP_PORT: "587"
       IMAP_HOST: dovecot

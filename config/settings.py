@@ -70,6 +70,77 @@ def _resolve_mail_service_host(service_key: str, docker_default: str) -> str:
 
 ALLOWED_HOSTS = ['*']
 
+
+def _origin_from_url(url: str) -> str | None:
+    url = (url or '').strip()
+    if not url:
+        return None
+    if not url.startswith(('http://', 'https://')):
+        url = f'https://{url}'
+    try:
+        from urllib.parse import urlparse
+        p = urlparse(url)
+        if p.scheme and p.netloc:
+            return f'{p.scheme}://{p.netloc}'
+    except Exception:
+        pass
+    return None
+
+
+def _build_trusted_origins() -> list[str]:
+    """Traefik / Dokploy HTTPS — CSRF 403 önleme."""
+    origins: list[str] = []
+    seen: set[str] = set()
+
+    def add(o: str | None) -> None:
+        if not o or o in seen:
+            return
+        seen.add(o)
+        origins.append(o)
+
+    for item in (
+        'http://localhost:3000',
+        'http://localhost:8000',
+        'http://127.0.0.1:3000',
+        'http://127.0.0.1:8000',
+        'http://0.0.0.0:3000',
+        'http://0.0.0.0:8000',
+    ):
+        add(item)
+
+    env_csv = os.getenv('CSRF_TRUSTED_ORIGINS', '') or os.getenv('CORS_ALLOWED_ORIGINS', '')
+    for part in env_csv.replace(';', ',').split(','):
+        add(_origin_from_url(part.strip()))
+
+    for env_name in (
+        'PUBLIC_URL',
+        'SITE_URL',
+        'APP_URL',
+        'COOLIFY_FQDN',
+        'COOLIFY_URL',
+        'DOKPLOY_APP_URL',
+        'TRAEFIK_HOST',
+    ):
+        raw = os.getenv(env_name, '').strip()
+        if raw:
+            add(_origin_from_url(raw))
+            if not raw.startswith(('http://', 'https://')):
+                add(f'https://{raw.split("/")[0]}')
+                add(f'http://{raw.split("/")[0]}')
+
+    mail_host = os.getenv('MAIL_HOSTNAME', '').strip()
+    mail_domain = os.getenv('MAIL_DOMAIN', '').strip()
+    for host in (mail_host, f'mail.{mail_domain}' if mail_domain else ''):
+        if host and '.' in host:
+            add(f'https://{host}')
+            add(f'http://{host}')
+
+    return origins
+
+
+_TRUSTED_ORIGINS = _build_trusted_origins()
+
+
 def _get_installation_status():
     """
     SystemConfig tablosundan is_installed durumunu al.
@@ -139,25 +210,13 @@ MIDDLEWARE = [
     'jir_core.middleware.JirInstallMiddleware',
 ]
 
-CORS_ALLOWED_ORIGINS = [
-    'http://localhost:3000',
-    'http://localhost:8000',
-    'http://127.0.0.1:3000',
-    'http://127.0.0.1:8000',
-    'http://0.0.0.0:3000',
-    'http://0.0.0.0:8000',
-]
-
+CORS_ALLOWED_ORIGINS = _TRUSTED_ORIGINS
 CORS_ALLOW_CREDENTIALS = True
+CSRF_TRUSTED_ORIGINS = _TRUSTED_ORIGINS
 
-CSRF_TRUSTED_ORIGINS = [
-    'http://localhost:3000',
-    'http://localhost:8000',
-    'http://127.0.0.1:3000',
-    'http://127.0.0.1:8000',
-    'http://0.0.0.0:3000',
-    'http://0.0.0.0:8000',
-]
+# Traefik / Dokploy arkasında HTTPS
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+USE_X_FORWARDED_HOST = True
 
 if DEBUG:
     CSRF_COOKIE_SECURE = False
@@ -176,6 +235,7 @@ TEMPLATES = [
         'OPTIONS': {
             'context_processors': [
                 'django.template.context_processors.request',
+                'django.template.context_processors.csrf',
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
             ],
@@ -342,8 +402,12 @@ JIR_CONTAINER_DJANGO = os.getenv('JIR_CONTAINER_DJANGO', 'jir_django')
 JIR_CONTAINER_CELERY = os.getenv('JIR_CONTAINER_CELERY', 'jir_celery')
 JIR_CONTAINER_CELERY_BEAT = os.getenv('JIR_CONTAINER_CELERY_BEAT', 'jir_celery_beat')
 
-SESSION_COOKIE_AGE = 86400
-SESSION_COOKIE_SECURE = not DEBUG
+SESSION_COOKIE_AGE = int(os.getenv('SESSION_COOKIE_AGE', '86400'))
 SESSION_COOKIE_HTTPONLY = True
-SESSION_COOKIE_SAMESITE = 'Lax'
+SESSION_COOKIE_SAMESITE = os.getenv('SESSION_COOKIE_SAMESITE', 'Lax')
 SESSION_EXPIRE_AT_BROWSER_CLOSE = False
+SESSION_SAVE_EVERY_REQUEST = True
+CSRF_COOKIE_HTTPONLY = False
+CSRF_COOKIE_SAMESITE = os.getenv('CSRF_COOKIE_SAMESITE', 'Lax')
+SESSION_COOKIE_DOMAIN = os.getenv('SESSION_COOKIE_DOMAIN', '') or None
+CSRF_COOKIE_DOMAIN = os.getenv('CSRF_COOKIE_DOMAIN', '') or None
