@@ -116,3 +116,37 @@ class MailOutboundLog(models.Model):
 
     def __str__(self):
         return f'{self.account.email} → {self.to_addr[:40]} ({self.status})'
+
+
+class ScheduledMail(models.Model):
+    STATUS_PENDING = 'pending'
+    STATUS_SENT = 'sent'
+    STATUS_FAILED = 'failed'
+    STATUS_CANCELLED = 'cancelled'
+
+    STATUS_CHOICES = [
+        (STATUS_PENDING, 'Beklemede'),
+        (STATUS_SENT, 'Gönderildi'),
+        (STATUS_FAILED, 'Başarısız'),
+        (STATUS_CANCELLED, 'İptal'),
+    ]
+
+    account = models.ForeignKey(MailAccount, on_delete=models.CASCADE, related_name='scheduled_mails')
+    to_addr = models.TextField()
+    cc_addr = models.TextField(blank=True, default='')
+    bcc_addr = models.TextField(blank=True, default='')
+    subject = models.CharField(max_length=998, blank=True, default='')
+    body_text = models.TextField(blank=True, default='')
+    body_html = models.TextField(blank=True, default='')
+    attachments_meta = models.JSONField(default=list, blank=True)
+    send_at = models.DateTimeField(db_index=True)
+    status = models.CharField(max_length=16, choices=STATUS_CHOICES, default=STATUS_PENDING, db_index=True)
+    error_message = models.TextField(blank=True, default='')
+    created_at = models.DateTimeField(auto_now_add=True)
+    sent_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ['send_at']
+
+    def __str__(self):
+        return f'{self.account.email} @ {self.send_at} ({self.status})'

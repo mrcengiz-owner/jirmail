@@ -1,0 +1,14 @@
+<div class="flex flex-col h-full p-3 gap-2">
+  <h2 class="text-xs font-semibold uppercase tracking-wide text-[var(--wm-muted)]">Yeni mesaj</h2>
+  <input class="wm-input" placeholder="Kime" x-model="composeTo">
+  <input class="wm-input" placeholder="Cc" x-model="composeCc">
+  <input class="wm-input" placeholder="Konu" x-model="composeSubject">
+  <textarea class="wm-textarea flex-1" placeholder="İçerik" x-model="composeBody"></textarea>
+  <input type="file" multiple class="text-xs text-[var(--wm-muted)]" @change="onFiles($event)">
+  <label class="text-[var(--wm-size-xs)] text-[var(--wm-muted)]">Planlı gönderim (ISO, örn. 2026-05-18T09:00)</label>
+  <input class="wm-input" type="datetime-local" x-model="scheduleAt">
+  <div class="flex gap-2">
+    <button type="button" class="wm-btn wm-btn-primary flex-1" @click="sendMail()" :disabled="sendingMail">Gönder</button>
+    <button type="button" class="wm-btn" @click="closeCompose()">İptal</button>
+  </div>
+</div>

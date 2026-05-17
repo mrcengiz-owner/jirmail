@@ -33,4 +33,8 @@ app.conf.beat_schedule = {
         'task': 'management.auto_heal_mail_stack',
         'schedule': 600.0,
     },
+    'process-scheduled-mail-every-minute': {
+        'task': 'webmail.process_scheduled_mail',
+        'schedule': 60.0,
+    },
 }

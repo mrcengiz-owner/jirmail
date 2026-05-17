@@ -1,0 +1,30 @@
+<aside class="wm-sidebar flex flex-col shrink-0"
+       :class="mobileView === 'folders' ? 'flex' : 'hidden md:flex'">
+  <div class="h-11 px-3 flex items-center border-b border-[var(--wm-border)]">
+    <img src="{% static 'brand/logo-icon.svg' %}" alt="" class="w-7 h-7 rounded-lg mr-2">
+    <span class="text-xs font-semibold text-white">Jîr<span class="text-[var(--wm-accent)]">Mail</span></span>
+  </div>
+  <div class="p-2">
+    <button type="button" @click="openCompose()" class="wm-btn wm-btn-primary w-full">Yaz</button>
+  </div>
+  <nav class="flex-1 py-1 overflow-y-auto">
+    <button type="button" @click="currentFolder='inbox'; mobileView='list'" class="wm-folder-btn w-full text-left block"
+            :class="currentFolder==='inbox' && 'active'">Gelen</button>
+    <button type="button" @click="currentFolder='sent'; mobileView='list'" class="wm-folder-btn w-full text-left block"
+            :class="currentFolder==='sent' && 'active'">Gönderilen</button>
+    <button type="button" @click="currentFolder='drafts'; mobileView='list'" class="wm-folder-btn w-full text-left block"
+            :class="currentFolder==='drafts' && 'active'">Taslaklar</button>
+    <button type="button" @click="currentFolder='trash'; mobileView='list'" class="wm-folder-btn w-full text-left block"
+            :class="currentFolder==='trash' && 'active'">Çöp</button>
+    <button type="button" @click="currentFolder='starred'; mobileView='list'" class="wm-folder-btn w-full text-left block"
+            :class="currentFolder==='starred' && 'active'">Yıldızlı</button>
+  </nav>
+  <div class="p-2 border-t border-[var(--wm-border)] space-y-1">
+    <button type="button" x-show="aiEnabled" @click="showAi=!showAi" class="wm-btn w-full text-[var(--wm-muted)]">
+      AI Asistan
+    </button>
+    <form method="post" action="{% url 'webmail:logout' %}">{% csrf_token %}
+      <button type="submit" class="wm-btn w-full text-[var(--wm-danger)]">Çıkış</button>
+    </form>
+  </div>
+</aside>

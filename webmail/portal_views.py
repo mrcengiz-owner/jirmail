@@ -33,13 +33,19 @@ def _require_webmail_session(view_func):
 @ensure_csrf_cookie
 @_require_webmail_session
 def inbox(request):
+    from core.models import MailAccount
+
+    account = MailAccount.objects.filter(
+        pk=request.session.get('account_id'),
+    ).select_related('domain').first()
     return render(
         request,
-        'webmail/inbox.html',
+        'webmail/pages/inbox.html',
         {
             'email': request.session.get('email', ''),
             'role': request.session.get('role', ''),
             'is_admin': request.session.get('role') == 'FULL',
+            'ai_enabled': bool(account and account.ai_available),
         },
     )
 

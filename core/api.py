@@ -614,3 +614,33 @@ def toggle_domain(request, domain: str, key: str = None):
         }
     except MailDomain.DoesNotExist:
         return {"status": "error", "message": "Domain bulunamadı."}
+
+
+class DomainAISettingsSchema(Schema):
+    ai_enabled: Optional[bool] = None
+    ai_provider: Optional[str] = None
+    ai_default_model: Optional[str] = None
+    ai_system_prompt_default: Optional[str] = None
+
+
+@router.patch("/domain-ai/{domain}", summary="Domain AI ayarları (sunucu)")
+def update_domain_ai(request, domain: str, data: DomainAISettingsSchema, key: str = None):
+    if not check_auth(request, key):
+        return {"status": "error", "message": "Yetkisiz erişim!"}
+    try:
+        domain_obj = MailDomain.objects.get(name=domain)
+    except MailDomain.DoesNotExist:
+        return {"status": "error", "message": "Domain bulunamadı."}
+    fields = []
+    for attr, val in data.dict(exclude_unset=True).items():
+        if val is not None:
+            setattr(domain_obj, attr, val)
+            fields.append(attr)
+    if fields:
+        domain_obj.save(update_fields=fields)
+    return {
+        "status": "success",
+        "domain": domain_obj.name,
+        "ai_enabled": domain_obj.ai_enabled,
+        "ai_default_model": domain_obj.ai_default_model,
+    }

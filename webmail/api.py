@@ -426,6 +426,170 @@ def sync_all(request: HttpRequest):
     }
 
 
+class AiChatSchema(Schema):
+    message: str
+    context_subject: str = ''
+
+
+class AiSettingsSchema(Schema):
+    ai_enabled: Optional[bool] = None
+    ai_provider: Optional[str] = None
+    ai_model: Optional[str] = None
+    ai_api_key: Optional[str] = None
+    ai_system_prompt: Optional[str] = None
+
+
+class ScheduleMailSchema(Schema):
+    to: str
+    subject: str
+    body_text: str = ''
+    send_at: str
+    cc: str = ''
+    bcc: str = ''
+
+
+@router.get('/ai/status', summary='AI kullanılabilirlik')
+def ai_status(request: HttpRequest):
+    account, _ = _get_account_and_password(request)
+    if not account:
+        return {'success': False, 'message': 'Oturum yok'}
+    account = MailAccount.objects.select_related('domain').filter(pk=account.pk).first()
+    return {
+        'success': True,
+        'domain_ai_enabled': bool(account.domain.ai_enabled),
+        'account_ai_enabled': bool(account.ai_enabled),
+        'ai_available': bool(account.ai_available),
+        'has_api_key': bool((account.ai_api_key or '').strip()),
+        'model': account.ai_model or account.domain.ai_default_model,
+    }
+
+
+@router.post('/ai/chat', summary='AI sohbet / komut')
+def ai_chat(request: HttpRequest, data: AiChatSchema):
+    account, _ = _get_account_and_password(request)
+    if not account:
+        return {'success': False, 'message': 'Oturum yok'}
+    from webmail.ai.service import ai_chat as run_chat
+
+    return run_chat(
+        account,
+        data.message,
+        context={'selected_subject': data.context_subject},
+    )
+
+
+@router.post('/ai/compose', summary='AI ile metin üret')
+def ai_compose(request: HttpRequest, data: AiChatSchema):
+    account, _ = _get_account_and_password(request)
+    if not account:
+        return {'success': False, 'message': 'Oturum yok'}
+    from webmail.ai.service import ai_compose_assist
+
+    return ai_compose_assist(account, instruction=data.message)
+
+
+@router.patch('/ai/settings', summary='Hesap AI ayarları')
+def ai_settings_patch(request: HttpRequest, data: AiSettingsSchema):
+    account, _ = _get_account_and_password(request)
+    if not account:
+        return {'success': False, 'message': 'Oturum yok'}
+    if not account.domain.ai_enabled:
+        return {'success': False, 'message': 'AI bu domain için sunucu tarafından kapalı.'}
+    fields = []
+    for attr, val in data.dict(exclude_unset=True).items():
+        if val is not None:
+            setattr(account, attr, val)
+            fields.append(attr)
+    if fields:
+        account.save(update_fields=fields)
+    return {'success': True, 'ai_available': account.ai_available}
+
+
+@router.get('/scheduled', summary='Planlanmış gönderimler')
+def list_scheduled(request: HttpRequest):
+    account, _ = _get_account_and_password(request)
+    if not account:
+        return {'success': False, 'message': 'Oturum yok'}
+    from webmail.models import ScheduledMail
+
+    rows = ScheduledMail.objects.filter(
+        account=account,
+        status=ScheduledMail.STATUS_PENDING,
+    ).order_by('send_at')[:50]
+    return {
+        'success': True,
+        'items': [
+            {
+                'id': r.id,
+                'to': r.to_addr,
+                'subject': r.subject,
+                'send_at': r.send_at.isoformat(),
+            }
+            for r in rows
+        ],
+    }
+
+
+@router.post('/schedule', summary='Planlı gönderim oluştur')
+def schedule_mail(request: HttpRequest, data: ScheduleMailSchema):
+    account, password = _get_account_and_password(request)
+    if not account:
+        return {'success': False, 'message': 'Oturum yok'}
+    if not password:
+        return {'success': False, 'message': 'Oturumda parola yok — yeniden giriş yapın.'}
+
+    from datetime import datetime
+    from webmail.models import ScheduledMail
+
+    try:
+        send_at = datetime.fromisoformat(data.send_at.replace('Z', '+00:00'))
+    except ValueError:
+        return {'success': False, 'message': 'Geçersiz tarih formatı (ISO 8601 kullanın).'}
+
+    row = ScheduledMail.objects.create(
+        account=account,
+        to_addr=data.to,
+        cc_addr=data.cc or '',
+        bcc_addr=data.bcc or '',
+        subject=data.subject,
+        body_text=data.body_text,
+        send_at=send_at,
+    )
+    return {'success': True, 'id': row.id, 'send_at': row.send_at.isoformat()}
+
+
+@router.post('/send-attachments', summary='Ek dosyalı gönderim')
+def send_with_attachments(request: HttpRequest):
+    account, password = _get_account_and_password(request)
+    if not account:
+        return {'success': False, 'message': 'Oturum yok'}
+    if not password:
+        return {'success': False, 'message': 'Oturumda parola yok — yeniden giriş yapın.'}
+
+    to_raw = request.POST.get('to', '')
+    subject = request.POST.get('subject', '')
+    body_text = request.POST.get('body_text', '')
+    to_list = [x.strip() for x in to_raw.split(',') if x.strip()]
+    if not to_list:
+        return {'success': False, 'message': 'Alıcı gerekli.'}
+
+    attachments = []
+    for f in request.FILES.getlist('attachments'):
+        attachments.append({
+            'filename': f.name,
+            'mime_type': f.content_type or 'application/octet-stream',
+            'content': f.read(),
+        })
+
+    return send_mail(
+        account, password,
+        to=to_list,
+        subject=subject,
+        body_text=body_text,
+        attachments=attachments or None,
+    )
+
+
 def mail_stream(request: HttpRequest):
     """SSE endpoint — yeni mail push."""
     account_id = request.session.get('account_id')

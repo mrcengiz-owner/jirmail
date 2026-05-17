@@ -66,3 +66,45 @@ def imap_idle_listener(self, account_id: int, password: str, folder_name: str = 
     except Exception as exc:
         logger.exception('IDLE failed: %s', exc)
         return {'success': False, 'message': str(exc)}
+
+
+@shared_task(name='webmail.process_scheduled_mail')
+def process_scheduled_mail():
+    from django.utils import timezone
+
+    from webmail.models import ScheduledMail
+    from webmail.smtp_client import send_mail
+
+    now = timezone.now()
+    pending = ScheduledMail.objects.filter(
+        status=ScheduledMail.STATUS_PENDING,
+        send_at__lte=now,
+    ).select_related('account', 'account__domain')[:20]
+
+    results = []
+    for row in pending:
+        account = row.account
+        try:
+            out = send_mail(
+                account,
+                '',
+                to=[x.strip() for x in row.to_addr.split(',') if x.strip()],
+                subject=row.subject,
+                body_text=row.body_text,
+                body_html=row.body_html,
+            )
+            if out.get('success'):
+                row.status = ScheduledMail.STATUS_SENT
+                row.sent_at = now
+                row.error_message = ''
+            else:
+                row.status = ScheduledMail.STATUS_FAILED
+                row.error_message = (out.get('message') or '')[:2000]
+            row.save(update_fields=['status', 'sent_at', 'error_message'])
+            results.append({'id': row.id, 'ok': out.get('success')})
+        except Exception as exc:
+            row.status = ScheduledMail.STATUS_FAILED
+            row.error_message = str(exc)[:2000]
+            row.save(update_fields=['status', 'error_message'])
+            logger.exception('Scheduled mail %s failed', row.id)
+    return {'processed': len(results), 'results': results}

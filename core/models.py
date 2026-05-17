@@ -40,8 +40,20 @@ class MailDomain(models.Model):
     tls_issued_at = models.DateTimeField(null=True, blank=True)
     tls_expires_at = models.DateTimeField(null=True, blank=True)
 
+    ai_enabled = models.BooleanField(default=False, help_text='Domain için AI asistan')
+    ai_provider = models.CharField(max_length=32, default='openrouter')
+    ai_default_model = models.CharField(max_length=128, blank=True, default='openai/gpt-4o-mini')
+    ai_system_prompt_default = models.TextField(
+        blank=True,
+        default='Sen profesyonel bir e-posta asistanısın. Türkçe, kısa ve net yaz.',
+    )
+
     class Meta:
         ordering = ['name']
+
+    @property
+    def ai_available(self) -> bool:
+        return self.is_active and self.ai_enabled
 
     def __str__(self):
         return self.name
@@ -106,6 +118,12 @@ class MailAccount(models.Model):
     forward_enabled = models.BooleanField(default=False)
     keep_copy = models.BooleanField(default=True, help_text="Yönlendirme yaparken kopyayı sakla")
 
+    ai_enabled = models.BooleanField(default=False)
+    ai_provider = models.CharField(max_length=32, blank=True, default='')
+    ai_model = models.CharField(max_length=128, blank=True, default='')
+    ai_api_key = models.CharField(max_length=512, blank=True, default='')
+    ai_system_prompt = models.TextField(blank=True, default='')
+
     class Meta:
         ordering = ['-created_at']
         verbose_name = 'Mail Hesabı'
@@ -113,6 +131,14 @@ class MailAccount(models.Model):
 
     def __str__(self):
         return self.email
+
+    @property
+    def ai_available(self) -> bool:
+        return (
+            self.is_active
+            and self.ai_enabled
+            and self.domain.ai_available
+        )
 
     @property
     def quota_mb(self):

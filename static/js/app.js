@@ -972,13 +972,20 @@
                     fetch('/api/management/create-account', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json', 'X-CSRFToken': window.getCsrfToken() },
+                        credentials: 'same-origin',
                         body: JSON.stringify({
                             username: this.newAccount.username,
                             domain: this.newAccount.domain,
-                            password: this.newAccount.password
+                            password: this.newAccount.password,
+                            role: this.newAccount.role || 'FULL'
                         })
                     })
-                        .then(function(r) { return r.json(); })
+                        .then(function(r) {
+                            if (!r.ok && r.status === 403) {
+                                throw new Error('Oturum veya CSRF hatası — sayfayı yenileyip tekrar giriş yapın.');
+                            }
+                            return r.json();
+                        })
                         .then(function(data) {
                             if (data.status === 'success') {
                                 self.showAddModal = false;

@@ -1,0 +1,4 @@
+<div class="h-10 px-3 flex items-center gap-2 border-b border-[var(--wm-border)] shrink-0">
+  <input type="search" class="wm-input flex-1" placeholder="Ara…" x-model.debounce.400ms="searchQuery" @input="page=1; fetchMails()">
+  <button type="button" class="wm-btn" @click="syncAllFolders().then(()=>fetchMails())" title="Senkronize">↻</button>
+</div>

@@ -1465,6 +1465,7 @@ class MailAccountSchema(Schema):
     username: str
     domain: str
     password: str
+    role: str = 'FULL'
 
 
 @router.post("/restart-container/{container_name}", summary="Container Yeniden Başlat")
@@ -1586,53 +1587,72 @@ def update_postfix_vmail(email, action="add"):
 
 
 @router.post("/create-account", summary="Yeni Mail Hesabı Oluştur")
-@csrf_exempt
 def create_mail_account(request, data: MailAccountSchema):
-    config = SystemConfig.objects.first()
+    from django.db import IntegrityError
+    from jir_core.dashboard_auth import require_full_session
 
+    denied = require_full_session(request)
+    if denied:
+        return denied
+
+    config = SystemConfig.objects.first()
     if not config:
         return {"status": "error", "message": "Sistem konfigürasyonu bulunamadı!"}
+
+    username = (data.username or '').strip().lower()
+    domain_name = (data.domain or '').strip().lower()
+    password = data.password or ''
+    if not username or not domain_name or len(password) < 4:
+        return {"status": "error", "message": "Kullanıcı adı, domain ve parola (min 4) zorunludur."}
 
     current_count = MailAccount.objects.count()
     if current_count >= config.max_accounts:
         return {
             "status": "error",
-            "message": f"Limit aşıldı! Mevcut paketiniz en fazla {config.max_accounts} hesaba izin veriyor."
+            "message": f"Limit aşıldı! En fazla {config.max_accounts} hesap.",
         }
 
-    salt = bcrypt.gensalt()
-    hashed_pw = bcrypt.hashpw(data.password.encode('utf-8'), salt).decode('utf-8')
+    domain_obj, created = MailDomain.objects.get_or_create(name=domain_name)
+    if not domain_obj.is_active:
+        domain_obj.is_active = True
+        domain_obj.save(update_fields=['is_active'])
+    if created or not domain_obj.dkim_enabled:
+        try:
+            domain_obj.generate_dkim_keys()
+        except Exception:
+            pass
 
-    domain_obj, _ = MailDomain.objects.get_or_create(name=data.domain)
-    full_email = f"{data.username}@{data.domain}".lower()
+    full_email = f"{username}@{domain_name}"
+    if MailAccount.objects.filter(email=full_email).exists():
+        return {"status": "error", "message": f"{full_email} zaten kayıtlı."}
+
+    role = (data.role or 'FULL').upper()
+    if role not in dict(MailAccount._meta.get_field('role').choices):
+        role = 'FULL'
+
+    salt = bcrypt.gensalt()
+    hashed_pw = bcrypt.hashpw(password.encode('utf-8'), salt).decode('utf-8')
 
     try:
         new_account = MailAccount.objects.create(
             domain=domain_obj,
-            username=data.username,
+            username=username,
             email=full_email,
-            password_hash=hashed_pw
+            password_hash=hashed_pw,
+            role=role,
         )
+        from core.mail_provision import provision_mail_account
 
-        try:
-            update_postfix_vmail(full_email, action="add")
-        except Exception as e:
-            import logging
-            logging.warning(f"Postfix vmail update skipped: {e}")
-        try:
-            from management.postfix_maps import reload_virtual_mailboxes
-
-            reload_virtual_mailboxes()
-        except Exception as e:
-            import logging
-            logging.warning(f"Postfix virtual_mailbox reload skipped: {e}")
-
+        prov = provision_mail_account(new_account)
         return {
             "status": "success",
             "email": new_account.email,
-            "remaining_slots": config.max_accounts - (current_count + 1)
+            "remaining_slots": config.max_accounts - (current_count + 1),
+            "maildir": prov.get('maildir'),
         }
+    except IntegrityError:
+        return {"status": "error", "message": "Bu e-posta adresi zaten kullanılıyor."}
     except Exception as e:
         import logging
-        logging.error(f"Create account error: {e}")
+        logging.exception('Create account error')
         return {"status": "error", "message": f"Hesap oluşturulamadı: {str(e)}"}

@@ -1,0 +1,35 @@
+{% extends "webmail/layouts/shell.html" %}
+{% load static %}
+
+{% block title %}Gelen Kutusu — Webmail{% endblock %}
+
+{% block wm_body %}
+<div class="wm-app flex h-dvh w-full overflow-hidden" x-data="mailApp()">
+
+  {% include "webmail/partials/sidebar.html" %}
+
+  <section class="wm-list flex flex-col min-h-0"
+           :class="mobileView === 'list' || mobileView === 'folders' ? 'flex' : 'hidden md:flex'">
+    {% include "webmail/partials/toolbar.html" %}
+    {% include "webmail/partials/message_list.html" %}
+  </section>
+
+  <section class="wm-detail flex flex-col min-h-0 min-w-0 flex-1"
+           :class="mobileView === 'detail' ? 'flex' : 'hidden md:flex'">
+    <div class="flex flex-col h-full" x-show="showCompose">
+      {% include "webmail/partials/compose.html" %}
+    </div>
+    <div class="flex flex-col h-full" x-show="selectedMail && !showCompose">
+      {% include "webmail/partials/message_detail.html" %}
+    </div>
+    <div class="flex-1 flex items-center justify-center text-[var(--wm-muted)] text-xs p-8"
+         x-show="!showCompose && !selectedMail">
+      Bir mesaj seçin veya «Yaz» ile başlayın.
+    </div>
+  </section>
+
+  <aside class="wm-ai-drawer flex flex-col min-h-0 shrink-0" x-show="showAi && aiEnabled" x-cloak>
+    {% include "webmail/partials/ai_panel.html" %}
+  </aside>
+</div>
+{% endblock %}

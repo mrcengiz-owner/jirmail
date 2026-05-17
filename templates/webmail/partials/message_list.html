@@ -1,0 +1,17 @@
+<div class="flex-1 overflow-y-auto">
+  <template x-if="loadingMails">
+    <p class="p-4 text-xs text-[var(--wm-muted)]">Yükleniyor…</p>
+  </template>
+  <template x-for="mail in mails" :key="mail.uid">
+    <div class="wm-mail-row" :class="selectedMail && selectedMail.uid === mail.uid && 'active'"
+         @click="selectMail(mail); mobileView='detail'">
+      <div class="flex justify-between gap-2">
+        <span class="wm-meta truncate" x-text="mail.from"></span>
+        <span class="wm-meta shrink-0" x-text="formatDate(mail.date)"></span>
+      </div>
+      <p class="wm-subject mt-0.5" x-text="mail.subject"></p>
+      <p class="wm-meta truncate mt-0.5" x-text="mail.preview"></p>
+    </div>
+  </template>
+  <p x-show="!loadingMails && mails.length===0" class="p-4 text-xs text-[var(--wm-muted)]">Mesaj yok</p>
+</div>
