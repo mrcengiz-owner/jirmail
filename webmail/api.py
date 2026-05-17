@@ -9,6 +9,7 @@ Endpoint'ler:
     POST   /api/mail/messages/{uid}/move           klasöre taşı
     DELETE /api/mail/messages/{uid}                sil
     POST   /api/mail/sync                          manuel folder sync
+    POST   /api/mail/sync-all                      INBOX + Sent + Drafts + Trash sync
     GET    /api/mail/stream                        SSE yeni mail push
 """
 from typing import Optional
@@ -374,6 +375,32 @@ def sync(request: HttpRequest, data: SyncSchema):
         return {'success': True, **result}
     except Exception as exc:
         return {'success': False, 'message': str(exc)}
+
+
+@router.post('/sync-all', summary='Tüm ana klasörleri IMAP ile senkronize et')
+def sync_all(request: HttpRequest):
+    account, password = _get_account_and_password(request)
+    if not account:
+        return {'success': False, 'message': 'Oturum yok'}
+
+    folders = ['INBOX', 'Sent', 'Drafts', 'Trash']
+    results = []
+    errors = []
+    for folder in folders:
+        try:
+            results.append(sync_folder_metadata(account, password, folder, limit=200))
+        except Exception as exc:
+            errors.append({'folder': folder, 'error': str(exc)})
+
+    if not results and errors:
+        return {'success': False, 'message': errors[0]['error'], 'errors': errors}
+
+    return {
+        'success': True,
+        'synced': results,
+        'errors': errors,
+        'total_fetched': sum(r.get('fetched', 0) for r in results),
+    }
 
 
 def mail_stream(request: HttpRequest):

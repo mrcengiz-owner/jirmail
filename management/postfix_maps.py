@@ -9,7 +9,15 @@ logger = logging.getLogger(__name__)
 
 
 def reload_virtual_mailboxes() -> bool:
-    """jir_postfix içinde inbound init script mantığını tekrar çalıştır."""
+    """Postfix yenile (pgsql harita anlık; docker yoksa no-op)."""
+    try:
+        from core.mail_provision import reload_postfix
+
+        reload_postfix()
+        return True
+    except Exception as exc:
+        logger.debug('postfix reload: %s', exc)
+
     container = os.getenv('JIR_CONTAINER_POSTFIX', 'jir_postfix')
     script = '/docker-init.d/10-jirmail-inbound.sh'
     try:
@@ -27,8 +35,8 @@ def reload_virtual_mailboxes() -> bool:
             return False
         return True
     except FileNotFoundError:
-        logger.debug('docker CLI yok — postfix map yenileme atlandı')
-        return False
+        logger.debug('docker CLI yok — postfix map yenileme atlandı (pgsql canlı)')
+        return True
     except Exception as exc:
         logger.warning('Postfix virtual_mailbox yenileme: %s', exc)
         return False

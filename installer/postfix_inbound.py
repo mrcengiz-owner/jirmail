@@ -15,6 +15,9 @@ def postfix_boky_base_environment(mail_domain: str, mail_hostname: str) -> dict[
         'HOSTNAME': hostname,
         'POSTFIX_myhostname': hostname,
         'POSTFIX_mynetworks': '127.0.0.0/8,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16',
+        'POSTFIX_smtpd_sender_restrictions': 'permit',
+        'POSTFIX_smtpd_client_restrictions': 'permit',
+        'POSTFIX_smtpd_helo_restrictions': 'permit',
         'MAIL_DOMAIN': domain,
     }
 

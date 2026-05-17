@@ -1179,7 +1179,9 @@
 
                 init: function() {
                     var self = this;
-                    this.fetchMails();
+                    this.syncAllFolders().then(function() {
+                        self.fetchMails();
+                    });
                     var stopFolderWatch = this.$watch('currentFolder', function() {
                         self.page = 1;
                         self.selectedMail = null;
@@ -1290,6 +1292,20 @@
                             headers: { 'Content-Type': 'application/json', 'X-CSRFToken': window.getCsrfToken() },
                             body: JSON.stringify({ folder: this.imapFolder(), limit: 100 })
                         });
+                    } catch(e) { /* ignore */ }
+                },
+
+                syncAllFolders: async function() {
+                    try {
+                        var res = await fetch('/api/mail/sync-all', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': window.getCsrfToken() },
+                            credentials: 'same-origin'
+                        });
+                        var data = await res.json();
+                        if (!data.success && data.message) {
+                            console.warn('Mail sync-all:', data.message);
+                        }
                     } catch(e) { /* ignore */ }
                 },
 

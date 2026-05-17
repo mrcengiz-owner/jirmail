@@ -29,6 +29,11 @@ echo "=== Running migrations ==="
 python manage.py makemigrations --noinput 2>/dev/null || true
 python manage.py migrate --noinput
 
+if [ "${JIR_COMPOSE_STACK}" = "1" ]; then
+    echo "=== Mail kutuları (Maildir) + Postfix eşlemesi ==="
+    python manage.py provision_mail_stack 2>/dev/null || true
+fi
+
 echo "=== Collecting static files ==="
 mkdir -p /app/staticfiles
 python manage.py collectstatic --noinput --clear

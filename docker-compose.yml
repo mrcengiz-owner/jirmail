@@ -33,6 +33,7 @@ services:
     volumes:
       - config_data:/app/config
       - jir_mail_tls:/etc/jir-mail/tls
+      - mail_data:/var/mail
     expose:
       - "8000"
     labels:
@@ -144,6 +145,9 @@ services:
       MAIL_DOMAIN: ${MAIL_DOMAIN:-jircode.com}
       POSTFIX_myhostname: ${MAIL_HOSTNAME:-mail.jircode.com}
       POSTFIX_mynetworks: "127.0.0.0/8,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16"
+      POSTFIX_smtpd_sender_restrictions: permit
+      POSTFIX_smtpd_client_restrictions: permit
+      POSTFIX_smtpd_helo_restrictions: permit
       DB_HOST: postgres
       DB_PORT: "5432"
       DB_NAME: ${POSTGRES_DB:-jir_mail_prod}
