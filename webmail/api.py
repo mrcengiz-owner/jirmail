@@ -220,40 +220,74 @@ def send(request: HttpRequest, data: SendMailSchema):
     if not account:
         return {'success': False, 'message': 'Oturum yok'}
 
+    if not password:
+        return {
+            'success': False,
+            'message': (
+                'Oturumda mail parolası yok. Çıkış yapıp webmail’e tekrar giriş yapın '
+                '(IMAP/Sent için parola gerekir).'
+            ),
+        }
+
     to_list = [x.strip() for x in data.to.split(',') if x.strip()]
+    if not to_list:
+        return {'success': False, 'message': 'En az bir alıcı gerekli.'}
+
     cc_list = [x.strip() for x in data.cc.split(',') if x.strip()] if data.cc else None
     bcc_list = [x.strip() for x in data.bcc.split(',') if x.strip()] if data.bcc else None
 
     snippet = (data.body_text or data.body_html or '')[:480]
-    log_row = MailOutboundLog.objects.create(
-        account=account,
-        to_addr=', '.join(to_list),
-        subject=data.subject,
-        snippet=snippet,
-        status=MailOutboundLog.STATUS_PENDING,
-    )
+    log_row = None
+    try:
+        log_row = MailOutboundLog.objects.create(
+            account=account,
+            to_addr=', '.join(to_list),
+            subject=data.subject,
+            snippet=snippet,
+            status=MailOutboundLog.STATUS_PENDING,
+        )
+    except Exception as exc:
+        import logging
+        logging.getLogger(__name__).warning('MailOutboundLog kaydı atlandı: %s', exc)
 
-    result = send_mail(
-        account, password,
-        to=to_list, subject=data.subject,
-        body_text=data.body_text, body_html=data.body_html,
-        cc=cc_list, bcc=bcc_list,
-    )
+    try:
+        result = send_mail(
+            account, password,
+            to=to_list, subject=data.subject,
+            body_text=data.body_text, body_html=data.body_html,
+            cc=cc_list, bcc=bcc_list,
+        )
+    except Exception as exc:
+        import logging
+        logging.getLogger(__name__).exception('send_mail')
+        if log_row:
+            log_row.status = MailOutboundLog.STATUS_FAILED
+            log_row.error_message = str(exc)[:2000]
+            log_row.save(update_fields=['status', 'error_message'])
+        return {'success': False, 'message': str(exc)}
 
     if result.get('success'):
-        log_row.status = MailOutboundLog.STATUS_SENT
-        log_row.message_id = (result.get('message_id') or '')[:512]
-        log_row.save(update_fields=['status', 'message_id'])
-        result['outbound_id'] = log_row.id
-        if result.get('sent_imap_warning'):
+        if log_row:
+            log_row.status = MailOutboundLog.STATUS_SENT
+            log_row.message_id = (result.get('message_id') or '')[:512]
+            log_row.save(update_fields=['status', 'message_id'])
+            result['outbound_id'] = log_row.id
+        warn = result.get('sent_imap_warning') or ''
+        if warn and 'AUTHENTICATIONFAILED' in warn.upper():
+            result['message'] = (
+                'Mesaj Postfix tarafından kabul edildi ancak Dovecot IMAP kimlik doğrulaması başarısız. '
+                'Çıkış yapıp aynı parola ile tekrar giriş yapın; sorun sürerse Dovecot konteynerini yeniden oluşturun.'
+            )
+        elif result.get('sent_imap_warning'):
             result['message'] = (
                 'Mesaj Postfix tarafından kabul edildi. '
                 'Gönderilen klasörüne kopyalanamadı — “Gönderilen” klasörünü yenileyin.'
             )
     else:
-        log_row.status = MailOutboundLog.STATUS_FAILED
-        log_row.error_message = (result.get('message') or '')[:2000]
-        log_row.save(update_fields=['status', 'error_message'])
+        if log_row:
+            log_row.status = MailOutboundLog.STATUS_FAILED
+            log_row.error_message = (result.get('message') or '')[:2000]
+            log_row.save(update_fields=['status', 'error_message'])
 
     return result
 

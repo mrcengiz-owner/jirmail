@@ -36,6 +36,13 @@ service pop3-login {
   }
 }
 
+# Postfix → Dovecot teslimatı (gelen posta)
+service lmtp {
+  inet_listener lmtp {
+    port = 24
+  }
+}
+
 passdb {
   driver = sql
   args = /etc/dovecot/dovecot-sql.conf.ext
@@ -54,7 +61,7 @@ plugin {
 }
 
 auth_mechanisms = plain login
+# Tam e-posta ile giriş (user@domain); realm ayrıştırmasını bozmasın
+auth_username_format = %Lu
 first_valid_uid = 5000
 last_valid_uid = 5000
-
-auth_default_realm = $MAIL_DOMAIN

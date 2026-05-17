@@ -130,18 +130,28 @@ services:
       retries: 5
 
   postfix:
-    image: boky/postfix:latest
+    build:
+      context: ./postfix
+      dockerfile: Dockerfile
+    image: jir-postfix:latest
     container_name: jir_postfix
     restart: unless-stopped
     hostname: ${MAIL_HOSTNAME:-mail.jircode.com}
     environment:
-      ALLOWED_SENDER_DOMAINS: ${MAIL_DOMAIN:-jircode.com}
+      ALLOW_EMPTY_SENDER_DOMAINS: "1"
+      ALLOWED_SENDER_DOMAINS: ""
       HOSTNAME: ${MAIL_HOSTNAME:-mail.jircode.com}
-      POSTFIX_smtpd_tls_security_level: encrypt
+      MAIL_DOMAIN: ${MAIL_DOMAIN:-jircode.com}
+      POSTFIX_myhostname: ${MAIL_HOSTNAME:-mail.jircode.com}
+      POSTFIX_mynetworks: "127.0.0.0/8,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16"
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_NAME: ${POSTGRES_DB:-jir_mail_prod}
+      DB_USER: ${POSTGRES_USER:-postgres}
+      DB_PASS: ${POSTGRES_PASSWORD}
       POSTFIX_smtpd_tls_cert_file: /etc/jir-mail/tls/server.crt
       POSTFIX_smtpd_tls_key_file: /etc/jir-mail/tls/server.key
       POSTFIX_smtpd_tls_CAfile: /etc/jir-mail/tls/ca.crt
-      POSTFIX_smtpd_tls_auth_only: "yes"
     volumes:
       - postfix_data:/etc/postfix
       - mail_data:/var/mail
@@ -149,6 +159,11 @@ services:
     ports:
       - "${POSTFIX_PORT_25:-25}:25"
       - "${POSTFIX_PORT_587:-587}:587"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      dovecot:
+        condition: service_started
     networks:
       - jir_network
 

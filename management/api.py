@@ -1615,6 +1615,13 @@ def create_mail_account(request, data: MailAccountSchema):
         except Exception as e:
             import logging
             logging.warning(f"Postfix vmail update skipped: {e}")
+        try:
+            from management.postfix_maps import reload_virtual_mailboxes
+
+            reload_virtual_mailboxes()
+        except Exception as e:
+            import logging
+            logging.warning(f"Postfix virtual_mailbox reload skipped: {e}")
 
         return {
             "status": "success",

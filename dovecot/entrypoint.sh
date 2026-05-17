@@ -18,6 +18,7 @@ mkdir -p /etc/dovecot/ssl
 envsubst '$DB_HOST $DB_PORT $DB_NAME $DB_USER $DB_PASS' \
   < "$TPL_DIR/dovecot-sql.conf.ext.tpl" > /etc/dovecot/dovecot-sql.conf.ext
 sed -i 's/^driver = postgres/driver = pgsql/' /etc/dovecot/dovecot-sql.conf.ext
+sed -i 's/^default_pass_scheme = bcrypt/default_pass_scheme = BLF-CRYPT/' /etc/dovecot/dovecot-sql.conf.ext
 grep -q '^driver = pgsql' /etc/dovecot/dovecot-sql.conf.ext || {
   echo 'dovecot: SQL driver pgsql olmalı (şablon/entrypoint güncel değil)' >&2
   head -3 /etc/dovecot/dovecot-sql.conf.ext >&2

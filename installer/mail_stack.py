@@ -107,17 +107,16 @@ def mail_stack_params_from_env() -> MailStackParams:
 def build_mail_only_specs(p: MailStackParams) -> list[ServiceSpec]:
     """Yalnızca Postfix + Dovecot (harici Postgres — depends_on boş)."""
     tls_mount = mail_tls_volume_mount(read_only=True)
-    pf_env = {
-        'ALLOWED_SENDER_DOMAINS': p.mail_domain,
-        'HOSTNAME': p.mail_hostname,
-        'POSTFIX_mynetworks': '127.0.0.0/8,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16',
-    }
+    from installer.postfix_inbound import postfix_boky_base_environment, postfix_db_environment
+
+    pf_env = postfix_boky_base_environment(p.mail_domain, p.mail_hostname)
+    pf_env.update(postfix_db_environment())
     pf_env.update(postfix_tls_environment())
 
     postfix = ServiceSpec(
         key='postfix',
         name=p.postfix_container,
-        image='boky/postfix:latest',
+        image=os.getenv('JIR_POSTFIX_IMAGE', 'jir-postfix:latest'),
         hostname=p.mail_hostname,
         environment=pf_env,
         ports={

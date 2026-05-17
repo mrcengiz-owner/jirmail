@@ -257,16 +257,14 @@ def mail_tls_volume_mount(*, read_only: bool = True) -> dict[str, dict[str, str]
 
 
 def postfix_tls_environment() -> dict[str, str]:
-    """boky/postfix: submission üzerinde zorunlu TLS."""
+    """TLS dosya yolları — smtpd_tls_* değerleri init script ile ayarlanır (MX için may)."""
     cert = f'{MAIL_TLS_MOUNT}/{SERVER_CERT_FILENAME}'
     key = f'{MAIL_TLS_MOUNT}/{SERVER_KEY_FILENAME}'
     ca = f'{MAIL_TLS_MOUNT}/{CA_FILENAME}'
     return {
-        'POSTFIX_smtpd_tls_security_level': 'encrypt',
         'POSTFIX_smtpd_tls_cert_file': cert,
         'POSTFIX_smtpd_tls_key_file': key,
         'POSTFIX_smtpd_tls_CAfile': ca,
-        'POSTFIX_smtpd_tls_auth_only': 'yes',
         'POSTFIX_smtpd_tls_mandatory_protocols': '!SSLv2, !SSLv3, !TLSv1, !TLSv1.1',
         'POSTFIX_smtpd_tls_mandatory_ciphers': 'high',
     }

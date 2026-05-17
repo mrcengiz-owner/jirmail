@@ -1438,13 +1438,24 @@
                         var res = await fetch('/api/mail/send', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json', 'X-CSRFToken': window.getCsrfToken() },
+                            credentials: 'same-origin',
                             body: JSON.stringify({
                                 to: this.composeTo,
                                 subject: this.composeSubject,
                                 body_text: this.composeBody
                             })
                         });
-                        var data = await res.json();
+                        var raw = await res.text();
+                        var data;
+                        try {
+                            data = JSON.parse(raw);
+                        } catch (parseErr) {
+                            throw new Error(
+                                res.ok
+                                    ? 'Sunucu geçersiz yanıt döndü'
+                                    : ('HTTP ' + res.status + ' — oturum süresi dolmuş veya sunucu hatası olabilir')
+                            );
+                        }
                         if (data.success) {
                             window.showToast(data.message || 'Mesaj Postfix tarafından kabul edildi.', 'success');
                             this.closeCompose();

@@ -112,8 +112,11 @@ def send_mail(account, password: str, *, to: list[str] | str, subject: str, body
                 sync_folder_metadata(account, password, sent_folder, limit=50)
                 out['sent_folder'] = sent_folder
             except Exception as exc:
-                logger.warning('Sent klasörüne IMAP append başarısız: %s', exc)
-                out['sent_imap_warning'] = str(exc)
+                err = str(exc)
+                if hasattr(exc, 'args') and exc.args:
+                    err = ' '.join(str(a) for a in exc.args if a)
+                logger.warning('Sent klasörüne IMAP append başarısız: %s', err)
+                out['sent_imap_warning'] = err
         return out
     except socket.gaierror as exc:
         hint = (
