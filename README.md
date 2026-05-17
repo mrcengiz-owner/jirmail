@@ -41,9 +41,17 @@ cp .env.compose.example .env
 docker compose up -d --build
 ```
 
-Coolify: kaynak türü **Docker Compose** (tek Dockerfile değil), ortam dosyasına `JIR_COMPOSE_STACK=1` (`.env.coolify` örneğine bakın).
+**Dokploy / Coolify:** kaynak türü **Docker Compose** → `docker-compose.yml`. Ortam: `.env.dokploy.example` veya `.env.coolify`. `JIR_COMPOSE_STACK=1` zorunlu.
 
-Kurulum sihirbazı compose modunda Docker API ile konteyner açmaz; mail doğrulaması `postfix` / `dovecot` servis adları üzerinden yapılır.
+Sunucuda `git clone` + `docker compose up` **yapmayın** — PaaS deploy etsin. Kurulum sihirbazı compose modunda Docker API kullanmaz.
+
+### Dokploy (özet)
+
+1. Proje → **Compose** → GitHub `mrcengiz-owner/jirmail`, branch `main`
+2. **Environment** → `.env.dokploy.example` içeriği (şifreleri değiştirin)
+3. **Domains** → `django` servisi, port **8000**
+4. Deploy; ilk açılışta `/setup/` sihirbazı
+5. DNS: `A` mail → sunucu IP; SMTP 25/587, IMAP 993 firewall’da açık
 
 ## Teknoloji Yığını
 

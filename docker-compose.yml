@@ -1,5 +1,5 @@
-# Jîr-Mail — tek stack (panel + DB + mail). Coolify: "Docker Compose" olarak deploy edin.
-# Host'ta ayrı jir_* konteyner kurmayın; `docker compose up -d` yeterli.
+# Jîr-Mail — tek stack (panel + Postgres + Redis + Postfix + Dovecot).
+# Dokploy / Coolify: kaynak türü "Docker Compose", bu dosya. Host'ta elle jir_* kurmayın.
 
 services:
 
@@ -33,7 +33,7 @@ services:
     volumes:
       - config_data:/app/config
       - jir_mail_tls:/etc/jir-mail/tls
-    # Coolify reverse proxy — yalnızca ağ içi 8000 (host bind yok, port çakışması olmaz).
+    # Traefik/Caddy (Dokploy proxy) — yalnızca ağ içi 8000; host'a 8000 bind etmeyin.
     expose:
       - "8000"
     depends_on:
@@ -171,23 +171,19 @@ services:
       - jir_network
 
 volumes:
-  # Mevcut sunucu volume'ları (jir_* ) — veri kaybı olmasın diye external
+  # Sabit isimler — format sonrası temiz kurulumda otomatik oluşur
   postgres_data:
-    external: true
     name: jir_postgres_data
   redis_data:
-    external: true
     name: jir_redis_data
   postfix_data:
-    external: true
     name: jir_postfix_data
   mail_data:
-    external: true
     name: jir_mail_data
   jir_mail_tls:
-    external: true
     name: jir_mail_tls
   config_data:
+    name: jir_config_data
 
 networks:
   jir_network:
