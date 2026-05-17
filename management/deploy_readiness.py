@@ -262,6 +262,33 @@ def collect_deploy_readiness(*, session_role: str | None = None) -> dict[str, An
         checks.append(_check_item(f'mail_{sk}', label, m_st, m_msg, details={'host': host, 'port': port}))
         overall = _worst_status(overall, m_st)
 
+    # —— Mail stack otomatik doğrulama (compose) ——
+    if os.getenv('JIR_COMPOSE_STACK') == '1':
+        try:
+            from management.mail_stack_health import verify_mail_stack
+
+            ms = verify_mail_stack(fix=False, healthcheck=True)
+            ms_st = CHECK_OK if ms.get('ok') else CHECK_ERR
+            ms_msg = 'SMTP/IMAP/Postfix pgsql otomatik kontrol geçti.' if ms.get('ok') else (
+                'Mail stack sorunlu: '
+                + ', '.join(c['id'] for c in ms.get('checks', []) if not c.get('ok'))
+            )
+            checks.append(_check_item(
+                'mail_stack_auto',
+                'Mail stack (otomatik)',
+                ms_st,
+                ms_msg,
+                hint='Deploy sonrası entrypoint verify_and_heal_mail_stack çalışır; elle test gerekmez.',
+            ))
+            overall = _worst_status(overall, ms_st)
+        except Exception as exc:
+            checks.append(_check_item(
+                'mail_stack_auto',
+                'Mail stack (otomatik)',
+                CHECK_WARN,
+                f'Kontrol atlandı: {exc}',
+            ))
+
     # —— Kurulum tamamlandı mı ——
     try:
         from saas.models import SystemConfig

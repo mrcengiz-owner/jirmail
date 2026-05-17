@@ -29,4 +29,8 @@ app.conf.beat_schedule = {
         'task': 'tls.renew_certificates',
         'schedule': 604800.0,
     },
+    'auto-heal-mail-stack-every-10-minutes': {
+        'task': 'management.auto_heal_mail_stack',
+        'schedule': 600.0,
+    },
 }

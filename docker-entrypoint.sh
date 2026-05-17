@@ -32,6 +32,9 @@ python manage.py migrate --noinput
 if [ "${JIR_COMPOSE_STACK}" = "1" ]; then
     echo "=== Mail kutuları (Maildir) + Postfix eşlemesi ==="
     python manage.py provision_mail_stack 2>/dev/null || true
+    echo "=== Mail stack otomatik doğrulama ve onarım ==="
+    python manage.py verify_and_heal_mail_stack --fix --quiet || true
+    python manage.py verify_and_heal_mail_stack --self-test-only --quiet || true
 fi
 
 echo "=== Collecting static files ==="

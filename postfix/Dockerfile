@@ -9,5 +9,7 @@ RUN apt-get update \
 
 COPY docker-init.d/ /docker-init.d/
 COPY pgsql-virtual-mailboxes.cf.tpl pgsql-virtual-domains.cf.tpl /usr/share/jir-mail/postfix-templates/
-RUN chmod +x /docker-init.d/*.sh
+COPY entrypoint-wrapper.sh /usr/local/bin/jir-postfix-entrypoint.sh
+RUN chmod +x /docker-init.d/*.sh /usr/local/bin/jir-postfix-entrypoint.sh
 ENV JIR_POSTFIX_TEMPLATES=/usr/share/jir-mail/postfix-templates
+ENTRYPOINT ["/tini", "--", "/usr/local/bin/jir-postfix-entrypoint.sh"]

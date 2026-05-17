@@ -28,6 +28,17 @@ chmod 600 /etc/dovecot/dovecot-sql.conf.ext
 envsubst '$MAIL_DOMAIN' \
   < "$TPL_DIR/dovecot.conf.tpl" > /etc/dovecot/dovecot.conf
 
+# Eski imaj / manuel düzenleme: dinamik kota IMAP'i düşürür
+if grep -qE 'quota_rule.*%\{(Userdb|userdb):quota_bytes\}' /etc/dovecot/dovecot.conf 2>/dev/null; then
+  sed -i 's|quota_rule = .*|quota_rule = *:storage=2G|' /etc/dovecot/dovecot.conf
+  echo "dovecot: kota satırı 2G olarak düzeltildi"
+fi
+if ! doveconf -n >/dev/null 2>&1; then
+  echo "dovecot: yapılandırma geçersiz" >&2
+  doveconf -n 2>&1 | head -20 >&2
+  exit 1
+fi
+
 CERT=/etc/dovecot/ssl/dovecot.crt
 KEY=/etc/dovecot/ssl/dovecot.key
 PKI_CERT=/etc/jir-mail/tls/server.crt

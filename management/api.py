@@ -93,33 +93,37 @@ def health_check(request):
     except Exception:
         pass
 
-    vmail_path = getattr(settings, 'POSTFIX_VMAIL_PATH', '/etc/postfix/vmail_accounts')
-    if os.path.exists(vmail_path):
+    if os.getenv('JIR_COMPOSE_STACK') == '1':
         try:
-            result = subprocess.run(['postmap', '-q', 'test', vmail_path], capture_output=True, timeout=5)
-            checks['postfix'] = result.returncode == 0
-        except Exception:
-            pass
-    # postmap yoksa process kontrolüne düş
-    if not checks['postfix']:
-        try:
-            for proc in psutil.process_iter(['name']):
-                if 'postfix' in proc.info['name'].lower() or 'master' in proc.info['name'].lower():
+            from management.mail_stack_health import verify_mail_stack
+
+            ms = verify_mail_stack(fix=False, healthcheck=True)
+            for chk in ms.get('checks', []):
+                cid = chk.get('id', '')
+                if cid == 'smtp':
+                    checks['postfix'] = bool(chk.get('ok'))
+                elif cid == 'imap':
+                    checks['dovecot'] = bool(chk.get('ok'))
+                elif cid == 'postfix_pgsql_cf' and chk.get('ok'):
                     checks['postfix'] = True
-                    break
         except Exception:
             pass
 
-    dovecot_socket = '/var/run/dovecot/auth-login'
-    if os.path.exists(dovecot_socket) or os.path.exists('/var/run/dovecot'):
-        checks['dovecot'] = True
-    # socket yoksa process kontrolüne düş
-    if not checks['dovecot']:
+    if not checks['postfix']:
+        from management.mail_service_endpoint import resolve_mail_endpoint, tcp_reachable
         try:
-            for proc in psutil.process_iter(['name']):
-                if 'dovecot' in proc.info['name'].lower():
-                    checks['dovecot'] = True
-                    break
+            host, port = resolve_mail_endpoint(
+                'postfix', int(getattr(settings, 'SMTP_PORT', 587)), auth_submission=True
+            )
+            checks['postfix'] = tcp_reachable(host, port, timeout=2.0)
+        except Exception:
+            pass
+
+    if not checks['dovecot']:
+        from management.mail_service_endpoint import resolve_mail_endpoint, tcp_reachable
+        try:
+            host, port = resolve_mail_endpoint('dovecot', int(getattr(settings, 'IMAP_PORT', 993)))
+            checks['dovecot'] = tcp_reachable(host, port, timeout=2.0)
         except Exception:
             pass
 
