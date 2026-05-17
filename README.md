@@ -49,9 +49,19 @@ Sunucuda `git clone` + `docker compose up` **yapmayın** — PaaS deploy etsin. 
 
 1. Proje → **Compose** → GitHub `mrcengiz-owner/jirmail`, branch `main`
 2. **Environment** → `.env.dokploy.example` içeriği (şifreleri değiştirin)
-3. **Domains** → `django` servisi, port **8000**
+3. **Domains** → `django` servisi, port **8000**, host `mail.jircode.com`
 4. Deploy; ilk açılışta `/setup/` sihirbazı
 5. DNS: `A` mail → sunucu IP; SMTP 25/587, IMAP 993 firewall’da açık
+
+**404 (Traefik “page not found”) ama `docker exec dokploy-traefik wget … jir_django:8000` → 200:**
+
+Dokploy bazen domain’i konteyner etiketine yazar, Traefik **file** provider’a eklemez. Kontrol:
+
+```bash
+docker exec dokploy-traefik wget -qO- http://127.0.0.1:8080/api/http/routers | grep mail.jircode
+```
+
+Çıktı yoksa: Domains’i silip yeniden ekleyin ve redeploy. Hâlâ yoksa `deploy/dokploy/traefik-mail.jircode.com.yaml` içeriğini Dokploy → **Traefik → Additional / Dynamic config** alanına yapıştırın (host adını değiştirin).
 
 ## Teknoloji Yığını
 

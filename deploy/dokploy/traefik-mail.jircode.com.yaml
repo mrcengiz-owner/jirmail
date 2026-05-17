@@ -1,0 +1,29 @@
+# Dokploy Traefik file provider — mail.jircode.com → jir_django:8000
+# Traefik API'de mail.jircode.com router yoksa bu dosyayı Dokploy'a ekleyin:
+# Settings → Traefik → Additional configuration (veya dynamic/ mount)
+#
+# jir_django ve dokploy-traefik aynı dokploy-network üzerinde olmalı.
+
+http:
+  routers:
+    jirmail-http:
+      rule: Host(`mail.jircode.com`)
+      entryPoints:
+        - web
+      middlewares:
+        - redirect-to-https@file
+      service: jirmail-panel
+
+    jirmail-https:
+      rule: Host(`mail.jircode.com`)
+      entryPoints:
+        - websecure
+      service: jirmail-panel
+      tls:
+        certResolver: letsencrypt
+
+  services:
+    jirmail-panel:
+      loadBalancer:
+        servers:
+          - url: http://jir_django:8000
