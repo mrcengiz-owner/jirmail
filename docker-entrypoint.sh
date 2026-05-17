@@ -26,7 +26,7 @@ if [ "${JIR_COMPOSE_STACK}" = "1" ]; then
 fi
 
 echo "=== Running migrations ==="
-python manage.py makemigrations --noinput 2>/dev/null || true
+# Prod'da makemigrations çalıştırma — migration çakışması / 502 riski
 python manage.py migrate --noinput
 
 if [ "${JIR_COMPOSE_STACK}" = "1" ]; then
