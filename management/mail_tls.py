@@ -148,6 +148,7 @@ def verify_imap_tls(
 ) -> bool:
     """IMAPS: TLS el sıkışması + Dovecot * OK satırı (IMAPClient bazen Broken pipe verir)."""
     import socket
+    import time
 
     if not imap_ssl_verify_required():
         return True
@@ -157,7 +158,14 @@ def verify_imap_tls(
             with ctx.wrap_socket(raw, server_hostname=host) as tls:
                 tls.settimeout(timeout)
                 buf = b''
+                deadline = time.monotonic() + min(timeout, 8.0)
                 while len(buf) < 4096 and b'\n' not in buf:
+                    if time.monotonic() >= deadline:
+                        raise TimeoutError(
+                            'IMAP * OK gelmedi (Dovecot auth çöküyor olabilir; '
+                            'docker logs jir_dovecot | tail -20)'
+                        )
+                    tls.settimeout(max(0.5, deadline - time.monotonic()))
                     chunk = tls.recv(512)
                     if not chunk:
                         break
