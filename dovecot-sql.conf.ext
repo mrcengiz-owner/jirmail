@@ -1,7 +1,7 @@
 # Dovecot PostgreSQL Authentication Configuration
 # Reads from jir_mail_prod database
 
-driver = postgres
+driver = pgsql
 connect = host=${DB_HOST:-82.153.241.171} port=${DB_PORT:-5432} dbname=${DB_NAME:-jir_mail_prod} user=${DB_USER:-postgres} password=${DB_PASS:-YwzYYQkUjO29REPbignRwVVyJnM3r8cBg5h7NE7kyvc0wMYg99Ccf5mGPMnpuig1}
 
 # Password scheme - matches Django's bcrypt

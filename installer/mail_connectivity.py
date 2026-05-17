@@ -93,10 +93,16 @@ def _dovecot_container_healthy(client: Any, name: str) -> bool:
         if getattr(c, 'status', '') != 'running':
             return False
         exit_code, _ = c.exec_run(
-            ['dovecot', '--version'],
+            ['doveconf', '-n'],
             demux=True,
         )
-        return exit_code == 0
+        if exit_code != 0:
+            return False
+        exit_code2, out = c.exec_run(
+            ['grep', '-q', '^driver = pgsql', '/etc/dovecot/dovecot-sql.conf.ext'],
+            demux=True,
+        )
+        return exit_code2 == 0
     except Exception:
         return False
 

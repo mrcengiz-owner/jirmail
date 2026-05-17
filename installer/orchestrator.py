@@ -103,8 +103,20 @@ def _dovecot_container_stale(c) -> bool:
         )
         if ec != 0:
             return True
-        ec2, _ = c.exec_run(['dovecot', '--version'], demux=True)
-        return ec2 != 0
+        ec2, _ = c.exec_run(
+            ['grep', '-qE', '^driver = (pgsql|postgres)', '/etc/dovecot/dovecot-sql.conf.ext'],
+            demux=True,
+        )
+        if ec2 != 0:
+            return True
+        ec3, _ = c.exec_run(
+            ['grep', '-q', '^driver = postgres', '/etc/dovecot/dovecot-sql.conf.ext'],
+            demux=True,
+        )
+        if ec3 == 0:
+            return True
+        ec4, _ = c.exec_run(['doveconf', '-n'], demux=True)
+        return ec4 != 0
     except Exception:
         return True
 

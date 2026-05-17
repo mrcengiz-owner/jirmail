@@ -22,6 +22,9 @@ rm -rf "$BUILD_DIR"
 docker cp "$PANEL:/app/dovecot" "$BUILD_DIR"
 
 # Eski panel kodu: manage_sieve / submission
+if [ -f "$BUILD_DIR/dovecot-sql.conf.ext.tpl" ]; then
+  sed -i 's/^driver = postgres/driver = pgsql/' "$BUILD_DIR/dovecot-sql.conf.ext.tpl"
+fi
 if [ -f "$BUILD_DIR/dovecot.conf.tpl" ]; then
   sed -i '/manage_sieve/d' "$BUILD_DIR/dovecot.conf.tpl"
   sed -i 's/ lmtp submission/ lmtp/g; s/submission //g' "$BUILD_DIR/dovecot.conf.tpl"
@@ -53,4 +56,5 @@ docker run -d --name jir_dovecot --network jir_network \
 
 sleep 2
 docker logs jir_dovecot --tail 15
-docker exec jir_dovecot doveadm version
+docker exec jir_dovecot doveconf -n >/dev/null && echo "doveconf OK"
+docker exec jir_dovecot grep '^driver =' /etc/dovecot/dovecot-sql.conf.ext

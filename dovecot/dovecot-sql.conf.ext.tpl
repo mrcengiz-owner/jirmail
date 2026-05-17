@@ -2,7 +2,7 @@
 # Çalışma anında entrypoint: envsubst ile /etc/dovecot/dovecot-sql.conf.ext üretilir.
 # Gerekli ortam: DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASS
 
-driver = postgres
+driver = pgsql
 connect = host=$DB_HOST port=$DB_PORT dbname=$DB_NAME user=$DB_USER password=$DB_PASS
 
 default_pass_scheme = bcrypt
