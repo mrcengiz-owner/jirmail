@@ -1,16 +1,26 @@
 #!/bin/sh
 set -e
+TPL_DIR="${JIR_DOVECOT_TEMPLATES:-/usr/share/jir-mail/dovecot-templates}"
+
 for v in DB_HOST DB_PORT DB_NAME DB_USER DB_PASS MAIL_DOMAIN; do
   eval "test -n \"\$$v\"" || { echo "dovecot: eksik ortam: $v" >&2; exit 1; }
 done
 export DB_HOST DB_PORT DB_NAME DB_USER DB_PASS MAIL_DOMAIN
 umask 077
+
+if [ ! -f "$TPL_DIR/dovecot-sql.conf.ext.tpl" ]; then
+  echo "dovecot: şablon bulunamadı: $TPL_DIR" >&2
+  ls -la "$TPL_DIR" 2>/dev/null || ls -la /usr/share/jir-mail/ 2>/dev/null || true
+  exit 1
+fi
+
+mkdir -p /etc/dovecot/ssl
 envsubst '$DB_HOST $DB_PORT $DB_NAME $DB_USER $DB_PASS' \
-  < /etc/dovecot/dovecot-sql.conf.ext.tpl > /etc/dovecot/dovecot-sql.conf.ext
+  < "$TPL_DIR/dovecot-sql.conf.ext.tpl" > /etc/dovecot/dovecot-sql.conf.ext
 chmod 600 /etc/dovecot/dovecot-sql.conf.ext
 envsubst '$MAIL_DOMAIN' \
-  < /etc/dovecot/dovecot.conf.tpl > /etc/dovecot/dovecot.conf
-mkdir -p /etc/dovecot/ssl
+  < "$TPL_DIR/dovecot.conf.tpl" > /etc/dovecot/dovecot.conf
+
 CERT=/etc/dovecot/ssl/dovecot.crt
 KEY=/etc/dovecot/ssl/dovecot.key
 PKI_CERT=/etc/jir-mail/tls/server.crt

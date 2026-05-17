@@ -86,10 +86,27 @@ def _ensure_db_container_on_network(client: Any, db_host: str, network: str) -> 
         return f'Veritabanı ağ bağlantısı ({host}): {exc}'
 
 
+def _dovecot_container_healthy(client: Any, name: str) -> bool:
+    try:
+        c = client.containers.get(name)
+        c.reload()
+        if getattr(c, 'status', '') != 'running':
+            return False
+        exit_code, _ = c.exec_run(
+            ['dovecot', '--version'],
+            demux=True,
+        )
+        return exit_code == 0
+    except Exception:
+        return False
+
+
 def _needs_mail_provision(client: Any, postfix_name: str, dovecot_name: str) -> bool:
     if not _mail_containers_running(client):
         return True
     if dovecot_container_needs_rebuild(client, dovecot_name):
+        return True
+    if not _dovecot_container_healthy(client, dovecot_name):
         return True
     return False
 

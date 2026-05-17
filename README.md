@@ -97,6 +97,21 @@ static/       main.css (tek stylesheet kaynağı), brand.css, app.js
 dovecot/      Dovecot imajı; `*.tpl` şablonlar + ortam (`DB_*`, `MAIL_DOMAIN`) — sırlar repoda yok
 ```
 
+### Dovecot’u sunucuda elle derlemek (Coolify)
+
+`/app` yalnızca **panel konteynerinin içinde** vardır; host’ta `docker build /app/dovecot` çalışmaz. Örnek:
+
+```bash
+export PANEL=y6171w3adxrsvye799k5htub-010053730009   # büyük harf PANEL
+chmod +x scripts/rebuild-dovecot-on-host.sh
+./scripts/rebuild-dovecot-on-host.sh
+```
+
+`panel=` küçük harf ile `$PANEL` boş kalır; `docker cp` hata verir.
+
+Kurulum sihirbazı (`setup.html` → bootstrap) güncel kodu deploy ettikten sonra imajı panel üzerinden otomatik derler; tercih edilen yol budur.
+```
+
 ## Stil (saf CSS)
 
 Arayüz stilleri `static/css/main.css` içindedir (önceki Tailwind çıktısı tek dosyada konsolide edilmiştir). Yeni görünüm veya bileşen eklerken:

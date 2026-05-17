@@ -752,7 +752,17 @@ function setupWizard() {
             const deadline = Date.now() + (maxWaitMs || 600000);
             while (Date.now() < deadline) {
                 const st = await fetch('/api/installer/bootstrap-stack/status');
-                const data = await st.json();
+                const raw = await st.text();
+                let data;
+                try {
+                    data = JSON.parse(raw);
+                } catch (e) {
+                    return {
+                        status: 'error',
+                        error: 'Sunucu JSON yerine HTML döndü (HTTP ' + st.status + '). Oturum veya proxy kontrol edin.',
+                        detail: raw.slice(0, 200)
+                    };
+                }
                 if (data.status === 'running') {
                     await new Promise((r) => setTimeout(r, 2500));
                     continue;

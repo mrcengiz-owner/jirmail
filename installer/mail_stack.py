@@ -149,7 +149,6 @@ def build_mail_only_specs(p: MailStackParams) -> list[ServiceSpec]:
             '993/tcp': 993,
         },
         volumes={
-            'jir_dovecot_data': {'bind': '/etc/dovecot', 'mode': 'rw'},
             'jir_mail_data': {'bind': '/var/mail', 'mode': 'rw'},
             **tls_mount,
         },
@@ -227,7 +226,6 @@ services:
       DB_PASS: {q(p.db_password)}
       MAIL_DOMAIN: {q(p.mail_domain)}
     volumes:
-      - dovecot_data:/etc/dovecot
       - mail_data:/var/mail
       - jir_mail_tls:/etc/jir-mail/tls:ro
     ports:
@@ -237,7 +235,6 @@ services:
 
 volumes:
   postfix_data:
-  dovecot_data:
   mail_data:
   jir_mail_tls:
 {net_block}"""

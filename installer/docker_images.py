@@ -37,8 +37,26 @@ def ensure_jir_dovecot_image(
     if not force_rebuild:
         try:
             client.images.get(JIR_DOVECOT_IMAGE)
-            _say(f'Dovecot imajı mevcut: {JIR_DOVECOT_IMAGE}')
-            return JIR_DOVECOT_IMAGE
+            # Eski imajda şablonlar /etc/dovecot altındaydı (volume ile kayboluyordu)
+            try:
+                client.containers.run(
+                    JIR_DOVECOT_IMAGE,
+                    ['test', '-f', '/usr/share/jir-mail/dovecot-templates/dovecot.conf.tpl'],
+                    remove=True,
+                )
+                client.containers.run(
+                    JIR_DOVECOT_IMAGE,
+                    [
+                        'sh', '-c',
+                        'DB_HOST=127.0.0.1 DB_PORT=5432 DB_NAME=jir DB_USER=jir DB_PASS=jir '
+                        'MAIL_DOMAIN=mail.local /entrypoint.sh doveconf -n >/dev/null',
+                    ],
+                    remove=True,
+                )
+                _say(f'Dovecot imajı mevcut: {JIR_DOVECOT_IMAGE}')
+                return JIR_DOVECOT_IMAGE
+            except Exception:
+                _say('Eski/bozuk Dovecot imajı — yeniden derleniyor.')
         except Exception:
             pass
 

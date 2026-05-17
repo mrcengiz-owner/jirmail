@@ -130,7 +130,6 @@ def build_specs(config: dict) -> list[ServiceSpec]:
             '993/tcp': 993,
         },
         volumes={
-            'jir_dovecot_data': {'bind': '/etc/dovecot', 'mode': 'rw'},
             'jir_mail_data': {'bind': '/var/mail', 'mode': 'rw'},
             JIR_MAIL_TLS_VOLUME: {'bind': MAIL_TLS_MOUNT, 'mode': 'ro'},
         },

@@ -22,7 +22,11 @@ class JirInstallMiddleware:
         is_logged_in = request.session.get('is_logged_in', False)
 
         protected_paths = ['/master-panel/', '/mail-panel/', '/webmail/', '/dashboard/', '/domains/', '/accounts/', '/containers/', '/backups/', '/logs/', '/settings/', '/api/content/']
-        auth_paths = ['/login/', '/webmail/login/', '/setup/', '/api/health', '/api/login', '/api/test-db', '/api/setup-complete']
+        auth_paths = [
+            '/login/', '/webmail/login/', '/setup/',
+            '/api/health', '/api/login', '/api/test-db', '/api/setup-complete',
+            '/api/installer/',
+        ]
 
         path = request.path
 

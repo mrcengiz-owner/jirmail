@@ -81,6 +81,34 @@ def _remove_container_by_name(client, container_name: str) -> None:
             pass
 
 
+def _dovecot_container_stale(c) -> bool:
+    """Eski kurulum: /etc/dovecot volume mount veya çökme döngüsü."""
+    name = (getattr(c, 'name', '') or '').lstrip('/')
+    if 'dovecot' not in name:
+        return False
+    for m in c.attrs.get('Mounts') or []:
+        dest = m.get('Destination') or ''
+        vol = m.get('Name') or ''
+        if dest == '/etc/dovecot' and vol:
+            return True
+    state = c.attrs.get('State', {})
+    if state.get('Status') == 'restarting':
+        return True
+    if state.get('Status') != 'running':
+        return False
+    try:
+        ec, _ = c.exec_run(
+            ['test', '-f', '/usr/share/jir-mail/dovecot-templates/dovecot.conf.tpl'],
+            demux=True,
+        )
+        if ec != 0:
+            return True
+        ec2, _ = c.exec_run(['dovecot', '--version'], demux=True)
+        return ec2 != 0
+    except Exception:
+        return True
+
+
 def _stack_service_action(client, spec: ServiceSpec, policy: str) -> str:
     """skip | start | recreate — konteyner yoksa recreate (yeni oluştur)."""
     try:
@@ -95,6 +123,10 @@ def _stack_service_action(client, spec: ServiceSpec, policy: str) -> str:
     c.reload()
     cfg_img = (c.attrs.get('Config') or {}).get('Image') or ''
     if not _image_matches_spec(cfg_img, spec.image):
+        _remove_container_by_name(client, spec.name)
+        return 'recreate'
+
+    if _dovecot_container_stale(c):
         _remove_container_by_name(client, spec.name)
         return 'recreate'
 

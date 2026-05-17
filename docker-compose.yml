@@ -41,7 +41,6 @@ services:
     volumes:
       - config_data:/app/config
       - postfix_data:/etc/postfix
-      - dovecot_data:/etc/dovecot
     expose:
       - "8000"
     depends_on:
@@ -163,7 +162,6 @@ services:
       - DB_PASS=${POSTGRES_PASSWORD}
       - MAIL_DOMAIN=${MAIL_DOMAIN:-jircode.com}
     volumes:
-      - dovecot_data:/etc/dovecot
       - mail_data:/var/mail
     ports:
       - "${DOVECOT_PORT_IMAP:-993}:993"
@@ -176,7 +174,6 @@ services:
 volumes:
   postgres_data:
   postfix_data:
-  dovecot_data:
   mail_data:
   static_data:
   config_data:

@@ -2,8 +2,8 @@
 # Sertifika üretimde TLS ile değiştirin (Let's Encrypt vb.).
 
 listen = *, ::
-protocols = imap pop3 lmtp submission
-manage_sieve = yes
+# Gönderim Postfix (587); Sieve için pigeonhole gerekir — Alpine imajında yok
+protocols = imap pop3 lmtp
 
 log_path = /var/log/dovecot.log
 info_log_path = /var/log/dovecot-info.log
@@ -28,7 +28,6 @@ plugin {
   quota = maildir:User quota
   quota_rule = *:storage=%{Userdb:quota_bytes}b
   quota_rule2 = *:messages=0
-  quota_warning = storage=95%% echo "Kota %%d%% doldu" | /usr/local/bin/quota-warning
   quota_exceeded = 552 5.2.2 Mailbox full
 }
 
