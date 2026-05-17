@@ -451,8 +451,15 @@ def collect_installer_mail_stack_status(
         'dovecot', int(getattr(settings, 'IMAP_PORT', 993))
     )
 
-    smtp_ok = tcp_reachable(smtp_host, smtp_port, timeout=2.5)
-    imap_ok = tcp_reachable(imap_host, imap_port, timeout=2.5)
+    from management.mail_tls import bootstrap_mail_tls_ca_from_db, verify_imap_tls, verify_smtp_starttls
+
+    bootstrap_mail_tls_ca_from_db()
+    smtp_ok = False
+    imap_ok = False
+    if tcp_reachable(smtp_host, smtp_port, timeout=2.5):
+        smtp_ok = verify_smtp_starttls(smtp_host, smtp_port, timeout=4.0)
+    if tcp_reachable(imap_host, imap_port, timeout=2.5):
+        imap_ok = verify_imap_tls(imap_host, imap_port, timeout=4.0)
 
     pf_name = merged_container_name('postfix')
     dv_name = merged_container_name('dovecot')
@@ -491,10 +498,14 @@ def collect_installer_mail_stack_status(
         params_preview = {'error': str(exc)}
 
     hints: list[str] = []
-    if prof == 'docker_stack' and not mail_ready:
+    if postfix_running and dovecot_running and not mail_ready:
         hints.append(
-            'Tam Docker kurulumunda Postfix ve Dovecot henüz yoksa tüm satırlar kırmızı görünebilir; '
-            'bu adım bilgilendirme amaçlıdır, kurulum sihirbazını tamamladığınızda servisler oluşturulur.'
+            'Konteynerler çalışıyor ancak TLS doğrulaması başarısız — “Tekrar dene” ile bootstrap-stack '
+            'çalıştırın; panel jir_network ağına bağlı olmalı.'
+        )
+    if prof == 'docker_stack' and not mail_ready and not (postfix_running and dovecot_running):
+        hints.append(
+            'Bootstrap henüz tamamlanmadıysa adım 1 çıktısındaki hatayı giderin; ardından “Tekrar dene”.'
         )
     if in_docker and not (os.getenv('SMTP_HOST') or os.getenv('POSTFIX_SMTP_HOST') or '').strip():
         hints.append(
@@ -512,13 +523,14 @@ def collect_installer_mail_stack_status(
             'biri eksikse kurulumdan sonra compose veya CLI ile mail stack ekleyin.'
         )
     if not has_db_url:
-        if django_uses_postgresql:
+        if 'sqlite' in db_engine:
             hints.append(
-                'DATABASE_URL ortamda yok; Django PostgreSQL ayarları kurulumda kullanılacak.'
+                'Şu an SQLite kullanılıyor. Tek sunucu kurulumu bootstrap sonrası jir_postgres + DATABASE_URL '
+                'ayarlar; adım 1 bootstrap başarılı olmalı.'
             )
-        elif 'sqlite' in db_engine:
+        elif django_uses_postgresql:
             hints.append(
-                'Şu an SQLite kullanılıyor; üretim mail kurulumu için PostgreSQL ve DATABASE_URL tanımlanmalıdır.'
+                'DATABASE_URL ortam değişkeninde yok; Django PostgreSQL ayarları kullanılıyor olabilir.'
             )
 
     return {

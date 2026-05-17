@@ -535,6 +535,16 @@ def provision_docker_stack_sync(client, config: dict) -> list[str]:
         dovecot_container='jir_dovecot',
     )
     cfg['mail_pki_ca_pem'] = pki.ca_cert_pem.decode('utf-8')
+    try:
+        from installer.mail_pki import write_ca_to_path
+        import tempfile
+        from pathlib import Path
+
+        dest = Path(tempfile.gettempdir()) / 'jir-mail-internal-ca.crt'
+        write_ca_to_path(pki.ca_cert_pem, dest)
+        os.environ['MAIL_TLS_CA_FILE'] = str(dest)
+    except Exception:
+        pass
 
     rec.log('Dovecot imajı derleniyor…')
     ensure_jir_dovecot_image(client, log=rec.log)

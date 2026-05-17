@@ -107,6 +107,8 @@ def bootstrap_single_server(
         if profile == PROFILE_DOCKER_STACK:
             stack_msgs = provision_docker_stack_sync(client, config)
             messages.extend(stack_msgs)
+            if config.get('mail_pki_ca_pem'):
+                messages.append('Mail PKI tamam (docker_stack).')
             db_url = _apply_internal_database_url(config)
             if db_url:
                 messages.append('DATABASE_URL → jir_postgres (iç ağ) ayarlandı.')

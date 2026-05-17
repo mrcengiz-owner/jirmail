@@ -179,24 +179,42 @@ def auto_setup_mail_services(
     except Exception as exc:
         return {'success': False, 'error': str(exc), 'messages': messages}
 
-    pki_ca_pem = ''
+    pki_ca_pem = (config.get('mail_pki_ca_pem') or '').strip()
     try:
         params_pre = resolve_mail_stack_params(mail_domain_override=domain or None)
         db_msg = _ensure_db_container_on_network(client, params_pre.db_host, network)
         if db_msg:
             messages.append(db_msg)
-        messages.append('Dahili mail PKI (TLS)…')
-        pki = ensure_mail_pki_volume(
-            client,
-            mail_hostname=mail_hostname or params_pre.mail_hostname,
-            mail_domain=params_pre.mail_domain,
-            postfix_container=params_pre.postfix_container,
-            dovecot_container=params_pre.dovecot_container,
-        )
-        pki_ca_pem = pki.ca_cert_pem.decode('utf-8')
-        messages.append('TLS sertifikaları hazır (jir_mail_tls volume).')
+        if not pki_ca_pem:
+            messages.append('Dahili mail PKI (TLS)…')
+            pki = ensure_mail_pki_volume(
+                client,
+                mail_hostname=mail_hostname or params_pre.mail_hostname,
+                mail_domain=params_pre.mail_domain,
+                postfix_container=params_pre.postfix_container,
+                dovecot_container=params_pre.dovecot_container,
+            )
+            pki_ca_pem = pki.ca_cert_pem.decode('utf-8')
+            messages.append('TLS sertifikaları hazır (jir_mail_tls volume).')
+        else:
+            messages.append('TLS sertifikaları mevcut (bootstrap).')
     except Exception as exc:
         messages.append(f'PKI/TLS: {exc}')
+        return {
+            'success': False,
+            'error': f'Mail PKI hazırlanamadı: {exc}',
+            'messages': messages,
+        }
+
+    if panel:
+        ok, msg = _attach_to_network(client, panel, network)
+        messages.append(msg)
+        if not ok:
+            return {
+                'success': False,
+                'error': f'Panel mail ağına bağlanamadı: {msg}',
+                'messages': messages,
+            }
 
     need_provision = _needs_mail_provision(client, smtp_host, imap_host)
     if need_provision:
@@ -231,18 +249,10 @@ def auto_setup_mail_services(
     else:
         messages.append('Postfix ve Dovecot zaten çalışıyor (özel Dovecot imajı).')
 
-    if panel:
-        ok, msg = _attach_to_network(client, panel, network)
-        messages.append(msg)
-        if not ok:
-            return {
-                'success': False,
-                'error': f'Panel mail ağına bağlanamadı: {msg}',
-                'messages': messages,
-            }
-    else:
+    if not panel:
         messages.append(
-            'Uyarı: Panel konteyner adı bilinmiyor; yeniden başlatma sonrası ağ bağlantısı denenecek.'
+            'Uyarı: Panel konteyner adı bilinmiyor (HOSTNAME / COOLIFY_CONTAINER_NAME); '
+            'SMTP/IMAP DNS çözülemeyebilir.'
         )
 
     params_summary: dict[str, Any] = {}

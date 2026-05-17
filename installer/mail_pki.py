@@ -21,6 +21,7 @@ MAIL_TLS_MOUNT = '/etc/jir-mail/tls'
 CA_FILENAME = 'ca.crt'
 SERVER_CERT_FILENAME = 'server.crt'
 SERVER_KEY_FILENAME = 'server.key'
+_TLS_FILENAMES = (CA_FILENAME, SERVER_CERT_FILENAME, SERVER_KEY_FILENAME)
 
 
 @dataclass(frozen=True)
@@ -132,22 +133,45 @@ def _ensure_volume(client, name: str) -> None:
         client.volumes.create(name=name)
 
 
-def _volume_has_ca(client, volume_name: str) -> bool:
+def _with_tls_volume_container(client, volume_name: str, *, read_only: bool = True):
+    """Volume mount edilmiş kısa ömürlü alpine konteyner."""
+    container = client.containers.create(
+        'alpine:3.19',
+        ['sleep', '120'],
+        volumes={volume_name: {'bind': MAIL_TLS_MOUNT, 'mode': 'ro' if read_only else 'rw'}},
+    )
+    container.start()
+    return container
+
+
+def _exec_cat(container, filename: str) -> bytes:
+    """Docker get_archive tek dosyada 404 verebilir; cat güvenilir."""
+    path = f'{MAIL_TLS_MOUNT}/{filename}'
+    exit_code, output = container.exec_run(['cat', path])
+    if exit_code != 0:
+        raise FileNotFoundError(f'{path} okunamadı (exit {exit_code})')
+    if not output:
+        raise FileNotFoundError(f'{path} boş')
+    return output
+
+
+def _volume_has_complete_pki(client, volume_name: str) -> bool:
     container = None
     try:
-        container = client.containers.run(
-            'alpine:3.19',
-            ['test', '-f', f'{MAIL_TLS_MOUNT}/{CA_FILENAME}'],
-            detach=True,
-            remove=False,
-            volumes={volume_name: {'bind': MAIL_TLS_MOUNT, 'mode': 'ro'}},
-        )
-        container.wait(timeout=30)
-        return int(container.attrs.get('State', {}).get('ExitCode', 1)) == 0
+        container = _with_tls_volume_container(client, volume_name, read_only=True)
+        for name in _TLS_FILENAMES:
+            exit_code, _ = container.exec_run(['test', '-s', f'{MAIL_TLS_MOUNT}/{name}'])
+            if exit_code != 0:
+                return False
+        return True
     except Exception:
         return False
     finally:
         if container:
+            try:
+                container.stop(timeout=5)
+            except Exception:
+                pass
             try:
                 container.remove(force=True)
             except Exception:
@@ -157,13 +181,13 @@ def _volume_has_ca(client, volume_name: str) -> bool:
 def _write_volume_files(client, volume_name: str, files: dict[str, bytes]) -> None:
     container = None
     try:
-        container = client.containers.create(
-            'alpine:3.19',
-            ['sleep', '120'],
-            volumes={volume_name: {'bind': MAIL_TLS_MOUNT, 'mode': 'rw'}},
-        )
-        container.start()
+        container = _with_tls_volume_container(client, volume_name, read_only=False)
+        container.exec_run(['mkdir', '-p', MAIL_TLS_MOUNT])
         container.put_archive(MAIL_TLS_MOUNT, _tar_archive(files))
+        for name in files:
+            exit_code, _ = container.exec_run(['test', '-s', f'{MAIL_TLS_MOUNT}/{name}'])
+            if exit_code != 0:
+                raise RuntimeError(f'PKI dosyası yazılamadı: {MAIL_TLS_MOUNT}/{name}')
     finally:
         if container:
             try:
@@ -187,8 +211,11 @@ def ensure_mail_pki_volume(
 ) -> MailPkiMaterial:
     """Docker volume jir_mail_tls içinde CA + sunucu sertifikası."""
     _ensure_volume(client, JIR_MAIL_TLS_VOLUME)
-    if not force and _volume_has_ca(client, JIR_MAIL_TLS_VOLUME):
-        return load_mail_pki_from_volume(client)
+    if not force and _volume_has_complete_pki(client, JIR_MAIL_TLS_VOLUME):
+        try:
+            return load_mail_pki_from_volume(client)
+        except Exception as exc:
+            logger.warning('PKI volume okunamadı, yeniden oluşturuluyor: %s', exc)
 
     dns_names = [
         mail_hostname,
@@ -205,28 +232,14 @@ def ensure_mail_pki_volume(
 
 
 def load_mail_pki_from_volume(client: Any) -> MailPkiMaterial:
-    """Mevcut volume'dan PEM oku."""
+    """Mevcut volume'dan PEM oku (exec cat)."""
     container = None
     try:
-        container = client.containers.create(
-            'alpine:3.19',
-            ['sleep', '60'],
-            volumes={JIR_MAIL_TLS_VOLUME: {'bind': MAIL_TLS_MOUNT, 'mode': 'ro'}},
-        )
-        container.start()
-        base = MAIL_TLS_MOUNT
-
-        def _read(name: str) -> bytes:
-            bits, _ = container.get_archive(f'{base}/{name}')
-            data = b''.join(bits)
-            with tarfile.open(fileobj=io.BytesIO(data), mode='r:') as tar:
-                member = tar.getmembers()[0]
-                return tar.extractfile(member).read()
-
+        container = _with_tls_volume_container(client, JIR_MAIL_TLS_VOLUME, read_only=True)
         return MailPkiMaterial(
-            ca_cert_pem=_read(CA_FILENAME),
-            server_cert_pem=_read(SERVER_CERT_FILENAME),
-            server_key_pem=_read(SERVER_KEY_FILENAME),
+            ca_cert_pem=_exec_cat(container, CA_FILENAME),
+            server_cert_pem=_exec_cat(container, SERVER_CERT_FILENAME),
+            server_key_pem=_exec_cat(container, SERVER_KEY_FILENAME),
         )
     finally:
         if container:
