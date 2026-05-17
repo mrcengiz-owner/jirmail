@@ -31,7 +31,19 @@ python manage.py check_deploy --json   # CI / Coolify post-deploy script
 python manage.py check_deploy --fail-on-error
 ```
 
-**Önemli:** Lokal **Docker tam kurulum** (`docker_stack`) Coolify tek uygulama konteynerinde çalışmaz. Sunucuda **Ortam veritabanı (DATABASE_URL)** + ayrı Postfix/Dovecot servisleri kullanın; `JIR_CONTAINER_POSTFIX` / `JIR_CONTAINER_DOVECOT` env ile gerçek konteyner adlarını verin.
+## Tek komutla tam stack (önerilen)
+
+Panel + Postgres + Redis + Postfix + Dovecot **aynı `docker-compose.yml` içinde** — host’ta ayrı `docker build` / `jir_*` kurulumu gerekmez.
+
+```bash
+cp .env.compose.example .env
+# .env içinde POSTGRES_PASSWORD ve JIR_LOCAL_KEY düzenleyin
+docker compose up -d --build
+```
+
+Coolify: kaynak türü **Docker Compose** (tek Dockerfile değil), ortam dosyasına `JIR_COMPOSE_STACK=1` (`.env.coolify` örneğine bakın).
+
+Kurulum sihirbazı compose modunda Docker API ile konteyner açmaz; mail doğrulaması `postfix` / `dovecot` servis adları üzerinden yapılır.
 
 ## Teknoloji Yığını
 

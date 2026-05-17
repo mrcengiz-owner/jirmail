@@ -742,7 +742,11 @@ function setupWizard() {
             this.jirKey = this.generateKey();
             this.ensurePostgresSecret();
             await this.loadBootstrap();
-            if (this.bootstrap.docker_available) {
+            if (this.bootstrap.compose_stack) {
+                this.installProfile = 'compose_stack';
+                this.stackBootstrapOk = true;
+                this.stackBootstrapMessages = 'Docker Compose stack — mail servisleri bu deployment ile birlikte çalışıyor.\n';
+            } else if (this.bootstrap.docker_available) {
                 this.installProfile = 'docker_stack';
                 await this.runStackBootstrap('');
             }

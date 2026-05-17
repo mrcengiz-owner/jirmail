@@ -17,6 +17,14 @@ with open('/app/config/db_config.json') as f:
 EOF
 fi
 
+if [ "${JIR_COMPOSE_STACK}" = "1" ]; then
+    echo "=== Compose stack: mail TLS (Postfix/Dovecot aynı ağda) ==="
+    python manage.py init_mail_tls \
+        --domain "${MAIL_DOMAIN:-mail.local}" \
+        --hostname "${MAIL_HOSTNAME:-mail.${MAIL_DOMAIN:-mail.local}}" \
+        2>/dev/null || true
+fi
+
 echo "=== Running migrations ==="
 python manage.py makemigrations --noinput 2>/dev/null || true
 python manage.py migrate --noinput

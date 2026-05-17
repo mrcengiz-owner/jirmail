@@ -9,6 +9,7 @@ from urllib.parse import quote_plus
 
 from django.conf import settings
 
+from installer.compose_stack import bootstrap_compose_stack, is_compose_stack
 from installer.db_url import has_database_url, resolve_database_url
 from installer.mail_connectivity import auto_setup_mail_services, apply_mail_connectivity_to_system_config
 from installer.profiles import PROFILE_DOCKER_STACK, PROFILE_PLATFORM_ENV
@@ -28,14 +29,17 @@ def discover_stack_paths() -> dict[str, Any]:
         'dovecot_ok': dovecot_df.is_file(),
         'manage_ok': manage_py.is_file(),
         'in_docker': bool(getattr(settings, 'IN_DOCKER', False)),
+        'compose_stack': is_compose_stack(),
     }
 
 
 def _effective_profile(config: dict[str, Any], docker_available: bool) -> str:
-    """Tek sunucu: Docker varsa her zaman tam stack."""
-    raw = (config.get('install_profile') or '').strip()
+    """Tek sunucu: Compose veya Docker API ile tam stack."""
+    if is_compose_stack():
+        return 'compose_stack'
     if docker_available:
         return PROFILE_DOCKER_STACK
+    raw = (config.get('install_profile') or '').strip()
     if raw in (PROFILE_PLATFORM_ENV, 'platform_env'):
         return PROFILE_PLATFORM_ENV
     return raw or PROFILE_DOCKER_STACK
@@ -43,6 +47,9 @@ def _effective_profile(config: dict[str, Any], docker_available: bool) -> str:
 
 def _apply_internal_database_url(config: dict[str, Any]) -> str | None:
     """docker_stack sonrası Django/migrate için DATABASE_URL."""
+    if is_compose_stack():
+        url = os.getenv('DATABASE_URL', '').strip()
+        return url or None
     if config.get('install_profile') != PROFILE_DOCKER_STACK:
         return None
     pw = str(config.get('postgres_password') or '')
@@ -63,9 +70,7 @@ def bootstrap_single_server(
     *,
     docker_client: Any | None = None,
 ) -> dict[str, Any]:
-    """Sihirbaz başlangıcı: dizinleri bul, konteynerleri oluştur, mail TLS doğrula."""
-    from installer.orchestrator import _get_docker_client_optional, provision_docker_stack_sync
-
+    """Sihirbaz: Compose stack veya Docker API ile kurulum."""
     messages: list[str] = []
     paths = discover_stack_paths()
     messages.append(f"Proje kökü: {paths['base_dir']}")
@@ -78,29 +83,41 @@ def bootstrap_single_server(
             'messages': messages,
         }
 
+    domain = (config.get('domain') or os.getenv('MAIL_DOMAIN') or '').strip() or 'mail.local'
+    mail_hostname = (config.get('mail_hostname') or f'mail.{domain}').strip()
+    config = {
+        **config,
+        'domain': domain,
+        'mail_hostname': mail_hostname,
+    }
+
+    if is_compose_stack():
+        config['install_profile'] = 'compose_stack'
+        result = bootstrap_compose_stack(config)
+        result['paths'] = paths
+        result['docker_available'] = False
+        result['compose_stack'] = True
+        return result
+
+    from installer.orchestrator import _get_docker_client_optional, provision_docker_stack_sync
+
     client = docker_client or _get_docker_client_optional()
     if client is None:
         return {
             'success': False,
             'error': (
-                'Docker API erişilemiyor. Tek sunucu kurulumu için panel konteynerine '
-                '/var/run/docker.sock mount edilmelidir.'
+                'Docker API erişilemiyor. Önerilen: repodaki docker-compose.yml ile '
+                'tüm stack\'i deploy edin (JIR_COMPOSE_STACK=1). Alternatif: panel konteynerine '
+                '/var/run/docker.sock mount.'
             ),
             'paths': paths,
             'messages': messages,
             'docker_available': False,
         }
 
-    domain = (config.get('domain') or os.getenv('MAIL_DOMAIN') or '').strip() or 'mail.local'
-    mail_hostname = (config.get('mail_hostname') or f'mail.{domain}').strip()
     profile = _effective_profile(config, docker_available=True)
-    config = {
-        **config,
-        'domain': domain,
-        'mail_hostname': mail_hostname,
-        'install_profile': profile,
-    }
-    messages.append(f'Kurulum profili (tek sunucu): {profile}')
+    config['install_profile'] = profile
+    messages.append(f'Kurulum profili: {profile}')
     messages.append(f'Mail domain: {domain}')
 
     try:

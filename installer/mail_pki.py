@@ -277,3 +277,50 @@ def write_ca_to_path(ca_pem: bytes, path: Path) -> Path:
     path.write_bytes(ca_pem)
     path.chmod(0o644)
     return path
+
+
+def _tls_dir_complete(tls_dir: Path) -> bool:
+    return all((tls_dir / name).is_file() and (tls_dir / name).stat().st_size > 0 for name in _TLS_FILENAMES)
+
+
+def ensure_mail_pki_files(
+    tls_dir: Path,
+    *,
+    mail_hostname: str,
+    mail_domain: str,
+    postfix_host: str = 'postfix',
+    dovecot_host: str = 'dovecot',
+    force: bool = False,
+) -> MailPkiMaterial:
+    """Compose: paylaşılan volume dizinine PKI yaz (Docker API yok)."""
+    tls_dir = Path(tls_dir)
+    tls_dir.mkdir(parents=True, exist_ok=True)
+    if not force and _tls_dir_complete(tls_dir):
+        return load_mail_pki_from_directory(tls_dir)
+
+    dns_names = [
+        mail_hostname,
+        mail_domain,
+        f'mail.{mail_domain}',
+        postfix_host,
+        dovecot_host,
+        'jir_postfix',
+        'jir_dovecot',
+        'localhost',
+    ]
+    material = generate_mail_pki(common_name=mail_hostname, dns_names=dns_names)
+    for name, data in material.as_volume_files().items():
+        dest = tls_dir / name
+        dest.write_bytes(data)
+        dest.chmod(0o644 if name.endswith('.crt') else 0o600)
+    logger.info('Mail PKI yazıldı: %s', tls_dir)
+    return material
+
+
+def load_mail_pki_from_directory(tls_dir: Path) -> MailPkiMaterial:
+    tls_dir = Path(tls_dir)
+    return MailPkiMaterial(
+        ca_cert_pem=(tls_dir / CA_FILENAME).read_bytes(),
+        server_cert_pem=(tls_dir / SERVER_CERT_FILENAME).read_bytes(),
+        server_key_pem=(tls_dir / SERVER_KEY_FILENAME).read_bytes(),
+    )

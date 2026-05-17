@@ -67,7 +67,16 @@ def probe_capabilities() -> Dict[str, Any]:
     """Bootstrap için: Docker API ve DATABASE_URL varlığı (ping ile)."""
     from django.conf import settings
 
+    from installer.compose_stack import is_compose_stack
     from installer.db_url import has_database_url as _has_db_url
+
+    if is_compose_stack():
+        return {
+            'docker_available': False,
+            'has_database_url': _has_db_url(),
+            'managed_install_forced': False,
+            'compose_stack': True,
+        }
 
     has_database_url = _has_db_url()
     docker_available = False
@@ -109,7 +118,9 @@ def probe_capabilities() -> Dict[str, Any]:
 
 
 def suggested_profile_from_capabilities(cap: Dict[str, Any]) -> str:
-    """Tek sunucu: Docker varsa tam stack."""
+    """Tek sunucu: Compose veya Docker API stack."""
+    if cap.get('compose_stack'):
+        return 'compose_stack'
     if cap.get('docker_available'):
         return PROFILE_DOCKER_STACK
     if cap.get('has_database_url'):
@@ -119,18 +130,32 @@ def suggested_profile_from_capabilities(cap: Dict[str, Any]) -> str:
 
 def install_modes_for_ui(cap: Dict[str, Any]) -> List[Dict[str, Any]]:
     """Sihirbaz kartları — her biri canonical `id` ile."""
+    compose_ok = bool(cap.get('compose_stack'))
     docker_ok = bool(cap.get('docker_available'))
     db_url = bool(cap.get('has_database_url'))
     forced = bool(cap.get('managed_install_forced'))
 
     modes: List[Dict[str, Any]] = [
         {
+            'id': 'compose_stack',
+            'title': 'Docker Compose (önerilen)',
+            'subtitle': 'Panel, Postgres, Redis, Postfix ve Dovecot aynı stack — host’ta ek kurulum yok.',
+            'scenarios': 'Coolify “Docker Compose”, VPS `docker compose up`, tek komut.',
+            'disabled': not compose_ok,
+            'recommended': compose_ok,
+            'disabled_reason': (
+                None
+                if compose_ok
+                else 'JIR_COMPOSE_STACK=1 ve SMTP_HOST/IMAP_HOST compose servis adları gerekir.'
+            ),
+        },
+        {
             'id': PROFILE_DOCKER_STACK,
-            'title': 'Docker ile tam kurulum',
+            'title': 'Docker API ile kurulum',
             'subtitle': 'PostgreSQL, Redis, Postfix, Dovecot bu API üzerinden ayağa kalkar.',
             'scenarios': 'Kendi VPS, docker compose, Docker soketi erişimi olan PaaS.',
-            'disabled': not docker_ok,
-            'recommended': docker_ok,
+            'disabled': not docker_ok or compose_ok,
+            'recommended': docker_ok and not compose_ok,
             'disabled_reason': (
                 None
                 if docker_ok

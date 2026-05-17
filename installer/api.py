@@ -139,6 +139,7 @@ def installer_bootstrap(request: HttpRequest):
     except Exception as exc:
         out['deploy_readiness'] = {'status': 'warning', 'message': str(exc)}
     out['stack_paths'] = discover_stack_paths()
+    out['compose_stack'] = bool(cap.get('compose_stack') or out['stack_paths'].get('compose_stack'))
     out['single_server'] = True
     return out
 

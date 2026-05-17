@@ -1,23 +1,7 @@
-version: '3.8'
+# Jîr-Mail — tek stack (panel + DB + mail). Coolify: "Docker Compose" olarak deploy edin.
+# Host'ta ayrı jir_* konteyner kurmayın; `docker compose up -d` yeterli.
 
 services:
-
-  # ─── Docker Socket Proxy (Güvenli Docker API erişimi) ─────────────────────
-  docker-proxy:
-    image: tecnativa/docker-socket-proxy:latest
-    container_name: jir_docker_proxy
-    restart: unless-stopped
-    environment:
-      - CONTAINERS=1   # container listesi
-      - INFO=1         # sistem bilgisi
-      - PING=1         # health check
-      - STATS=1        # istatistikler
-      - POST=0         # yazma işlemleri kapalı (güvenlik)
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:ro
-    networks:
-      - jir_network
-    privileged: true
 
   django:
     build:
@@ -26,34 +10,44 @@ services:
     container_name: jir_django
     restart: unless-stopped
     entrypoint: ["./docker-entrypoint.sh"]
-    command: ["gunicorn", "--bind", "0.0.0.0:8000", "--workers", "4", "--timeout", "60", "config.wsgi:application"]
+    command: ["gunicorn", "--bind", "0.0.0.0:8000", "--workers", "4", "--timeout", "120", "config.wsgi:application"]
     environment:
-      - DATABASE_URL=${DATABASE_URL}
-      - JIR_LOCAL_KEY=${JIR_LOCAL_KEY}
-      - CELERY_BROKER_URL=redis://redis:6379/0
-      - CELERY_RESULT_BACKEND=redis://redis:6379/0
-      - POSTFIX_VMAIL_PATH=/etc/postfix/vmail_accounts
-      - DOVECOT_PASSDB_PATH=/etc/dovecot/userdb
-      - PYTHONUNBUFFERED=1
-      - DEBUG=False
-      # Docker Socket Proxy URL — doğrudan socket yerine proxy kullan
-      - DOCKER_HOST=tcp://docker-proxy:2375
+      JIR_COMPOSE_STACK: "1"
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-jir_mail_prod}
+      POSTGRES_DB: ${POSTGRES_DB:-jir_mail_prod}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD zorunlu}
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/0
+      MAIL_DOMAIN: ${MAIL_DOMAIN:-jircode.com}
+      MAIL_HOSTNAME: ${MAIL_HOSTNAME:-mail.jircode.com}
+      SMTP_HOST: postfix
+      SMTP_PORT: "587"
+      IMAP_HOST: dovecot
+      IMAP_PORT: "993"
+      MAIL_TLS_MODE: e2e
+      MAIL_TLS_CA_FILE: /etc/jir-mail/tls/ca.crt
+      JIR_LOCAL_KEY: ${JIR_LOCAL_KEY:-change-me}
+      PYTHONUNBUFFERED: "1"
+      DEBUG: "False"
     volumes:
       - config_data:/app/config
-      - postfix_data:/etc/postfix
-    expose:
-      - "8000"
+      - jir_mail_tls:/etc/jir-mail/tls
+    ports:
+      - "${DJANGO_PORT:-8000}:8000"
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
-      docker-proxy:
+      postfix:
+        condition: service_started
+      dovecot:
         condition: service_started
     networks:
       - jir_network
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/management/health')"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health')"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -66,12 +60,11 @@ services:
     restart: unless-stopped
     command: ["celery", "-A", "config", "worker", "--loglevel=info", "--concurrency=2"]
     environment:
-      - DATABASE_URL=${DATABASE_URL}
-      - JIR_LOCAL_KEY=${JIR_LOCAL_KEY}
-      - CELERY_BROKER_URL=redis://redis:6379/0
-      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+      JIR_COMPOSE_STACK: "1"
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-jir_mail_prod}
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/0
     volumes:
-      - static_data:/app/static
       - config_data:/app/config
     depends_on:
       postgres:
@@ -89,9 +82,8 @@ services:
     restart: unless-stopped
     command: ["celery", "-A", "config", "beat", "--loglevel=info"]
     environment:
-      - DATABASE_URL=${DATABASE_URL}
-      - CELERY_BROKER_URL=redis://redis:6379/0
-      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/0
     depends_on:
       redis:
         condition: service_healthy
@@ -102,8 +94,6 @@ services:
     image: redis:7-alpine
     container_name: jir_redis
     restart: unless-stopped
-    ports:
-      - "${REDIS_PORT:-6379}:6379"
     volumes:
       - redis_data:/data
     networks:
@@ -115,19 +105,19 @@ services:
       retries: 5
 
   postgres:
-    image: postgres:17
+    image: postgres:17-alpine
     container_name: jir_postgres
     restart: unless-stopped
     environment:
-      - POSTGRES_DB=${POSTGRES_DB:-jir_mail_prod}
-      - POSTGRES_USER=${POSTGRES_USER:-postgres}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-jir_mail_prod}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD zorunlu}
     volumes:
       - postgres_data:/var/lib/postgresql/data
     networks:
       - jir_network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-jir_mail_prod}"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -138,10 +128,17 @@ services:
     restart: unless-stopped
     hostname: ${MAIL_HOSTNAME:-mail.jircode.com}
     environment:
-      - ALLOWED_SENDER_DOMAINS=${MAIL_DOMAIN:-jircode.com}
+      ALLOWED_SENDER_DOMAINS: ${MAIL_DOMAIN:-jircode.com}
+      HOSTNAME: ${MAIL_HOSTNAME:-mail.jircode.com}
+      POSTFIX_smtpd_tls_security_level: encrypt
+      POSTFIX_smtpd_tls_cert_file: /etc/jir-mail/tls/server.crt
+      POSTFIX_smtpd_tls_key_file: /etc/jir-mail/tls/server.key
+      POSTFIX_smtpd_tls_CAfile: /etc/jir-mail/tls/ca.crt
+      POSTFIX_smtpd_tls_auth_only: "yes"
     volumes:
       - postfix_data:/etc/postfix
       - mail_data:/var/mail
+      - jir_mail_tls:/etc/jir-mail/tls:ro
     ports:
       - "${POSTFIX_PORT_25:-25}:25"
       - "${POSTFIX_PORT_587:-587}:587"
@@ -150,34 +147,35 @@ services:
 
   dovecot:
     build:
-      context: .
-      dockerfile: dovecot/Dockerfile
+      context: ./dovecot
+      dockerfile: Dockerfile
     container_name: jir_dovecot
     restart: unless-stopped
     environment:
-      - DB_HOST=postgres
-      - DB_PORT=5432
-      - DB_NAME=${POSTGRES_DB:-jir_mail_prod}
-      - DB_USER=${POSTGRES_USER:-postgres}
-      - DB_PASS=${POSTGRES_PASSWORD}
-      - MAIL_DOMAIN=${MAIL_DOMAIN:-jircode.com}
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_NAME: ${POSTGRES_DB:-jir_mail_prod}
+      DB_USER: ${POSTGRES_USER:-postgres}
+      DB_PASS: ${POSTGRES_PASSWORD}
+      MAIL_DOMAIN: ${MAIL_DOMAIN:-jircode.com}
     volumes:
       - mail_data:/var/mail
+      - jir_mail_tls:/etc/jir-mail/tls:ro
     ports:
       - "${DOVECOT_PORT_IMAP:-993}:993"
-      - "${DOVECOT_PORT_POP3:-143}:143"
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy
     networks:
       - jir_network
 
 volumes:
   postgres_data:
+  redis_data:
   postfix_data:
   mail_data:
-  static_data:
   config_data:
-  redis_data:
+  jir_mail_tls:
 
 networks:
   jir_network:

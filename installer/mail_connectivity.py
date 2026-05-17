@@ -7,6 +7,7 @@ import time
 from typing import Any
 
 from installer.compose_builder import JIR_NETWORK
+from installer.compose_stack import is_compose_stack
 from installer.docker_images import dovecot_container_needs_rebuild
 from installer.mail_stack import (
     mail_stack_params_summary,
@@ -210,8 +211,9 @@ def auto_setup_mail_services(
     domain = (config.get('domain') or '').strip()
     mail_hostname = (config.get('mail_hostname') or f'mail.{domain}' if domain else '').strip()
 
+    compose_only = bool(config.get('stack_already_provisioned')) and is_compose_stack()
     client = docker_client or _get_docker_client_optional()
-    if client is None:
+    if client is None and not compose_only:
         return {
             'success': False,
             'error': 'Docker API yok — otomatik mail kurulumu yapılamıyor.',
@@ -223,41 +225,64 @@ def auto_setup_mail_services(
     if panel:
         messages.append(f'Panel konteyneri: {panel}')
 
-    try:
-        existing = [n for n in client.networks.list(names=[network]) if n.name == network]
-        if not existing:
-            client.networks.create(network, driver='bridge')
-            messages.append(f'Ağ oluşturuldu: {network}')
-        else:
-            messages.append(f'Ağ mevcut: {network}')
-    except Exception as exc:
-        return {'success': False, 'error': f'Ağ hazırlığı: {exc}', 'messages': messages}
+    if client is not None:
+        try:
+            existing = [n for n in client.networks.list(names=[network]) if n.name == network]
+            if not existing:
+                client.networks.create(network, driver='bridge')
+                messages.append(f'Ağ oluşturuldu: {network}')
+            else:
+                messages.append(f'Ağ mevcut: {network}')
+        except Exception as exc:
+            return {'success': False, 'error': f'Ağ hazırlığı: {exc}', 'messages': messages}
+    elif compose_only:
+        messages.append('Compose modu: Docker API atlandı (servisler aynı ağda).')
 
-    smtp_host, imap_host = 'jir_postfix', 'jir_dovecot'
+    if compose_only:
+        smtp_host = os.getenv('SMTP_HOST', 'postfix').strip() or 'postfix'
+        imap_host = os.getenv('IMAP_HOST', 'dovecot').strip() or 'dovecot'
+    else:
+        smtp_host, imap_host = 'jir_postfix', 'jir_dovecot'
     try:
-        params = resolve_mail_stack_params(mail_domain_override=domain or None)
-        smtp_host = params.postfix_container
-        imap_host = params.dovecot_container
+        if not compose_only:
+            params = resolve_mail_stack_params(mail_domain_override=domain or None)
+            smtp_host = params.postfix_container
+            imap_host = params.dovecot_container
     except Exception as exc:
         return {'success': False, 'error': str(exc), 'messages': messages}
 
     pki_ca_pem = (config.get('mail_pki_ca_pem') or '').strip()
     try:
         params_pre = resolve_mail_stack_params(mail_domain_override=domain or None)
-        db_msg = _ensure_db_container_on_network(client, params_pre.db_host, network)
-        if db_msg:
-            messages.append(db_msg)
+        if client is not None:
+            db_msg = _ensure_db_container_on_network(client, params_pre.db_host, network)
+            if db_msg:
+                messages.append(db_msg)
         if not pki_ca_pem:
             messages.append('Dahili mail PKI (TLS)…')
-            pki = ensure_mail_pki_volume(
-                client,
-                mail_hostname=mail_hostname or params_pre.mail_hostname,
-                mail_domain=params_pre.mail_domain,
-                postfix_container=params_pre.postfix_container,
-                dovecot_container=params_pre.dovecot_container,
-            )
-            pki_ca_pem = pki.ca_cert_pem.decode('utf-8')
-            messages.append('TLS sertifikaları hazır (jir_mail_tls volume).')
+            if compose_only:
+                from pathlib import Path
+                from installer.mail_pki import MAIL_TLS_MOUNT, ensure_mail_pki_files
+
+                material = ensure_mail_pki_files(
+                    Path(MAIL_TLS_MOUNT),
+                    mail_hostname=mail_hostname or params_pre.mail_hostname,
+                    mail_domain=params_pre.mail_domain,
+                    postfix_host=os.getenv('SMTP_HOST', 'postfix'),
+                    dovecot_host=os.getenv('IMAP_HOST', 'dovecot'),
+                )
+                pki_ca_pem = material.ca_cert_pem.decode('utf-8')
+                messages.append('TLS sertifikaları hazır (compose volume).')
+            else:
+                pki = ensure_mail_pki_volume(
+                    client,
+                    mail_hostname=mail_hostname or params_pre.mail_hostname,
+                    mail_domain=params_pre.mail_domain,
+                    postfix_container=params_pre.postfix_container,
+                    dovecot_container=params_pre.dovecot_container,
+                )
+                pki_ca_pem = pki.ca_cert_pem.decode('utf-8')
+                messages.append('TLS sertifikaları hazır (jir_mail_tls volume).')
         else:
             messages.append('TLS sertifikaları mevcut (bootstrap).')
     except Exception as exc:
@@ -268,7 +293,7 @@ def auto_setup_mail_services(
             'messages': messages,
         }
 
-    if panel:
+    if panel and client is not None:
         ok, msg = _attach_to_network(client, panel, network)
         messages.append(msg)
         if not ok:
@@ -277,12 +302,16 @@ def auto_setup_mail_services(
                 'error': f'Panel mail ağına bağlanamadı: {msg}',
                 'messages': messages,
             }
+    elif compose_only:
+        messages.append('Compose: panel zaten postfix/dovecot ile aynı ağda.')
 
-    need_provision = _needs_mail_provision(client, smtp_host, imap_host)
+    need_provision = False
+    if client is not None:
+        need_provision = _needs_mail_provision(client, smtp_host, imap_host)
     if config.get('stack_already_provisioned') and _mail_containers_running(client):
         need_provision = False
         messages.append('Mail konteynerleri docker_stack bootstrap ile zaten kuruldu.')
-    if need_provision:
+    if need_provision and client is not None:
         if dovecot_container_needs_rebuild(client, imap_host):
             messages.append('Dovecot özel imajına yükseltiliyor (PostgreSQL passdb)…')
         else:
