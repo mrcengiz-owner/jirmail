@@ -33,8 +33,9 @@ services:
     volumes:
       - config_data:/app/config
       - jir_mail_tls:/etc/jir-mail/tls
-    ports:
-      - "${DJANGO_PORT:-8000}:8000"
+    # Coolify reverse proxy — yalnızca ağ içi 8000 (host bind yok, port çakışması olmaz).
+    expose:
+      - "8000"
     depends_on:
       postgres:
         condition: service_healthy
