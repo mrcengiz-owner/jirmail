@@ -33,9 +33,17 @@ services:
     volumes:
       - config_data:/app/config
       - jir_mail_tls:/etc/jir-mail/tls
-    # Traefik/Caddy (Dokploy proxy) — yalnızca ağ içi 8000; host'a 8000 bind etmeyin.
     expose:
       - "8000"
+    
+    # 🚨 TRAEFIK / DOKPLOY YÖNLENDİRME ETİKETLERİ (404'Ü ÇÖZEN KISIM):
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.jirmail-django.rule=Host(`${MAIL_HOSTNAME:-mail.jircode.com}`)"
+      - "traefik.http.routers.jirmail-django.entrypoints=websecure"
+      - "traefik.http.routers.jirmail-django.tls=true"
+      - "traefik.http.services.jirmail-django.loadbalancer.server.port=8000"
+    
     depends_on:
       postgres:
         condition: service_healthy
@@ -47,6 +55,7 @@ services:
         condition: service_started
     networks:
       - jir_network
+      - dokploy-network # 🚨 Dokploy proxy ağına bağlantı
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health')"]
       interval: 30s
@@ -171,7 +180,6 @@ services:
       - jir_network
 
 volumes:
-  # Sabit isimler — format sonrası temiz kurulumda otomatik oluşur
   postgres_data:
     name: jir_postgres_data
   redis_data:
@@ -188,3 +196,6 @@ volumes:
 networks:
   jir_network:
     driver: bridge
+  # 🚨 Dokploy'un halihazırda sunucuda koşturduğu proxy network'ünü dışarıdan bağlıyoruz:
+  dokploy-network:
+    external: true
