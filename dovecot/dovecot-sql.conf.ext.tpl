@@ -12,11 +12,11 @@ password_query = SELECT email as user, password_hash AS password, \
   '/var/mail/vhosts/%d/%n' AS userdb_home, \
   'maildir:/var/mail/vhosts/%d/%n' AS mail, \
   5000 AS uid, 5000 AS gid, \
-  COALESCE(quota_bytes, 52428800) AS quota_bytes \
+  CASE WHEN COALESCE(quota_bytes, 0) <= 0 THEN 10737418240 ELSE quota_bytes END AS quota_bytes \
   FROM core_mailaccount WHERE email = '%u' AND is_active = true
 
 user_query = SELECT '/var/mail/vhosts/%d/%n' AS home, \
   'maildir:/var/mail/vhosts/%d/%n' AS mail, \
   5000 AS uid, 5000 AS gid, \
-  COALESCE(quota_bytes, 52428800) AS quota_bytes \
+  CASE WHEN COALESCE(quota_bytes, 0) <= 0 THEN 10737418240 ELSE quota_bytes END AS quota_bytes \
   FROM core_mailaccount WHERE email = '%u' AND is_active = true

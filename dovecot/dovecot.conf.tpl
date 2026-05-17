@@ -55,9 +55,18 @@ userdb {
 
 plugin {
   quota = maildir:User quota
-  quota_rule = *:storage=%{Userdb:quota_bytes}b
+  # userdb alanı küçük harf: %{userdb:...} (Userdb → Unknown variable hatası)
+  quota_rule = *:storage=%{userdb:quota_bytes}
   quota_rule2 = *:messages=0
   quota_exceeded = 552 5.2.2 Mailbox full
+}
+
+protocol imap {
+  mail_plugins = $mail_plugins quota
+}
+
+protocol pop3 {
+  mail_plugins = $mail_plugins quota
 }
 
 auth_mechanisms = plain login
