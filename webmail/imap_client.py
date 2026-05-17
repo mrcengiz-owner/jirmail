@@ -250,3 +250,25 @@ def delete_message(account, password: str, folder_name: str, uid: int) -> None:
         client.select_folder(folder_name)
         client.delete_messages([uid])
         client.expunge()
+
+
+_SENT_FOLDER_CANDIDATES = ('Sent', 'Sent Messages', 'INBOX.Sent', 'Sent Items')
+
+
+def resolve_sent_folder_name(account, password: str) -> str:
+    """Hesabın Sent klasör adını bul."""
+    with imap_connection(account, password) as client:
+        for _flags, _delimiter, name in client.list_folders():
+            if name in _SENT_FOLDER_CANDIDATES:
+                return name
+            if isinstance(name, str) and name.lower() in ('sent', 'sent messages', 'sent items'):
+                return name
+    return 'Sent'
+
+
+def append_message_to_sent(account, password: str, raw_message: bytes) -> str:
+    """Gönderilen mesajı IMAP Sent klasörüne ekle; klasör adını döndür."""
+    folder = resolve_sent_folder_name(account, password)
+    with imap_connection(account, password) as client:
+        client.append(folder, raw_message, [b'\\Seen'], None)
+    return folder

@@ -85,3 +85,34 @@ class MailAttachmentMeta(models.Model):
 
     def __str__(self):
         return f'{self.filename or self.part_id} ({self.mime_type})'
+
+
+class MailOutboundLog(models.Model):
+    """Gönderilen iletiler — SMTP/IMAP kaydı (webmail ve dashboard istatistik)."""
+
+    STATUS_PENDING = 'pending'
+    STATUS_SENT = 'sent'
+    STATUS_FAILED = 'failed'
+    STATUS_DEFERRED = 'deferred'
+
+    STATUS_CHOICES = [
+        (STATUS_PENDING, 'Beklemede'),
+        (STATUS_SENT, 'Gönderildi'),
+        (STATUS_FAILED, 'Başarısız'),
+        (STATUS_DEFERRED, 'Ertelendi'),
+    ]
+
+    account = models.ForeignKey(MailAccount, on_delete=models.CASCADE, related_name='outbound_logs')
+    to_addr = models.TextField()
+    subject = models.CharField(max_length=998, blank=True, default='')
+    snippet = models.CharField(max_length=500, blank=True, default='')
+    message_id = models.CharField(max_length=512, blank=True, default='', db_index=True)
+    status = models.CharField(max_length=16, choices=STATUS_CHOICES, default=STATUS_PENDING, db_index=True)
+    error_message = models.TextField(blank=True, default='')
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f'{self.account.email} → {self.to_addr[:40]} ({self.status})'

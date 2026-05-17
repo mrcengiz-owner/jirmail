@@ -5,9 +5,12 @@ Postfix'e bağlanır. SASL auth ile mail gönderir.
 """
 from __future__ import annotations
 
+import logging
 import socket
 import smtplib
 import ssl
+
+logger = logging.getLogger(__name__)
 from email.message import EmailMessage
 from email.utils import formataddr, make_msgid
 
@@ -89,6 +92,8 @@ def send_mail(account, password: str, *, to: list[str] | str, subject: str, body
     if bcc:
         recipients.extend(bcc)
 
+    raw_bytes = msg.as_bytes()
+
     try:
         with smtplib.SMTP(host, port, timeout=30) as smtp:
             _smtp_submit(
@@ -98,7 +103,18 @@ def send_mail(account, password: str, *, to: list[str] | str, subject: str, body
                 msg=msg,
                 recipients=recipients,
             )
-        return {'success': True, 'message_id': msg['Message-ID']}
+        out = {'success': True, 'message_id': msg['Message-ID'], 'raw_message': raw_bytes}
+        if password:
+            try:
+                from webmail.imap_client import append_message_to_sent, sync_folder_metadata
+
+                sent_folder = append_message_to_sent(account, password, raw_bytes)
+                sync_folder_metadata(account, password, sent_folder, limit=50)
+                out['sent_folder'] = sent_folder
+            except Exception as exc:
+                logger.warning('Sent klasörüne IMAP append başarısız: %s', exc)
+                out['sent_imap_warning'] = str(exc)
+        return out
     except socket.gaierror as exc:
         hint = (
             f' SMTP hedefi çözülemedi ({host!r}). '

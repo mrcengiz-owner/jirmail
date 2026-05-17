@@ -19,7 +19,7 @@ def _exec(cmd: list[str]) -> tuple[int, str]:
     """Postfix container'ında shell komutu çalıştır."""
     try:
         import docker
-        docker_host = getattr(settings, 'DOCKER_HOST', 'unix://var/run/docker.sock')
+        docker_host = getattr(settings, 'DOCKER_HOST', 'unix:///var/run/docker.sock')
         client = docker.DockerClient(base_url=docker_host, timeout=30)
         try:
             container = client.containers.get(POSTFIX_CONTAINER)

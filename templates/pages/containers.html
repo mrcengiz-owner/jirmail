@@ -6,6 +6,7 @@
 {% block extra_head %}
 <script>
     window.JIR_KEY = "{{ JIR_LOCAL_KEY|escapejs }}";
+    window.JIR_COMPOSE_STACK = {% if compose_stack %}true{% else %}false{% endif %};
 </script>
 {% endblock %}
 
@@ -24,6 +25,10 @@
             <span class="hidden sm:inline">Yenile</span>
         </button>
     </header>
+
+    <div x-show="composeMode" x-cloak class="mb-4 rounded-xl border border-info-500/25 bg-info-500/10 p-4 text-sm text-info-200/90">
+        Compose modu: servis durumu ağ üzerinden izlenir. Başlat/durdur işlemleri Dokploy veya sunucuda <code class="text-info-300">docker compose</code> ile yapılır.
+    </div>
 
     <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3 sm:gap-4">
         <template x-for="container in containers" :key="container.container_id">
@@ -64,7 +69,9 @@
                     </div>
                 </div>
 
-                <div class="flex gap-2">
+                <p x-show="container.error" class="text-xs text-warning-400/90 mb-2" x-text="container.error"></p>
+
+                <div class="flex gap-2" x-show="isManageable(container)">
                     <button x-show="container.status === 'running'"
                             @click="if(confirm(container.container_name + ' servisini durdurmak istediğinizden emin misiniz?')) toggleContainer(container, 'stop')"
                             class="flex-1 btn btn-sm bg-danger-500/10 text-danger-400 hover:bg-danger-500/20 border border-danger-500/20">
@@ -82,6 +89,7 @@
                         Başlat
                     </button>
                 </div>
+                <p x-show="!isManageable(container)" class="text-xs text-slate-500">Yönetim: platform / compose</p>
             </div>
         </template>
     </div>

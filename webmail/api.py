@@ -13,6 +13,7 @@ Endpoint'ler:
 """
 from typing import Optional
 
+from django.db import models
 from django.http import HttpRequest
 from ninja import Router, Schema
 
@@ -20,12 +21,63 @@ from core.models import MailAccount
 from .imap_client import (
     delete_message, fetch_message_body, move_message, set_flag, sync_folder_metadata,
 )
-from .models import MailFolder, MailMessageCache
+from .models import MailFolder, MailMessageCache, MailOutboundLog
 from .smtp_client import send_mail
 from .sse import webmail_sse_response
 
 
 router = Router()
+
+
+def _imap_delivery_status(folder: str, msg: MailMessageCache) -> str:
+    """Liste satırı için durum noktası: sent klasörü yeşil, gelen mavi/gri."""
+    if folder.lower() in ('sent', 'sent messages', 'inbox.sent'):
+        return 'sent'
+    if not msg.is_seen:
+        return 'unread'
+    return 'read'
+
+
+def _outbound_as_messages(account, *, limit: int = 50) -> list[dict]:
+    """IMAP’ta henüz görünmeyen veya başarısız gönderim kayıtları."""
+    rows = (
+        MailOutboundLog.objects.filter(account=account)
+        .filter(
+            models.Q(status=MailOutboundLog.STATUS_PENDING)
+            | models.Q(status=MailOutboundLog.STATUS_FAILED)
+            | models.Q(status=MailOutboundLog.STATUS_DEFERRED)
+        )
+        .order_by('-created_at')[:limit]
+    )
+    out = []
+    for row in rows:
+        st = row.status
+        if st == MailOutboundLog.STATUS_PENDING:
+            delivery = 'pending'
+        elif st == MailOutboundLog.STATUS_SENT:
+            delivery = 'sent'
+        elif st == MailOutboundLog.STATUS_DEFERRED:
+            delivery = 'deferred'
+        else:
+            delivery = 'failed'
+        out.append({
+            'uid': -int(row.id),
+            'subject': row.subject or '(konu yok)',
+            'from': account.email,
+            'from_name': account.username,
+            'to': row.to_addr,
+            'date': row.created_at.isoformat(),
+            'is_seen': True,
+            'is_flagged': False,
+            'is_answered': False,
+            'has_attachments': False,
+            'snippet': row.snippet or '',
+            'size': 0,
+            'delivery_status': delivery,
+            'source': 'outbound',
+            'outbound_id': row.id,
+        })
+    return out
 
 
 def _get_account_and_password(request: HttpRequest):
@@ -67,6 +119,16 @@ def list_messages(request: HttpRequest, folder: str = 'INBOX', page: int = 1, pa
 
     folder_obj = MailFolder.objects.filter(account=account, name=folder).first()
     if not folder_obj:
+        if account and folder.lower() in ('sent', 'sent messages', 'inbox.sent'):
+            outbound = _outbound_as_messages(account, limit=page_size)
+            return {
+                'success': True,
+                'folder': folder,
+                'page': page,
+                'page_size': page_size,
+                'total': len(outbound),
+                'messages': outbound,
+            }
         return {'success': True, 'folder': folder, 'messages': [], 'total': 0, 'page': page}
 
     qs = MailMessageCache.objects.filter(folder=folder_obj, is_deleted=False)
@@ -93,9 +155,16 @@ def list_messages(request: HttpRequest, folder: str = 'INBOX', page: int = 1, pa
             'has_attachments': m.has_attachments,
             'snippet': m.snippet,
             'size': m.raw_size,
+            'delivery_status': _imap_delivery_status(folder, m),
+            'source': 'imap',
         }
         for m in qs[start:end]
     ]
+
+    if account and folder.lower() in ('sent', 'sent messages', 'inbox.sent'):
+        outbound = _outbound_as_messages(account, limit=page_size)
+        messages = outbound + messages
+        total += len(outbound)
 
     return {
         'success': True,
@@ -112,6 +181,22 @@ def message_body(request: HttpRequest, uid: int, folder: str = 'INBOX'):
     account, password = _get_account_and_password(request)
     if not account:
         return {'success': False, 'message': 'Oturum yok'}
+
+    if uid < 0:
+        row = MailOutboundLog.objects.filter(account=account, id=-uid).first()
+        if not row:
+            return {'success': False, 'message': 'Kayıt bulunamadı'}
+        plain = row.snippet or ''
+        if row.error_message:
+            plain += '\n\n--- Hata ---\n' + row.error_message
+        return {
+            'success': True,
+            'folder': folder,
+            'uid': uid,
+            'html': '',
+            'plain': plain,
+            'attachments': [],
+        }
 
     try:
         result = fetch_message_body(account, password, folder, uid)
@@ -139,12 +224,37 @@ def send(request: HttpRequest, data: SendMailSchema):
     cc_list = [x.strip() for x in data.cc.split(',') if x.strip()] if data.cc else None
     bcc_list = [x.strip() for x in data.bcc.split(',') if x.strip()] if data.bcc else None
 
+    snippet = (data.body_text or data.body_html or '')[:480]
+    log_row = MailOutboundLog.objects.create(
+        account=account,
+        to_addr=', '.join(to_list),
+        subject=data.subject,
+        snippet=snippet,
+        status=MailOutboundLog.STATUS_PENDING,
+    )
+
     result = send_mail(
         account, password,
         to=to_list, subject=data.subject,
         body_text=data.body_text, body_html=data.body_html,
         cc=cc_list, bcc=bcc_list,
     )
+
+    if result.get('success'):
+        log_row.status = MailOutboundLog.STATUS_SENT
+        log_row.message_id = (result.get('message_id') or '')[:512]
+        log_row.save(update_fields=['status', 'message_id'])
+        result['outbound_id'] = log_row.id
+        if result.get('sent_imap_warning'):
+            result['message'] = (
+                'Mesaj Postfix tarafından kabul edildi. '
+                'Gönderilen klasörüne kopyalanamadı — “Gönderilen” klasörünü yenileyin.'
+            )
+    else:
+        log_row.status = MailOutboundLog.STATUS_FAILED
+        log_row.error_message = (result.get('message') or '')[:2000]
+        log_row.save(update_fields=['status', 'error_message'])
+
     return result
 
 

@@ -10,6 +10,15 @@ import os
 INSTALLED_FLAG = os.path.join(settings.BASE_DIR, 'config', '.installed')
 
 
+def _docker_api_available_for_panel() -> bool:
+    try:
+        from management.compose_status import docker_api_available
+
+        return docker_api_available()
+    except Exception:
+        return False
+
+
 def is_installed():
     """
     Check installation status:
@@ -108,7 +117,10 @@ def dashboard(request):
         'active_domains': active_domains,
         'active_accounts': active_accounts,
         'inactive_accounts': inactive_accounts,
-        'can_manage_docker': request.session.get('role') == 'FULL',
+        'can_manage_docker': (
+            request.session.get('role') == 'FULL'
+            and _docker_api_available_for_panel()
+        ),
     })
 
 
@@ -290,10 +302,13 @@ def accounts_view(request):
     except Exception:
         accounts = []
 
+    import json
+
     return render(request, 'pages/accounts.html', {
         'JIR_LOCAL_KEY': get_jir_key(),
         'domains_json': domains_json,
-        'accounts': accounts,
+        'accounts_bootstrap': json.dumps(accounts),
+        'domains_list': json.dumps(domains_json),
         'current_page': 'accounts',
     })
 
@@ -307,9 +322,17 @@ def containers_view(request):
     if request.session.get('role') != 'FULL':
         return redirect('webmail:inbox')
 
+    try:
+        from installer.compose_mode import is_compose_stack
+
+        compose_mode = is_compose_stack()
+    except Exception:
+        compose_mode = False
+
     return render(request, 'pages/containers.html', {
         'JIR_LOCAL_KEY': get_jir_key(),
         'current_page': 'containers',
+        'compose_stack': compose_mode,
     })
 
 

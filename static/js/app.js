@@ -390,6 +390,7 @@
             return {
                 containers: [],
                 interval: null,
+                composeMode: typeof window.JIR_COMPOSE_STACK !== 'undefined' && window.JIR_COMPOSE_STACK === true,
 
                 init: function() {
                     this.fetchContainers();
@@ -413,7 +414,24 @@
                         });
                 },
 
+                isManageable: function(container) {
+                    if (!container) return false;
+                    if (container.compose_managed) return false;
+                    var id = (container.container_id || '').toLowerCase();
+                    var name = (container.container_name || '').toLowerCase();
+                    if (id === 'unavailable' || id === 'error' || id.indexOf('compose-') === 0) return false;
+                    if (name.indexOf('docker unavailable') >= 0 || name.indexOf('docker proxy') >= 0) return false;
+                    return true;
+                },
+
                 toggleContainer: function(container, action) {
+                    if (!this.isManageable(container)) {
+                        window.showToast(
+                            'Bu ortamda konteynerler panelden yönetilmez. Dokploy veya `docker compose` kullanın.',
+                            'warning'
+                        );
+                        return;
+                    }
                     var self = this;
                     fetch('/api/management/container/' + encodeURIComponent(container.container_name) + '/' + action, {
                         method: 'POST',
@@ -858,6 +876,143 @@
         });
 
         // ----------------------------------------------------------------
+        // Hesaplar yönetimi
+        // ----------------------------------------------------------------
+        Alpine.data('accountsApp', function() {
+            function parseJsonScript(id, fallback) {
+                var el = document.getElementById(id);
+                if (!el) return fallback;
+                try {
+                    return JSON.parse(el.textContent) || fallback;
+                } catch (e) {
+                    return fallback;
+                }
+            }
+            return {
+                JIR_KEY: window.JIR_KEY || '',
+                accounts: parseJsonScript('accounts-bootstrap', []),
+                domains: window.DOMAINS || [],
+                showAddModal: false,
+                loading: false,
+                newAccount: { username: '', domain: '', password: '', role: 'FULL' },
+
+                init: function() {
+                    if (!this.domains.length) {
+                        var d = parseJsonScript('domains-bootstrap', null);
+                        if (Array.isArray(d)) {
+                            this.domains = d.map(function(x) { return typeof x === 'string' ? x : x.name; });
+                        }
+                    }
+                    if (this.domains.length && !this.newAccount.domain) {
+                        this.newAccount.domain = this.domains[0];
+                    }
+                    this.refreshAccounts();
+                },
+
+                refreshAccounts: function() {
+                    var self = this;
+                    return fetch('/api/core/list-accounts?key=' + encodeURIComponent(self.JIR_KEY))
+                        .then(function(r) { return r.json(); })
+                        .then(function(data) {
+                            if (data.status === 'success') self.accounts = data.accounts || [];
+                        })
+                        .catch(function(e) {
+                            console.error(e);
+                            window.showToast('Hesap listesi alınamadı', 'error');
+                        });
+                },
+
+                openAddModal: function() {
+                    this.newAccount = {
+                        username: '',
+                        domain: this.domains[0] || '',
+                        password: '',
+                        role: 'FULL'
+                    };
+                    this.showAddModal = true;
+                },
+
+                createAccount: function() {
+                    var self = this;
+                    if (!this.newAccount.username || !this.newAccount.password || !this.newAccount.domain) {
+                        window.showToast('Kullanıcı adı, domain ve parola zorunludur.', 'warning');
+                        return;
+                    }
+                    this.loading = true;
+                    fetch('/api/management/create-account', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': window.getCsrfToken() },
+                        body: JSON.stringify({
+                            username: this.newAccount.username,
+                            domain: this.newAccount.domain,
+                            password: this.newAccount.password
+                        })
+                    })
+                        .then(function(r) { return r.json(); })
+                        .then(function(data) {
+                            if (data.status === 'success') {
+                                self.showAddModal = false;
+                                window.showToast('Hesap oluşturuldu: ' + (data.email || ''), 'success');
+                                self.refreshAccounts();
+                            } else {
+                                window.showToast(data.message || 'Hesap oluşturulamadı', 'error');
+                            }
+                        })
+                        .catch(function() {
+                            window.showToast('Bağlantı hatası', 'error');
+                        })
+                        .finally(function() { self.loading = false; });
+                },
+
+                toggleAccount: function(acc) {
+                    var self = this;
+                    fetch('/api/core/toggle-account/' + encodeURIComponent(acc.email) + '?key=' + encodeURIComponent(self.JIR_KEY), {
+                        method: 'PATCH',
+                        headers: { 'X-CSRFToken': window.getCsrfToken() }
+                    })
+                        .then(function(r) { return r.json(); })
+                        .then(function(data) {
+                            if (data.status === 'success') {
+                                window.showToast('Hesap durumu güncellendi', 'success');
+                                self.refreshAccounts();
+                            } else {
+                                window.showToast(data.message || 'İşlem başarısız', 'error');
+                            }
+                        })
+                        .catch(function() {
+                            window.showToast('Bağlantı hatası', 'error');
+                        });
+                },
+
+                deleteAccount: function(acc) {
+                    if (!confirm(acc.email + ' hesabı silinsin mi?')) return;
+                    var self = this;
+                    fetch('/api/core/delete-account/' + encodeURIComponent(acc.email) + '?key=' + encodeURIComponent(self.JIR_KEY), {
+                        method: 'DELETE',
+                        headers: { 'X-CSRFToken': window.getCsrfToken() }
+                    })
+                        .then(function(r) { return r.json(); })
+                        .then(function(data) {
+                            if (data.status === 'success') {
+                                window.showToast('Hesap silindi', 'success');
+                                self.refreshAccounts();
+                            } else {
+                                window.showToast(data.message || 'Silinemedi', 'error');
+                            }
+                        })
+                        .catch(function() {
+                            window.showToast('Bağlantı hatası', 'error');
+                        });
+                },
+
+                roleLabel: function(role) {
+                    var labels = { FULL: 'Tam erişim', SEND: 'Yalnız gönder', RECV: 'Yalnız al', BLOCK: 'Dahili' };
+                    return labels[role] || role;
+                }
+            };
+        });
+
+        // ----------------------------------------------------------------
         // Live log tail (SSE) — logs sayfası; kaldırılınca EventSource kapanır
         // ----------------------------------------------------------------
         Alpine.data('liveLogTail', function() {
@@ -1107,7 +1262,9 @@
                                 unread: !m.is_seen,
                                 starred: m.is_flagged,
                                 hasAttachments: m.has_attachments,
-                                folder: this.currentFolder
+                                folder: this.currentFolder,
+                                deliveryStatus: m.delivery_status || (m.is_seen ? 'read' : 'unread'),
+                                source: m.source || 'imap'
                             };
                         }, this);
                         this.hasMore = (this.page * this.pageSize) < (data.total || 0);
@@ -1172,6 +1329,7 @@
                 },
 
                 patchFlags: async function(uid, payload) {
+                    if (uid < 0) return;
                     try {
                         payload.folder = this.imapFolder();
                         await fetch('/api/mail/messages/' + uid + '/flags', {
@@ -1196,6 +1354,28 @@
                     if (!isoString) return '';
                     var date = new Date(isoString);
                     return date.toLocaleString('tr-TR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+                },
+
+                mailStatusDotClass: function(mail) {
+                    var s = (mail && mail.deliveryStatus) || 'read';
+                    if (s === 'unread') return 'bg-primary-400 ring-primary-400/30';
+                    if (s === 'pending' || s === 'deferred') return 'bg-warning-400 ring-warning-400/30';
+                    if (s === 'failed') return 'bg-danger-400 ring-danger-400/30';
+                    if (s === 'sent') return 'bg-success-400 ring-success-400/30';
+                    return 'bg-slate-600 ring-slate-600/20';
+                },
+
+                mailStatusTitle: function(mail) {
+                    var s = (mail && mail.deliveryStatus) || 'read';
+                    var map = {
+                        unread: 'Okunmadı',
+                        read: 'Okundu',
+                        pending: 'Gönderim bekleniyor',
+                        sent: 'Gönderildi (SMTP kabul)',
+                        failed: 'Gönderilemedi',
+                        deferred: 'Ertelendi / kuyrukta'
+                    };
+                    return map[s] || s;
                 },
 
                 formatBody: function(html) { return html || ''; },
@@ -1266,8 +1446,12 @@
                         });
                         var data = await res.json();
                         if (data.success) {
-                            window.showToast('Mesaj başarıyla gönderildi.', 'success');
+                            window.showToast(data.message || 'Mesaj Postfix tarafından kabul edildi.', 'success');
                             this.closeCompose();
+                            this.currentFolder = 'sent';
+                            this.page = 1;
+                            await this.syncInbox();
+                            await this.fetchMails(false);
                         } else {
                             window.showToast(data.message || 'Gönderme başarısız.', 'error');
                         }
@@ -1318,6 +1502,7 @@
                 count: 0,
                 loading: false,
                 pollInterval: null,
+                showHelp: false,
                 init: function() {
                     this.refresh(false);
                     var self = this;
@@ -1354,12 +1539,28 @@
             };
         });
 
+        window.JIR_CARD_HELP = {
+            mailQueue: {
+                title: 'Mail kuyruğu',
+                body: 'Postfix’te henüz teslim edilmemiş veya ertelenmiş iletilerin sayısı. Flush, kuyruğu zorla yeniden işlemeye alır. Yüksek sayı DNS, relay veya alıcı sunucu sorununa işaret edebilir.'
+            },
+            dnsbl: {
+                title: 'DNSBL (kara liste)',
+                body: 'Sunucunuzun çıkış IP adresinin bilinen spam kara listelerinde (DNSBL) olup olmadığını kontrol eder. Listelenmiş IP’lerde alıcı sunucular postanızı reddedebilir veya spam klasörüne atabilir.'
+            },
+            reputation: {
+                title: 'Son 24 saat',
+                body: 'Postfix mail.log veya webmail gönderim kayıtlarından özet: gönderilen, ertelenen, bounce ve red sayıları. Yüzde, kabul edilen / toplam oranıdır. Log yoksa panel gönderim kayıtlarını kullanır.'
+            }
+        };
+
         Alpine.data('dnsblCard', function() {
             return {
                 status: 'unknown',
                 ip: '',
                 listedCount: 0,
                 results: [],
+                showHelp: false,
                 init: function() {
                     this.detectIPAndCheck();
                 },
@@ -1388,6 +1589,7 @@
             return {
                 stats: { sent: 0, bounced: 0, deferred: 0, rejected: 0, delivery_rate_percent: 0, available: false },
                 pollInterval: null,
+                showHelp: false,
                 init: function() {
                     this.refresh();
                     var self = this;
@@ -1396,12 +1598,23 @@
                         if (self.pollInterval) clearInterval(self.pollInterval);
                     };
                 },
+                deliveryRateLabel: function() {
+                    if (!this.stats.available) return '—';
+                    var p = this.stats.delivery_rate_percent;
+                    if (p === null || p === undefined || isNaN(p)) return '0%';
+                    return Math.round(p) + '%';
+                },
                 refresh: function() {
                     var self = this;
                     fetch('/api/monitoring/reputation?window_hours=24', { credentials: 'same-origin' })
                         .then(function(r) { return r.json(); })
                         .then(function(d) {
-                            if (d.success) self.stats = d;
+                            if (d.success) {
+                                if (d.delivery_rate_percent === undefined || d.delivery_rate_percent === null) {
+                                    d.delivery_rate_percent = 0;
+                                }
+                                self.stats = d;
+                            }
                         })
                         .catch(function() {});
                 }

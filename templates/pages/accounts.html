@@ -6,19 +6,20 @@
 {% block extra_head %}
 <script>
     window.JIR_KEY = "{{ JIR_LOCAL_KEY|escapejs }}";
-    window.DOMAINS = {{ domains_json|safe }};
+    window.DOMAINS = {{ domains_list|safe }};
 </script>
+{{ accounts_bootstrap|json_script:"accounts-bootstrap" }}
 {% endblock %}
 
 {% block content %}
-<div class="page">
+<div class="page" x-data="accountsApp()" x-init="init()">
 
     <header class="page-header">
         <div class="min-w-0">
             <h1 class="section-title">Mail Hesapları</h1>
             <p class="section-subtitle">Tüm mail kullanıcılarını ve rollerini yönetin</p>
         </div>
-        <button onclick="showAddAccountModal()" class="btn btn-primary">
+        <button type="button" class="btn btn-primary" @click="openAddModal()" :disabled="loading">
             <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
             </svg>
@@ -26,9 +27,8 @@
         </button>
     </header>
 
-    {% if accounts %}
-    <!-- Desktop table / Mobile cards -->
-    <div class="bg-slate-900/40 md:bg-slate-900/50 rounded-2xl md:border border-slate-800/70 md:overflow-hidden">
+    <div x-show="accounts.length > 0" x-cloak
+         class="bg-slate-900/40 md:bg-slate-900/50 rounded-2xl md:border border-slate-800/70 md:overflow-hidden">
         <table class="responsive-table">
             <thead>
                 <tr>
@@ -41,54 +41,48 @@
                 </tr>
             </thead>
             <tbody class="md:divide-y md:divide-slate-800/70">
-                {% for account in accounts %}
-                <tr class="hover:bg-slate-800/30 transition-colors">
-                    <td data-label="E-posta">
-                        <div class="flex items-center gap-2 md:gap-3">
-                            <div class="w-9 h-9 rounded-xl bg-gradient-to-br from-primary-500/20 to-primary-700/20 border border-primary-500/20 flex items-center justify-center shrink-0">
-                                <span class="text-primary-300 font-semibold text-xs">
-                                    {{ account.email|slice:":2"|upper }}
-                                </span>
+                <template x-for="acc in accounts" :key="acc.email">
+                    <tr class="hover:bg-slate-800/30 transition-colors">
+                        <td data-label="E-posta">
+                            <div class="flex items-center gap-2 md:gap-3">
+                                <div class="w-9 h-9 rounded-xl bg-gradient-to-br from-primary-500/20 to-primary-700/20 border border-primary-500/20 flex items-center justify-center shrink-0">
+                                    <span class="text-primary-300 font-semibold text-xs" x-text="(acc.email || '').slice(0,2).toUpperCase()"></span>
+                                </div>
+                                <span class="font-medium text-white truncate" x-text="acc.email"></span>
                             </div>
-                            <span class="font-medium text-white truncate">{{ account.email }}</span>
-                        </div>
-                    </td>
-                    <td data-label="Kullanıcı" class="text-slate-400">{{ account.username }}</td>
-                    <td data-label="Domain" class="text-slate-400">{{ account.domain__name }}</td>
-                    <td data-label="Rol">
-                        <span class="badge badge-info">{{ account.role }}</span>
-                    </td>
-                    <td data-label="Durum">
-                        {% if account.is_active %}
-                            <span class="badge badge-success">
-                                <span class="w-1.5 h-1.5 rounded-full bg-success-400"></span>
-                                Aktif
+                        </td>
+                        <td data-label="Kullanıcı" class="text-slate-400" x-text="acc.username"></td>
+                        <td data-label="Domain" class="text-slate-400" x-text="acc.domain || acc.domain__name || '—'"></td>
+                        <td data-label="Rol">
+                            <span class="badge badge-info" x-text="roleLabel(acc.role)"></span>
+                        </td>
+                        <td data-label="Durum">
+                            <span class="badge" :class="acc.is_active ? 'badge-success' : 'badge-danger'">
+                                <span class="w-1.5 h-1.5 rounded-full" :class="acc.is_active ? 'bg-success-400' : 'bg-danger-400'"></span>
+                                <span x-text="acc.is_active ? 'Aktif' : 'Pasif'"></span>
                             </span>
-                        {% else %}
-                            <span class="badge badge-danger">Pasif</span>
-                        {% endif %}
-                    </td>
-                    <td data-label="Aksiyon" class="md:text-right">
-                        <div class="flex items-center md:justify-end gap-1">
-                            <button class="icon-btn" aria-label="Düzenle">
-                                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
-                                </svg>
-                            </button>
-                            <button class="icon-btn hover:text-danger-400 hover:bg-danger-500/10" aria-label="Sil">
-                                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
-                                </svg>
-                            </button>
-                        </div>
-                    </td>
-                </tr>
-                {% endfor %}
+                        </td>
+                        <td data-label="Aksiyon" class="md:text-right">
+                            <div class="flex items-center md:justify-end gap-1">
+                                <button type="button" class="icon-btn" @click="toggleAccount(acc)" :title="acc.is_active ? 'Askıya al' : 'Aktifleştir'">
+                                    <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 5.636a9 9 0 010 12.728M5.636 5.636a9 9 0 000 12.728"/>
+                                    </svg>
+                                </button>
+                                <button type="button" class="icon-btn hover:text-danger-400 hover:bg-danger-500/10" @click="deleteAccount(acc)" aria-label="Sil">
+                                    <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                                    </svg>
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+                </template>
             </tbody>
         </table>
     </div>
-    {% else %}
-    <div class="empty-state bento-card">
+
+    <div x-show="accounts.length === 0" x-cloak class="empty-state bento-card">
         <div class="empty-state-icon">
             <svg class="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/>
@@ -96,18 +90,37 @@
         </div>
         <h3 class="empty-state-title">Henüz hesap yok</h3>
         <p class="empty-state-body">Mail almak ve göndermek için ilk hesabınızı oluşturarak başlayın.</p>
-        <button onclick="showAddAccountModal()" class="btn btn-primary">
-            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
-            </svg>
-            İlk Hesabı Ekle
-        </button>
+        <button type="button" @click="openAddModal()" class="btn btn-primary">İlk Hesabı Ekle</button>
     </div>
-    {% endif %}
-</div>
 
-<script>
-function showAddAccountModal() {
-}
-</script>
+    <div x-show="showAddModal" x-cloak class="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4"
+         @keydown.escape.window="showAddModal = false">
+        <div class="absolute inset-0 bg-slate-950/80 backdrop-blur-sm" @click="showAddModal = false"></div>
+        <div class="relative w-full sm:max-w-md bg-slate-900 border border-slate-800 rounded-t-2xl sm:rounded-2xl p-5 sm:p-6 shadow-2xl">
+            <h2 class="text-lg font-semibold text-white mb-4">Yeni mail hesabı</h2>
+            <div class="space-y-3">
+                <div>
+                    <label class="label">Kullanıcı adı</label>
+                    <input type="text" class="input w-full" x-model="newAccount.username" placeholder="ornek" autocomplete="off">
+                </div>
+                <div>
+                    <label class="label">Domain</label>
+                    <select class="input w-full" x-model="newAccount.domain">
+                        <template x-for="d in domains" :key="d">
+                            <option :value="d" x-text="d"></option>
+                        </template>
+                    </select>
+                </div>
+                <div>
+                    <label class="label">Parola</label>
+                    <input type="password" class="input w-full" x-model="newAccount.password" autocomplete="new-password">
+                </div>
+            </div>
+            <div class="flex gap-2 mt-6">
+                <button type="button" class="btn btn-secondary flex-1" @click="showAddModal = false">İptal</button>
+                <button type="button" class="btn btn-primary flex-1" @click="createAccount()" :disabled="loading">Oluştur</button>
+            </div>
+        </div>
+    </div>
+</div>
 {% endblock %}

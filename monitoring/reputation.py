@@ -13,6 +13,45 @@ from .postfix_inspector import _exec
 LOG_PATHS = ['/var/log/mail.log', '/var/log/maillog']
 
 
+def _stats_from_outbound_logs(window_hours: int) -> dict:
+    """Postfix log okunamıyorsa webmail gönderim kayıtlarından istatistik."""
+    try:
+        from django.utils import timezone
+        from webmail.models import MailOutboundLog
+
+        cutoff = timezone.now() - timedelta(hours=window_hours)
+        qs = MailOutboundLog.objects.filter(created_at__gte=cutoff)
+        sent = qs.filter(status=MailOutboundLog.STATUS_SENT).count()
+        failed = qs.filter(status=MailOutboundLog.STATUS_FAILED).count()
+        deferred = qs.filter(status=MailOutboundLog.STATUS_DEFERRED).count()
+        pending = qs.filter(status=MailOutboundLog.STATUS_PENDING).count()
+        total = sent + failed + deferred + pending
+        rate = (sent / total * 100.0) if total else 0.0
+        return {
+            'window_hours': window_hours,
+            'sent': sent,
+            'bounced': failed,
+            'deferred': deferred + pending,
+            'rejected': 0,
+            'total': total,
+            'delivery_rate_percent': round(rate, 2),
+            'available': total > 0,
+            'source': 'outbound_logs',
+        }
+    except Exception:
+        return {
+            'window_hours': window_hours,
+            'sent': 0,
+            'bounced': 0,
+            'deferred': 0,
+            'rejected': 0,
+            'total': 0,
+            'delivery_rate_percent': 0.0,
+            'available': False,
+            'source': 'none',
+        }
+
+
 def _read_log(lines: int = 5000) -> str:
     for path in LOG_PATHS:
         code, out = _exec(['sh', '-c', f'test -f {path} && tail -n {lines} {path}'])
@@ -32,7 +71,7 @@ def compute_stats(*, window_hours: int = 24) -> dict:
     """Son <window_hours> içindeki sent/bounced/deferred/rejected sayısını hesapla."""
     log = _read_log(lines=10000)
     if not log:
-        return {'sent': 0, 'bounced': 0, 'deferred': 0, 'rejected': 0, 'total': 0, 'available': False}
+        return _stats_from_outbound_logs(window_hours)
 
     now = datetime.now(timezone.utc).replace(tzinfo=None)
     cutoff = now - timedelta(hours=window_hours)

@@ -147,13 +147,16 @@
         <div class="flex-1 overflow-y-auto custom-scrollbar">
             <template x-for="mail in filteredMails" :key="mail.id">
                 <button @click="selectMail(mail); mobileView = 'detail'"
-                        class="w-full text-left p-4 border-b border-slate-800/40 hover:bg-slate-800/40 transition-colors relative"
+                        class="w-full text-left p-4 border-b border-slate-800/40 hover:bg-slate-800/40 transition-colors relative pr-8"
                         :class="selectedMail && selectedMail.id === mail.id ? 'bg-slate-800/60' : ''">
                     <span x-show="selectedMail && selectedMail.id === mail.id"
                           class="absolute left-0 inset-y-2 w-0.5 bg-primary-500 rounded-r"></span>
+                    <span class="absolute bottom-3 right-3 w-2.5 h-2.5 rounded-full ring-2 ring-slate-900"
+                          :class="mailStatusDotClass(mail)"
+                          :title="mailStatusTitle(mail)"></span>
                     <div class="flex items-start justify-between gap-2 mb-1">
                         <div class="flex items-center gap-2 min-w-0">
-                            <span x-show="mail.unread" class="w-2 h-2 rounded-full bg-primary-500 shrink-0"></span>
+                            <span x-show="mail.unread && currentFolder === 'inbox'" class="w-2 h-2 rounded-full bg-primary-500 shrink-0"></span>
                             <span class="truncate text-sm"
                                   :class="mail.unread ? 'font-semibold text-white' : 'text-slate-400'"
                                   x-text="mail.from"></span>

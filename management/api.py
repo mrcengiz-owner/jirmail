@@ -1081,6 +1081,12 @@ class ContainerStatusSchema(Schema):
 
 @router.get("/container-status", response={200: list}, summary="Container Durumu")
 def get_container_status(request):
+    from management.compose_status import compose_stack_containers
+
+    compose_list = compose_stack_containers()
+    if compose_list is not None:
+        return compose_list
+
     containers = []
     import docker
 
@@ -1194,6 +1200,36 @@ def container_action(request, container_name, action):
 
     if action not in ['start', 'stop', 'restart']:
         return {"status": "error", "message": "Invalid action. Use start, stop, or restart."}
+
+    _blocked_names = {
+        'docker unavailable',
+        'docker proxy error',
+        'unavailable',
+        'error',
+    }
+    raw_early = (container_name or '').strip().lower()
+    if raw_early in _blocked_names or 'unavailable' in raw_early:
+        return {
+            "status": "error",
+            "message": (
+                "Docker API bu panelde kullanılamıyor (Compose/Dokploy modu). "
+                "Konteynerleri platform arayüzünden veya sunucuda `docker compose` ile yönetin."
+            ),
+        }
+
+    try:
+        from installer.compose_mode import is_compose_stack
+
+        if is_compose_stack():
+            return {
+                "status": "error",
+                "message": (
+                    "JIR_COMPOSE_STACK=1: servisler docker-compose.yml ile yönetilir. "
+                    "Dokploy’da stack’i yeniden başlatın; panelden start/stop desteklenmez."
+                ),
+            }
+    except Exception:
+        pass
 
     container_map = {
         'postgresql': merged_container_name('postgres'),
