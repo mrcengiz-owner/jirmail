@@ -1,20 +1,27 @@
-"""Kurulum sırasında Postfix/Dovecot + panel ağını otomatik hizalar (Coolify dahil)."""
+"""Kurulum sırasında Postfix/Dovecot + panel ağını otomatik hizalar."""
 from __future__ import annotations
 
 import logging
 import os
+import time
 from typing import Any
 
 from installer.compose_builder import JIR_NETWORK
+from installer.docker_images import dovecot_container_needs_rebuild
 from installer.mail_stack import (
     mail_stack_params_summary,
     provision_mail_stack_docker,
     resolve_mail_stack_params,
 )
 from management.docker_containers import persist_container_alias
+from installer.mail_pki import ensure_mail_pki_volume
 from management.mail_service_endpoint import resolve_mail_endpoint, tcp_reachable
+from management.mail_tls import verify_imap_tls, verify_smtp_starttls
 
 logger = logging.getLogger(__name__)
+
+MAIL_TCP_WAIT_SEC = float(os.getenv('MAIL_TCP_WAIT_SEC', '90'))
+MAIL_TCP_POLL_SEC = float(os.getenv('MAIL_TCP_POLL_SEC', '2'))
 
 
 def _panel_container_name() -> str:
@@ -24,7 +31,7 @@ def _panel_container_name() -> str:
 def _attach_to_network(client: Any, container_name: str, network: str) -> tuple[bool, str]:
     """Panel konteynerini mail ağına bağla (zaten bağlıysa OK)."""
     if not container_name:
-        return False, 'Panel konteyner adı bulunamadı (COOLIFY_CONTAINER_NAME / HOSTNAME).'
+        return False, 'Panel konteyner adı bulunamadı (HOSTNAME / COOLIFY_CONTAINER_NAME).'
     try:
         container = client.containers.get(container_name)
     except Exception as exc:
@@ -55,6 +62,77 @@ def _mail_containers_running(client: Any) -> bool:
         return pf.status == 'running' and dv.status == 'running'
     except Exception:
         return False
+
+
+def _ensure_db_container_on_network(client: Any, db_host: str, network: str) -> str | None:
+    """Dovecot passdb için Postgres konteynerini mail ağına bağla."""
+    host = (db_host or '').strip()
+    if not host or host in ('localhost', '127.0.0.1'):
+        return None
+    try:
+        container = client.containers.get(host)
+    except Exception:
+        return f'Postgres konteyneri bulunamadı ({host}); DATABASE_URL host adını kontrol edin.'
+    try:
+        nets = (container.attrs.get('NetworkSettings') or {}).get('Networks') or {}
+        if network in nets:
+            return f'Veritabanı {host} zaten {network} ağında.'
+        client.networks.get(network).connect(container)
+        return f'Veritabanı {host} → {network} ağına bağlandı (Dovecot erişimi).'
+    except Exception as exc:
+        err = str(exc).lower()
+        if 'already' in err:
+            return f'Veritabanı {host} zaten {network} üzerinde.'
+        return f'Veritabanı ağ bağlantısı ({host}): {exc}'
+
+
+def _needs_mail_provision(client: Any, postfix_name: str, dovecot_name: str) -> bool:
+    if not _mail_containers_running(client):
+        return True
+    if dovecot_container_needs_rebuild(client, dovecot_name):
+        return True
+    return False
+
+
+def _wait_mail_tcp(host: str, port: int, *, timeout: float = MAIL_TCP_WAIT_SEC) -> bool:
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if tcp_reachable(host, port, timeout=2.5):
+            return True
+        time.sleep(MAIL_TCP_POLL_SEC)
+    return False
+
+
+def _verify_mail_endpoints(
+    smtp_host: str,
+    smtp_port: int,
+    imap_host: str,
+    imap_port: int,
+) -> tuple[bool, bool, str, int, str, int]:
+    """TCP + zorunlu TLS (STARTTLS / IMAPS) doğrulaması."""
+    smtp_ok = False
+    imap_ok = False
+    deadline = time.monotonic() + MAIL_TCP_WAIT_SEC
+    while time.monotonic() < deadline:
+        if not smtp_ok and tcp_reachable(smtp_host, smtp_port, timeout=2.5):
+            smtp_ok = verify_smtp_starttls(smtp_host, smtp_port)
+        if not imap_ok and tcp_reachable(imap_host, imap_port, timeout=2.5):
+            imap_ok = verify_imap_tls(imap_host, imap_port)
+        if smtp_ok and imap_ok:
+            break
+        time.sleep(MAIL_TCP_POLL_SEC)
+
+    if smtp_ok and imap_ok:
+        return smtp_ok, imap_ok, smtp_host, smtp_port, imap_host, imap_port
+
+    rh, rp = resolve_mail_endpoint('postfix', smtp_port, auth_submission=True)
+    ih, ip = resolve_mail_endpoint('dovecot', imap_port)
+    if not smtp_ok and verify_smtp_starttls(rh, rp):
+        smtp_ok, smtp_host, smtp_port = True, rh, rp
+    if not imap_ok and verify_imap_tls(ih, ip):
+        imap_ok, imap_host, imap_port = True, ih, ip
+
+    return smtp_ok, imap_ok, smtp_host, smtp_port, imap_host, imap_port
 
 
 def auto_setup_mail_services(
@@ -93,9 +171,39 @@ def auto_setup_mail_services(
     except Exception as exc:
         return {'success': False, 'error': f'Ağ hazırlığı: {exc}', 'messages': messages}
 
-    need_provision = not _mail_containers_running(client)
+    smtp_host, imap_host = 'jir_postfix', 'jir_dovecot'
+    try:
+        params = resolve_mail_stack_params(mail_domain_override=domain or None)
+        smtp_host = params.postfix_container
+        imap_host = params.dovecot_container
+    except Exception as exc:
+        return {'success': False, 'error': str(exc), 'messages': messages}
+
+    pki_ca_pem = ''
+    try:
+        params_pre = resolve_mail_stack_params(mail_domain_override=domain or None)
+        db_msg = _ensure_db_container_on_network(client, params_pre.db_host, network)
+        if db_msg:
+            messages.append(db_msg)
+        messages.append('Dahili mail PKI (TLS)…')
+        pki = ensure_mail_pki_volume(
+            client,
+            mail_hostname=mail_hostname or params_pre.mail_hostname,
+            mail_domain=params_pre.mail_domain,
+            postfix_container=params_pre.postfix_container,
+            dovecot_container=params_pre.dovecot_container,
+        )
+        pki_ca_pem = pki.ca_cert_pem.decode('utf-8')
+        messages.append('TLS sertifikaları hazır (jir_mail_tls volume).')
+    except Exception as exc:
+        messages.append(f'PKI/TLS: {exc}')
+
+    need_provision = _needs_mail_provision(client, smtp_host, imap_host)
     if need_provision:
-        messages.append('Postfix/Dovecot kuruluyor…')
+        if dovecot_container_needs_rebuild(client, imap_host):
+            messages.append('Dovecot özel imajına yükseltiliyor (PostgreSQL passdb)…')
+        else:
+            messages.append('Postfix/Dovecot kuruluyor…')
         prov = provision_mail_stack_docker(
             skip_busy_ports=skip_busy_ports,
             pull_images=True,
@@ -104,6 +212,8 @@ def auto_setup_mail_services(
             docker_network_override=network,
         )
         messages.extend(prov.get('messages') or [])
+        if not pki_ca_pem and prov.get('tls_ca_pem'):
+            pki_ca_pem = prov['tls_ca_pem']
         if not prov.get('success') and prov.get('mode') != 'no_docker':
             return {
                 'success': False,
@@ -119,7 +229,7 @@ def auto_setup_mail_services(
                 'provision': prov,
             }
     else:
-        messages.append('Postfix ve Dovecot zaten çalışıyor.')
+        messages.append('Postfix ve Dovecot zaten çalışıyor (özel Dovecot imajı).')
 
     if panel:
         ok, msg = _attach_to_network(client, panel, network)
@@ -132,10 +242,9 @@ def auto_setup_mail_services(
             }
     else:
         messages.append(
-            'Uyarı: Panel konteyner adı bilinmiyor; mail DNS panel yeniden başlatılınca denenecek.'
+            'Uyarı: Panel konteyner adı bilinmiyor; yeniden başlatma sonrası ağ bağlantısı denenecek.'
         )
 
-    smtp_host, imap_host = 'jir_postfix', 'jir_dovecot'
     params_summary: dict[str, Any] = {}
     try:
         params = resolve_mail_stack_params(mail_domain_override=domain or None)
@@ -150,18 +259,10 @@ def auto_setup_mail_services(
     smtp_port = int(os.getenv('SMTP_PORT', '587'))
     imap_port = int(os.getenv('IMAP_PORT', '993'))
 
-    # Panel ağa yeni bağlandıysa DNS kısa süre gecikebilir; resolve_mail_endpoint yedek dener.
-    smtp_ok = tcp_reachable(smtp_host, smtp_port, timeout=3.0)
-    imap_ok = tcp_reachable(imap_host, imap_port, timeout=3.0)
-    if not smtp_ok or not imap_ok:
-        rh, rp = resolve_mail_endpoint('postfix', smtp_port, auth_submission=True)
-        ih, ip = resolve_mail_endpoint('dovecot', imap_port)
-        smtp_ok = smtp_ok or tcp_reachable(rh, rp, timeout=3.0)
-        imap_ok = imap_ok or tcp_reachable(ih, ip, timeout=3.0)
-        if smtp_ok:
-            smtp_host, smtp_port = rh, rp
-        if imap_ok:
-            imap_host, imap_port = ih, ip
+    messages.append('Mail servisleri hazır olana kadar bekleniyor…')
+    smtp_ok, imap_ok, smtp_host, smtp_port, imap_host, imap_port = _verify_mail_endpoints(
+        smtp_host, smtp_port, imap_host, imap_port,
+    )
 
     mail_endpoints = {
         'smtp_host': smtp_host,
@@ -170,44 +271,72 @@ def auto_setup_mail_services(
         'imap_port': imap_port,
         'docker_network': network,
         'panel_container': panel,
+        'tls_mode': 'e2e',
+        'tls_ca_pem': pki_ca_pem,
+    }
+
+    result: dict[str, Any] = {
+        'messages': messages,
+        'mail_endpoints': mail_endpoints,
+        'docker_container_map': {
+            'postfix': smtp_host if smtp_host.startswith('jir_') else 'jir_postfix',
+            'dovecot': imap_host if imap_host.startswith('jir_') else 'jir_dovecot',
+        },
+        'params': params_summary,
+        'smtp_ok': smtp_ok,
+        'imap_ok': imap_ok,
     }
 
     if smtp_ok and imap_ok:
         messages.append(f'SMTP hazır: {smtp_host}:{smtp_port}')
         messages.append(f'IMAP hazır: {imap_host}:{imap_port}')
-        return {
-            'success': True,
-            'messages': messages,
-            'mail_endpoints': mail_endpoints,
-            'docker_container_map': {
-                'postfix': smtp_host if smtp_host.startswith('jir_') else 'jir_postfix',
-                'dovecot': imap_host if imap_host.startswith('jir_') else 'jir_dovecot',
-            },
-            'params': params_summary,
-        }
+        messages.append(
+            'Mail trafiği uçtan uca TLS ile korunuyor (dahili PKI). Panel HTTPS ayrı katmandır.'
+        )
+        result['success'] = True
+        apply_mail_connectivity_to_system_config(result)
+        return result
 
-    return {
-        'success': False,
-        'error': (
-            f'Mail TCP doğrulanamadı (SMTP {smtp_host}:{smtp_port}, IMAP {imap_host}:{imap_port}). '
-            'Kurulum yeniden denenecek veya redeploy sonrası otomatik düzelir.'
-        ),
-        'messages': messages,
-        'mail_endpoints': mail_endpoints,
-        'smtp_ok': smtp_ok,
-        'imap_ok': imap_ok,
-    }
+    result['success'] = False
+    result['error'] = (
+        f'Mail TLS doğrulanamadı — SMTP {"OK" if smtp_ok else "yok"}, IMAP {"OK" if imap_ok else "yok"} '
+        f'({smtp_host}:{smtp_port}, {imap_host}:{imap_port}). '
+        'docker logs jir_dovecot && docker logs jir_postfix'
+    )
+    return result
 
 
 def apply_mail_connectivity_to_system_config(result: dict[str, Any]) -> None:
-    """Kurulum sonucunu SystemConfig + ortam için kalıcı kaydet."""
+    """Kurulum sonucunu SystemConfig + çalışma anı ortamı için kaydet."""
+    ep = result.get('mail_endpoints') or {}
+    if ep.get('smtp_host'):
+        os.environ.setdefault('SMTP_HOST', str(ep['smtp_host']))
+    if ep.get('smtp_port'):
+        os.environ.setdefault('SMTP_PORT', str(ep['smtp_port']))
+    if ep.get('imap_host'):
+        os.environ.setdefault('IMAP_HOST', str(ep['imap_host']))
+    if ep.get('imap_port'):
+        os.environ.setdefault('IMAP_PORT', str(ep['imap_port']))
+    if ep.get('tls_ca_pem'):
+        try:
+            from installer.mail_pki import write_ca_to_path
+            from pathlib import Path
+            import tempfile
+
+            dest = Path(tempfile.gettempdir()) / 'jir-mail-internal-ca.crt'
+            ca_raw = ep['tls_ca_pem']
+            ca_bytes = ca_raw.encode('utf-8') if isinstance(ca_raw, str) else ca_raw
+            write_ca_to_path(ca_bytes, dest)
+            os.environ.setdefault('MAIL_TLS_CA_FILE', str(dest))
+        except Exception:
+            pass
+
     try:
         from saas.models import SystemConfig
 
         conf = SystemConfig.objects.first()
         if not conf:
             return
-        ep = result.get('mail_endpoints') or {}
         dmap = result.get('docker_container_map') or {}
         if dmap:
             merged = dict(conf.docker_container_map or {})
@@ -217,6 +346,8 @@ def apply_mail_connectivity_to_system_config(result: dict[str, Any]) -> None:
         log['mail_endpoints'] = ep
         log['mail_auto_setup'] = {
             'success': result.get('success'),
+            'smtp_ok': result.get('smtp_ok'),
+            'imap_ok': result.get('imap_ok'),
             'messages': (result.get('messages') or [])[-20:],
         }
         conf.installation_log = log

@@ -9,6 +9,7 @@ from __future__ import annotations
 import email
 import logging
 import re
+import ssl
 from contextlib import contextmanager
 from datetime import datetime
 from email.header import decode_header, make_header
@@ -18,6 +19,7 @@ from typing import Iterator
 from django.conf import settings
 
 from management.mail_service_endpoint import resolve_mail_endpoint
+from management.mail_tls import imap_ssl_verify_required, imap_tls_context
 
 logger = logging.getLogger(__name__)
 
@@ -47,8 +49,21 @@ def imap_connection(account, password: str) -> Iterator:
 
     host, port = resolve_mail_endpoint('dovecot', int(getattr(settings, 'IMAP_PORT', 993)))
     ssl_required = getattr(settings, 'IMAP_SSL', True)
+    if not ssl_required:
+        raise ValueError('IMAP düz metin devre dışı (MAIL_TLS_MODE=e2e).')
 
-    client = IMAPClient(host=host, port=port, ssl=ssl_required, use_uid=True, timeout=30)
+    ssl_context = imap_tls_context()
+    if imap_ssl_verify_required() and ssl_context is None:
+        raise ssl.SSLError('IMAP TLS doğrulaması için SSL bağlamı oluşturulamadı.')
+
+    client = IMAPClient(
+        host=host,
+        port=port,
+        ssl=True,
+        ssl_context=ssl_context,
+        use_uid=True,
+        timeout=30,
+    )
     try:
         client.login(account.email, password)
         yield client

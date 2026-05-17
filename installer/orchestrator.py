@@ -27,7 +27,9 @@ from typing import Callable
 from django.conf import settings
 from django.utils import timezone
 
-from .compose_builder import JIR_NETWORK, ServiceSpec, build_specs, order_specs
+from .compose_builder import JIR_DOVECOT_IMAGE, JIR_NETWORK, ServiceSpec, build_specs, order_specs
+from .docker_images import ensure_jir_dovecot_image
+from .mail_pki import ensure_mail_pki_volume
 from .models import InstallationRun, InstallationStep
 from .port_check import filter_publish_ports
 from .profiles import (
@@ -420,6 +422,10 @@ def _ensure_volumes(client, specs: list[ServiceSpec], recorder: StepRecorder) ->
 def _pull_image(client, image: str, recorder: StepRecorder) -> None:
     recorder.start()
     try:
+        if image == JIR_DOVECOT_IMAGE:
+            recorder.log(f'{image} yerel derleme — pull atlanıyor.')
+            recorder.finish(success=True)
+            return
         recorder.log(f'Image çekiliyor: {image}')
         try:
             client.images.get(image)
@@ -487,6 +493,66 @@ def _wait_for_healthy(client, container_name: str, recorder: StepRecorder, timeo
         if recorder.step.status != 'failed':
             recorder.finish(success=False, message=str(exc))
         raise
+
+
+class _SyncLog:
+    """InstallationRun olmadan stack kurulumu için basit günlük."""
+
+    def __init__(self, messages: list[str]) -> None:
+        self.messages = messages
+        self.step = type('_Step', (), {'status': 'running', 'save': lambda self: None})()
+
+    def start(self) -> None:
+        pass
+
+    def finish(self, *, success: bool = True, message: str = '') -> None:
+        if not success:
+            if message:
+                self.messages.append(f'HATA: {message}')
+            raise RuntimeError(message or 'Kurulum adımı başarısız')
+
+    def log(self, line: str) -> None:
+        self.messages.append(line)
+
+
+def provision_docker_stack_sync(client, config: dict) -> list[str]:
+    """Tam Docker stack (Postgres, Redis, Postfix, Dovecot) — sihirbaz bootstrap."""
+    messages: list[str] = []
+    rec = _SyncLog(messages)
+    domain = (config.get('domain') or 'mail.local').strip()
+    cfg = {**config, 'domain': domain, 'mail_hostname': config.get('mail_hostname') or f'mail.{domain}'}
+
+    _ensure_network(client, rec)
+    specs = order_specs(build_specs(cfg))
+    _ensure_volumes(client, specs, rec)
+
+    rec.log('Dahili mail PKI (TLS)…')
+    pki = ensure_mail_pki_volume(
+        client,
+        mail_hostname=cfg['mail_hostname'],
+        mail_domain=domain,
+        postfix_container='jir_postfix',
+        dovecot_container='jir_dovecot',
+    )
+    cfg['mail_pki_ca_pem'] = pki.ca_cert_pem.decode('utf-8')
+
+    rec.log('Dovecot imajı derleniyor…')
+    ensure_jir_dovecot_image(client, log=rec.log)
+
+    policy_raw = (cfg.get('stack_service_policy') or STACK_POLICY_SMART).strip().lower()
+    if policy_raw not in (STACK_POLICY_SMART, STACK_POLICY_FORCE_RECREATE):
+        policy_raw = STACK_POLICY_SMART
+
+    for spec in specs:
+        _pull_image(client, spec.image, rec)
+        _apply_stack_service_step(client, spec, policy_raw, rec, config=cfg)
+        try:
+            _wait_for_healthy(client, spec.name, rec, timeout=120)
+        except RuntimeError:
+            rec.log(f'{spec.name}: healthcheck yok veya zaman aşımı — çalışıyor varsayılıyor.')
+
+    rec.log('Docker stack konteynerleri hazır.')
+    return messages
 
 
 def _build_postgres_url_from_manual(dbm: dict) -> str:
@@ -592,6 +658,22 @@ def _apply_dns_records(config: dict, recorder: StepRecorder) -> None:
 def _request_tls_certificate(config: dict, recorder: StepRecorder) -> None:
     """Let's Encrypt sertifikası al (best-effort; başarısız olursa adımı işaretler ama run'ı durdurmaz)."""
     recorder.start()
+    if os.getenv('MAIL_AUTO_TLS', 'false').lower() not in ('1', 'true', 'yes'):
+        recorder.log(
+            'Mail TLS (Let\'s Encrypt) atlandı — panel HTTPS platformunuzdan gelir; '
+            'iç ağda Dovecot snakeoil kullanılır. İsterseniz MAIL_AUTO_TLS=true ile açın.'
+        )
+        recorder.step.status = 'skipped'
+        recorder.step.finished_at = timezone.now()
+        recorder.step.save()
+        publish_event(str(recorder.run.run_id), 'step_end', {
+            'step_id': recorder.step.id,
+            'order': recorder.step.order,
+            'name': recorder.step.name,
+            'status': 'skipped',
+            'progress': 100,
+        })
+        return
     try:
         from tls.certbot_manager import request_certificate
         from core.models import MailDomain
@@ -706,6 +788,10 @@ def _run_mail_auto_setup(config: dict, client, recorder: StepRecorder) -> None:
         config['mail_connectivity'] = result
         for line in result.get('messages') or []:
             recorder.log(line)
+        from installer.mail_connectivity import apply_mail_connectivity_to_system_config
+
+        if result.get('mail_endpoints'):
+            apply_mail_connectivity_to_system_config(result)
         if result.get('success'):
             ep = result.get('mail_endpoints') or {}
             recorder.log(
@@ -820,6 +906,38 @@ def run_installation(run_id: str) -> None:
             order += 1
             _ensure_volumes(client, specs, _make_step(run, order, 'Volume hazırlığı',
                                                        'Persistent volume\'lar oluştur'))
+
+            order += 1
+            pki_rec = _make_step(run, order, 'Mail TLS (PKI)', 'Dahili CA ve sunucu sertifikası')
+            pki_rec.start()
+            try:
+                domain = config.get('domain', 'mail.local')
+                mail_hostname = config.get('mail_hostname', f'mail.{domain}')
+                pki = ensure_mail_pki_volume(
+                    client,
+                    mail_hostname=mail_hostname,
+                    mail_domain=domain,
+                    postfix_container='jir_postfix',
+                    dovecot_container='jir_dovecot',
+                )
+                config['mail_pki_ca_pem'] = pki.ca_cert_pem.decode('utf-8')
+                pki_rec.log('Dahili mail PKI volume hazır (jir_mail_tls).')
+                pki_rec.finish(success=True)
+            except Exception as exc:
+                pki_rec.log(f'HATA: {exc}')
+                pki_rec.finish(success=False, message=str(exc))
+                raise
+
+            order += 1
+            dove_rec = _make_step(run, order, 'Dovecot imajı', 'PostgreSQL passdb ile özel imaj derle')
+            dove_rec.start()
+            try:
+                ensure_jir_dovecot_image(client, log=dove_rec.log)
+                dove_rec.finish(success=True)
+            except Exception as exc:
+                dove_rec.log(f'HATA: {exc}')
+                dove_rec.finish(success=False, message=str(exc))
+                raise
 
             policy_raw = (config.get('stack_service_policy') or STACK_POLICY_SMART).strip().lower()
             if policy_raw not in (STACK_POLICY_SMART, STACK_POLICY_FORCE_RECREATE):

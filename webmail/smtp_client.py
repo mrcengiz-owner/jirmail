@@ -7,12 +7,46 @@ from __future__ import annotations
 
 import socket
 import smtplib
+import ssl
 from email.message import EmailMessage
 from email.utils import formataddr, make_msgid
 
 from django.conf import settings
 
 from management.mail_service_endpoint import resolve_mail_endpoint
+from management.mail_tls import smtp_starttls_required, smtp_tls_context
+
+
+def _smtp_auth_supported(smtp: smtplib.SMTP) -> bool:
+    try:
+        return bool(smtp.has_extn('auth'))
+    except Exception:
+        return False
+
+
+def _smtp_submit(
+    smtp: smtplib.SMTP,
+    *,
+    account,
+    password: str,
+    msg: EmailMessage,
+    recipients: list[str],
+) -> None:
+    """587 submission: zorunlu STARTTLS (e2e); AUTH yalnızca sunucu destekliyorsa."""
+    smtp.ehlo()
+    if smtp_starttls_required():
+        if not smtp.has_extn('starttls'):
+            raise smtplib.SMTPNotSupportedError('SMTP STARTTLS zorunlu ancak sunucu desteklemiyor.')
+        smtp.starttls(context=smtp_tls_context())
+        smtp.ehlo()
+    elif smtp.has_extn('starttls'):
+        smtp.starttls(context=smtp_tls_context())
+        smtp.ehlo()
+    if _smtp_auth_supported(smtp):
+        if not password:
+            raise ValueError('SMTP sunucusu kimlik doğrulama istiyor ancak parola verilmedi.')
+        smtp.login(account.email, password)
+    smtp.send_message(msg, from_addr=account.email, to_addrs=recipients)
 
 
 def send_mail(account, password: str, *, to: list[str] | str, subject: str, body_text: str,
@@ -57,14 +91,13 @@ def send_mail(account, password: str, *, to: list[str] | str, subject: str, body
 
     try:
         with smtplib.SMTP(host, port, timeout=30) as smtp:
-            smtp.ehlo()
-            try:
-                smtp.starttls()
-                smtp.ehlo()
-            except smtplib.SMTPNotSupportedError:
-                pass
-            smtp.login(account.email, password)
-            smtp.send_message(msg, from_addr=account.email, to_addrs=recipients)
+            _smtp_submit(
+                smtp,
+                account=account,
+                password=password,
+                msg=msg,
+                recipients=recipients,
+            )
         return {'success': True, 'message_id': msg['Message-ID']}
     except socket.gaierror as exc:
         hint = (
@@ -72,16 +105,13 @@ def send_mail(account, password: str, *, to: list[str] | str, subject: str, body
         )
         if not getattr(settings, 'IN_DOCKER', False):
             hint += (
-                'Panel `runserver` ile host üzerinde çalışıyorsa .env dosyasına '
-                'SMTP_HOST=127.0.0.1 ekleyin; Postfix konteynerinde 587 hosta publish edilmiş olmalı. '
-                'Coolify’da panel konteyneri ile aynı Docker ağında çalıştırın veya gerçek postfix host adını yazın.'
+                'Yerelde çalışıyorsanız kurulum sihirbazında mail adımını tamamlayın veya '
+                'SMTP_HOST=127.0.0.1 (587 publish edilmiş olmalı).'
             )
         else:
             hint += (
-                'Konteyner içi DNS’te bu ad yok: Postfix genelde ayrı servis veya farklı compose adıyla gelir. '
-                'Coolify’da uygulamanın ortamına SMTP_HOST=<Postfix’e ulaşan iç hostname> yazın '
-                '(aynı stack’te Compose `service` adı, örn. `postfix`), gerekirse JIR_CONTAINER_POSTFIX ile '
-                'gerçek konteyner adını eşleştirin veya iki servisi ortak Docker ağına alın.'
+                'Kurulum sihirbazı → Mail adımını çalıştırın veya SMTP_HOST ile Postfix konteyner adını verin; '
+                'panel ile Postfix aynı Docker ağında olmalı (jir_network).'
             )
         return {'success': False, 'message': f'{exc}{hint}'}
     except ConnectionRefusedError:
@@ -95,6 +125,14 @@ def send_mail(account, password: str, *, to: list[str] | str, subject: str, body
                 f'`docker inspect jir_postfix --format "{{{{json .NetworkSettings.Networks}}}}"`'
             ),
         }
+    except ssl.SSLError as exc:
+        return {
+            'success': False,
+            'message': (
+                f'SMTP TLS doğrulaması başarısız ({host}:{port}): {exc}. '
+                'Mail kurulum adımını yeniden çalıştırın (dahili PKI).'
+            ),
+        }
     except smtplib.SMTPException as exc:
         # Python 3.12+: SMTPNotSupportedError aynı zamanda OSError alt sınıfıdır;
         # geniş OSError bloğunda yakalanıp yeniden fırlatılmamalı.
@@ -102,11 +140,10 @@ def send_mail(account, password: str, *, to: list[str] | str, subject: str, body
             return {
                 'success': False,
                 'message': (
-                    'SMTP sunucusu kimlik doğrulama (AUTH) sunmuyor veya yanlış dinleyiciye '
-                    f'bağlanılıyor ({host}:{port}). Gönderim için genelde **587 (submission)** '
-                    've SASL gerekir; 25 çoğu kurulumda istemci girişi kabul etmez. '
-                    '.env içinde SMTP_HOST ve SMTP_PORT=587 doğrulayın; Postfix tarafında '
-                    '`submission` / `smtpd_sasl_auth_enable` açık olmalı.'
+                    f'SMTP komutu desteklenmiyor ({host}:{port}). '
+                    'boky/postfix relay kullanıyorsanız gönderen domain ALLOWED_SENDER_DOMAINS '
+                    'içinde olmalı; panel jir_network üzerinde olmalı. '
+                    'Parola ile AUTH gerekiyorsa Postfix\'e SMTPD_SASL_USERS tanımlayın.'
                 ),
             }
         return {'success': False, 'message': str(exc)}

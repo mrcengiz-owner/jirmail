@@ -67,7 +67,9 @@ def probe_capabilities() -> Dict[str, Any]:
     """Bootstrap için: Docker API ve DATABASE_URL varlığı (ping ile)."""
     from django.conf import settings
 
-    has_database_url = bool(os.getenv('DATABASE_URL', '').strip())
+    from installer.db_url import has_database_url as _has_db_url
+
+    has_database_url = _has_db_url()
     docker_available = False
     if os.getenv('JIR_MANAGED_INSTALL', '').lower() in ('1', 'true', 'yes'):
         return {
@@ -107,8 +109,7 @@ def probe_capabilities() -> Dict[str, Any]:
 
 
 def suggested_profile_from_capabilities(cap: Dict[str, Any]) -> str:
-    if cap.get('has_database_url') and not cap.get('docker_available'):
-        return PROFILE_PLATFORM_ENV
+    """Tek sunucu: Docker varsa tam stack."""
     if cap.get('docker_available'):
         return PROFILE_DOCKER_STACK
     if cap.get('has_database_url'):
@@ -129,6 +130,7 @@ def install_modes_for_ui(cap: Dict[str, Any]) -> List[Dict[str, Any]]:
             'subtitle': 'PostgreSQL, Redis, Postfix, Dovecot bu API üzerinden ayağa kalkar.',
             'scenarios': 'Kendi VPS, docker compose, Docker soketi erişimi olan PaaS.',
             'disabled': not docker_ok,
+            'recommended': docker_ok,
             'disabled_reason': (
                 None
                 if docker_ok
@@ -150,11 +152,15 @@ def install_modes_for_ui(cap: Dict[str, Any]) -> List[Dict[str, Any]]:
             'title': 'Ortam veritabanı (DATABASE_URL)',
             'subtitle': 'Sunucuda tanımlı DATABASE_URL ile migrate; mail servisleri platformda ayrı.',
             'scenarios': 'Coolify, Dokploy, Railway, Render vb. — Postgres servisi uygulamaya bağlı.',
-            'disabled': not db_url,
+            'disabled': not db_url or docker_ok,
             'disabled_reason': (
-                'DATABASE_URL tanımlı değil. Platformda PostgreSQL ekleyip uygulama ortamına bağlayın.'
-                if not db_url
-                else None
+                'Tek sunucu kurulumu: Docker erişimi varsa tam stack kullanılır.'
+                if docker_ok
+                else (
+                    'DATABASE_URL tanımlı değil. Platformda PostgreSQL ekleyip uygulama ortamına bağlayın.'
+                    if not db_url
+                    else None
+                )
             ),
         },
         {
@@ -162,8 +168,12 @@ def install_modes_for_ui(cap: Dict[str, Any]) -> List[Dict[str, Any]]:
             'title': 'Manuel PostgreSQL',
             'subtitle': 'Host, veritabanı, kullanıcı ve şifre ile migrate; uygulamanın DB’si aynı hedefe işaret etmeli.',
             'scenarios': 'cPanel, Plesk, harici RDS veya Coolify’da URL henüz yokken geçici bağlantı.',
-            'disabled': False,
-            'disabled_reason': None,
+            'disabled': docker_ok,
+            'disabled_reason': (
+                'Tek sunucu kurulumu: Docker ile tam stack önerilir.'
+                if docker_ok
+                else None
+            ),
         },
     ]
     return modes

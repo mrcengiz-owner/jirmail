@@ -81,23 +81,26 @@
 
             <!-- 1: Kurulum modu -->
             <div x-show="step === 1" x-transition.opacity>
-                <h2 class="text-lg sm:text-xl font-semibold text-white mb-1">Kurulum modu</h2>
-                <p class="text-slate-500 text-sm mb-5">Ortamınıza uygun yolu seçin; devre dışı seçenekler sunucuda gerekli erişim yoksa kilitlenir.</p>
+                <h2 class="text-lg sm:text-xl font-semibold text-white mb-1">Tek sunucu kurulumu</h2>
+                <p class="text-slate-500 text-sm mb-4">Sayfa açılınca Docker konteynerleri ve mail TLS (uçtan uca şifreleme) otomatik oluşturulur.</p>
 
-                <label class="flex items-start gap-3 cursor-pointer rounded-xl border border-slate-800 bg-slate-900/50 p-3 mb-4">
-                    <input type="checkbox" x-model="relaxModeLocks" class="mt-0.5 shrink-0 accent-primary-500">
-                    <span class="text-xs text-slate-400 leading-relaxed">
-                        <span class="text-slate-300 font-medium">Gelişmiş:</span>
-                        Kontrol yanlış olabilir (ör. uzak Docker). Kapalı seçenekleri seçebilmem için kilidi gevşet.
-                        Soket bağlı değilse seçseniz bile <strong>kurulum</strong> aşamasında Docker yok uyarısı alırsınız.
-                    </span>
-                </label>
+                <div x-show="stackBootstrapLoading"
+                     class="rounded-xl border border-primary-500/30 bg-primary-500/10 p-4 mb-4 text-sm text-primary-200">
+                    Altyapı kuruluyor (imajlar, ağ, PKI, konteynerler)…
+                </div>
+                <div x-show="stackBootstrapMessages && !stackBootstrapLoading"
+                     class="rounded-xl border border-slate-800 bg-slate-950/80 p-3 mb-4">
+                    <p class="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-2">Bootstrap çıktısı</p>
+                    <pre class="install-log text-slate-400 whitespace-pre-wrap max-h-36 overflow-y-auto custom-scrollbar" x-text="stackBootstrapMessages"></pre>
+                </div>
+                <p x-show="stackBootstrapOk" class="text-xs text-success-400 font-medium mb-4">Altyapı konteynerleri oluşturuldu.</p>
+                <p x-show="stackBootstrapError" class="text-xs text-danger-300 mb-4" x-text="stackBootstrapError"></p>
 
                 <div class="space-y-3">
                     <template x-for="mode in installModesList()" :key="mode.id">
                         <button type="button"
                                 @click="pickInstallMode(mode)"
-                                :disabled="mode.disabled && !relaxModeLocks"
+                                :disabled="mode.disabled"
                                 :class="installModeCardClass(mode)"
                                 class="w-full text-left rounded-xl border p-4 transition-all">
                             <p class="font-semibold text-white" x-text="mode.title"></p>
@@ -289,7 +292,7 @@
             <!-- 5: Mail servisleri -->
             <div x-show="step === 5" x-transition.opacity>
                 <h2 class="text-lg sm:text-xl font-semibold text-white mb-1">Mail servisleri</h2>
-                <p class="text-slate-500 text-sm mb-5">Postfix ve Dovecot otomatik kurulur; panel aynı Docker ağına bağlanır. Manuel SMTP ayarı gerekmez.</p>
+                <p class="text-slate-500 text-sm mb-5">Postfix ve Dovecot otomatik kurulur; panel ↔ mail trafiği <strong>uçtan uca TLS</strong> (dahili PKI) ile şifrelenir. Panel HTTPS ayrı katmandır. Manuel SMTP/IMAP env gerekmez.</p>
 
                 <div x-show="mailLoading || mailProvisionLoading" class="text-center py-10 text-slate-400 text-sm">Durum kontrol ediliyor…</div>
 
@@ -339,8 +342,11 @@
                                   :class="mailStatus.has_database_url ? 'text-success-400' : (mailStatus.django_uses_postgresql ? 'text-amber-400' : 'text-danger-400')"
                                   x-text="mailStatus.has_database_url ? 'Tanımlı' : (mailStatus.django_uses_postgresql ? 'Ortamda yok (PG kullanılıyor olabilir)' : 'Tanımlı değil')"></span>
                         </div>
-                        <p class="text-[10px] text-slate-600 -mt-2" x-show="!mailStatus.has_database_url">
-                            Mail stack otomatik kurulumu için ortamda <code class="text-slate-500">DATABASE_URL</code> gerekir.
+                        <p class="text-[10px] text-slate-600 -mt-2" x-show="!mailStatus.has_database_url && !mailStatus.django_uses_postgresql">
+                            Mail stack için PostgreSQL ve <code class="text-slate-500">DATABASE_URL</code> (veya Django DATABASES) gerekir.
+                        </p>
+                        <p class="text-[10px] text-slate-500 -mt-2" x-show="mailStatus.django_uses_postgresql && !mailStatus.has_database_url">
+                            DATABASE_URL ortamda yok; Django PostgreSQL ayarlarından otomatik kullanılacak.
                         </p>
                         <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-2 border-t border-slate-800 text-xs text-slate-500">
                             <p><span class="text-slate-600">Postfix:</span> <span class="text-slate-300 font-mono" x-text="mailStatus.postfix_container"></span>
@@ -364,14 +370,6 @@
                         <span x-show="mailStatus.mail_ready" class="text-xs text-success-400 font-medium">Mail uçları hazır görünüyor.</span>
                     </div>
 
-                    <label x-show="installProfile !== 'docker_stack' && !mailStatus.mail_ready"
-                           class="flex items-start gap-3 cursor-pointer rounded-xl border border-slate-800 bg-slate-900/40 p-4">
-                        <input type="checkbox" x-model="mailSkipped" class="mt-1 shrink-0 accent-primary-500">
-                        <span class="text-sm text-slate-300">
-                            Mail konteynerleri olmadan devam et
-                            <span class="block text-xs text-slate-500 mt-1">Kurulumdan sonra <code class="text-primary-400">provision_mail_stack</code> veya yönetim API’si ile tamamlayabilirsiniz.</span>
-                        </span>
-                    </label>
                 </div>
             </div>
 
@@ -591,7 +589,10 @@ function setupWizard() {
         postgresPassword: '',
         stackServicePolicy: 'smart',
         stackSkipBusyHostPorts: true,
-        relaxModeLocks: false,
+        stackBootstrapLoading: false,
+        stackBootstrapOk: false,
+        stackBootstrapError: '',
+        stackBootstrapMessages: '',
 
         bootstrap: {
             has_database_url: false,
@@ -627,7 +628,6 @@ function setupWizard() {
         mailStatus: null,
         mailLoading: false,
         mailProvisionLoading: false,
-        mailSkipped: false,
         mailProvisionOk: false,
         mailProvisionMessages: '',
         mailProvisionAttempted: false,
@@ -681,32 +681,18 @@ function setupWizard() {
         },
 
         installModeCardClass(mode) {
-            const locked = mode.disabled && !this.relaxModeLocks;
             const selected = this.installProfile === mode.id;
-            const relaxedSelectable = mode.disabled && this.relaxModeLocks;
-            if (locked) {
+            if (mode.disabled) {
                 return 'opacity-50 cursor-not-allowed border-slate-800/80 bg-slate-900/40';
             }
             if (selected) {
                 return 'ring-2 ring-primary-500 border-primary-500/50 bg-primary-500/10';
             }
-            if (relaxedSelectable) {
-                return 'border-amber-600/45 bg-amber-950/20 hover:border-amber-500/55 cursor-pointer';
-            }
             return 'border-slate-800 bg-slate-900/60 hover:border-slate-700 cursor-pointer';
         },
 
         pickInstallMode(mode) {
-            if (mode.disabled && !this.relaxModeLocks) return;
-            if (mode.disabled && this.relaxModeLocks) {
-                var msg = 'Bu mod için ortamda gerekli erişim doğrulanamadı.';
-                if (mode.id === 'docker_stack') {
-                    msg += ' Coolify\'da tam stack için konteynere Docker soketi bağlanmalı; yoksa kurulum başlarında hata verir.';
-                } else if (mode.id === 'platform_env') {
-                    msg += ' DATABASE_URL olmadan kurulum reddedilir.';
-                }
-                if (!window.confirm(msg + '\n\nYine de bu modu seçmek istiyor musunuz?')) return;
-            }
+            if (mode.disabled) return;
             this.selectInstallMode(mode.id);
         },
 
@@ -756,6 +742,45 @@ function setupWizard() {
             this.jirKey = this.generateKey();
             this.ensurePostgresSecret();
             await this.loadBootstrap();
+            if (this.bootstrap.docker_available) {
+                this.installProfile = 'docker_stack';
+                await this.runStackBootstrap('');
+            }
+        },
+
+        async runStackBootstrap(domainOverride) {
+            this.stackBootstrapLoading = true;
+            this.stackBootstrapError = '';
+            const dom = (domainOverride !== undefined && domainOverride !== null)
+                ? String(domainOverride).trim()
+                : (this.domain || '').trim();
+            try {
+                const res = await fetch('/api/installer/bootstrap-stack', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        domain: dom,
+                        mail_hostname: dom ? ('mail.' + dom) : '',
+                        install_profile: this.installProfile || 'docker_stack',
+                        postgres_password: this.postgresPassword,
+                        postgres_db: 'jir_mail_prod',
+                        postgres_user: 'postgres',
+                        stack_service_policy: this.stackServicePolicy || 'smart',
+                        stack_skip_busy_host_ports: true
+                    })
+                });
+                const data = await res.json();
+                const msgs = data.messages || [];
+                if (msgs.length) this.stackBootstrapMessages = msgs.join('\n');
+                this.stackBootstrapOk = !!data.success;
+                if (!data.success) {
+                    this.stackBootstrapError = data.error || 'Bootstrap başarısız.';
+                }
+            } catch (e) {
+                this.stackBootstrapError = 'Bootstrap isteği başarısız: ' + (e.message || String(e));
+            } finally {
+                this.stackBootstrapLoading = false;
+            }
         },
 
         ensurePostgresSecret() {
@@ -798,9 +823,12 @@ function setupWizard() {
 
         canProceed() {
             if (this.step === 1) {
+                if (this.stackBootstrapLoading) return false;
                 const mo = this.installModesList().find((x) => x.id === this.installProfile);
                 if (!mo || !this.installProfile) return false;
-                return !mo.disabled || this.relaxModeLocks;
+                if (mo.disabled) return false;
+                if (this.bootstrap.docker_available) return this.stackBootstrapOk;
+                return true;
             }
             if (this.step === 2) return this.domain && this.domain.includes('.');
             if (this.step === 3) {
@@ -817,11 +845,7 @@ function setupWizard() {
             if (this.step === 5) {
                 if (this.mailLoading || this.mailProvisionLoading) return false;
                 if (!this.mailStatus) return false;
-                if (this.mailStatus.mail_ready) return true;
-                if (this.mailProvisionAttempted) return true;
-                if (this.installProfile === 'docker_stack') return true;
-                if (this.mailSkipped) return true;
-                return false;
+                return !!this.mailStatus.mail_ready;
             }
             return true;
         },
@@ -832,7 +856,6 @@ function setupWizard() {
             }
             if (!this.mailStatus) return '—';
             if (this.mailStatus.mail_ready) return 'SMTP/IMAP hazır';
-            if (this.mailSkipped) return 'Atlandı — sonra tamamlanabilir';
             if (this.mailProvisionOk) return 'Kurulum tetiklendi — bağlantı için yeniden kontrol';
             if (this.mailStatus.can_auto_provision) return 'Bekliyor — kur veya atla';
             return 'Otomatik kurulum uygun değil — sonra YAML/CLI';
@@ -869,7 +892,11 @@ function setupWizard() {
                         domain: this.domain,
                         mail_hostname: 'mail.' + this.domain,
                         install_profile: this.installProfile,
-                        skip_busy_ports: true
+                        skip_busy_ports: true,
+                        postgres_password: this.postgresPassword,
+                        postgres_db: 'jir_mail_prod',
+                        postgres_user: 'postgres',
+                        stack_service_policy: this.stackServicePolicy || 'smart'
                     })
                 });
                 const data = await res.json();
@@ -889,11 +916,13 @@ function setupWizard() {
             }
         },
 
-        nextStep() {
+        async nextStep() {
             if (!this.canProceed()) return;
             const prev = this.step;
+            if (prev === 2 && this.domain && this.bootstrap.docker_available) {
+                await this.runStackBootstrap(this.domain);
+            }
             if (prev === 4) {
-                this.mailSkipped = false;
                 this.mailProvisionOk = false;
                 this.mailProvisionMessages = '';
                 this.mailProvisionAttempted = false;

@@ -12,11 +12,18 @@ from __future__ import annotations
 import logging
 import os
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Callable
 
 import dj_database_url
 
 from installer.compose_builder import JIR_NETWORK, ServiceSpec
+from installer.db_url import has_database_url, resolve_database_url
+from installer.docker_images import JIR_DOVECOT_IMAGE, ensure_jir_dovecot_image
+from installer.mail_pki import (
+    ensure_mail_pki_volume,
+    mail_tls_volume_mount,
+    postfix_tls_environment,
+)
 from installer.port_check import filter_publish_ports
 
 logger = logging.getLogger(__name__)
@@ -46,11 +53,8 @@ def resolve_mail_stack_params(
     mail_hostname_override: str | None = None,
     docker_network_override: str | None = None,
 ) -> MailStackParams:
-    """DATABASE_URL + MAIL_DOMAIN / SystemConfig / sihirbaz geçersizleri."""
-    url = (os.getenv('DATABASE_URL') or '').strip()
-    if not url:
-        raise RuntimeError('DATABASE_URL tanımlı değil.')
-
+    """DATABASE_URL (veya Django DATABASES) + MAIL_DOMAIN / SystemConfig."""
+    url = resolve_database_url()
     parsed = dj_database_url.parse(url)
     host = (parsed.get('HOST') or 'localhost').strip()
     port = int(parsed.get('PORT') or 5432)
@@ -102,15 +106,20 @@ def mail_stack_params_from_env() -> MailStackParams:
 
 def build_mail_only_specs(p: MailStackParams) -> list[ServiceSpec]:
     """Yalnızca Postfix + Dovecot (harici Postgres — depends_on boş)."""
+    tls_mount = mail_tls_volume_mount(read_only=True)
+    pf_env = {
+        'ALLOWED_SENDER_DOMAINS': p.mail_domain,
+        'HOSTNAME': p.mail_hostname,
+        'POSTFIX_mynetworks': '127.0.0.0/8,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16',
+    }
+    pf_env.update(postfix_tls_environment())
+
     postfix = ServiceSpec(
         key='postfix',
         name=p.postfix_container,
         image='boky/postfix:latest',
         hostname=p.mail_hostname,
-        environment={
-            'ALLOWED_SENDER_DOMAINS': p.mail_domain,
-            'HOSTNAME': p.mail_hostname,
-        },
+        environment=pf_env,
         ports={
             '25/tcp': 25,
             '587/tcp': 587,
@@ -118,6 +127,7 @@ def build_mail_only_specs(p: MailStackParams) -> list[ServiceSpec]:
         volumes={
             'jir_postfix_data': {'bind': '/etc/postfix', 'mode': 'rw'},
             'jir_mail_data': {'bind': '/var/mail', 'mode': 'rw'},
+            **tls_mount,
         },
         depends_on=[],
         network=p.docker_network,
@@ -126,7 +136,7 @@ def build_mail_only_specs(p: MailStackParams) -> list[ServiceSpec]:
     dovecot = ServiceSpec(
         key='dovecot',
         name=p.dovecot_container,
-        image='dovecot/dovecot:latest',
+        image=JIR_DOVECOT_IMAGE,
         environment={
             'DB_HOST': p.db_host,
             'DB_PORT': str(p.db_port),
@@ -137,11 +147,11 @@ def build_mail_only_specs(p: MailStackParams) -> list[ServiceSpec]:
         },
         ports={
             '993/tcp': 993,
-            '143/tcp': 143,
         },
         volumes={
             'jir_dovecot_data': {'bind': '/etc/dovecot', 'mode': 'rw'},
             'jir_mail_data': {'bind': '/var/mail', 'mode': 'rw'},
+            **tls_mount,
         },
         depends_on=[],
         network=p.docker_network,
@@ -170,6 +180,9 @@ networks:
 """
 
     q = _yaml_escape_double
+    tls_env_lines = '\n'.join(
+        f'      {k}: {q(v)}' for k, v in postfix_tls_environment().items()
+    )
 
     return f"""# Jîr-Mail — Postfix + Dovecot (harici PostgreSQL)
 # DATABASE_URL ile aynı DB: Dovecot passdb buradan okur.
@@ -189,9 +202,11 @@ services:
     environment:
       ALLOWED_SENDER_DOMAINS: {q(p.mail_domain)}
       HOSTNAME: {q(p.mail_hostname)}
+{tls_env_lines}
     volumes:
       - postfix_data:/etc/postfix
       - mail_data:/var/mail
+      - jir_mail_tls:/etc/jir-mail/tls:ro
     ports:
       - "${{POSTFIX_PORT_25:-25}}:25"
       - "${{POSTFIX_PORT_587:-587}}:587"
@@ -199,7 +214,9 @@ services:
       - {p.docker_network}
 
   dovecot:
-    image: dovecot/dovecot:latest
+    image: {JIR_DOVECOT_IMAGE}
+    build:
+      context: ./dovecot
     container_name: {p.dovecot_container}
     restart: unless-stopped
     environment:
@@ -212,9 +229,9 @@ services:
     volumes:
       - dovecot_data:/etc/dovecot
       - mail_data:/var/mail
+      - jir_mail_tls:/etc/jir-mail/tls:ro
     ports:
       - "${{DOVECOT_PORT_IMAP:-993}}:993"
-      - "${{DOVECOT_PORT_POP3:-143}}:143"
     networks:
       - {p.docker_network}
 
@@ -222,6 +239,7 @@ volumes:
   postfix_data:
   dovecot_data:
   mail_data:
+  jir_mail_tls:
 {net_block}"""
 
 
@@ -265,11 +283,20 @@ def _publish_ports_dict(spec: ServiceSpec, *, skip_busy: bool) -> dict[str, Any]
     return filtered
 
 
-def _create_or_replace_container(client, spec: ServiceSpec, *, skip_busy_ports: bool) -> None:
+def _create_or_replace_container(
+    client,
+    spec: ServiceSpec,
+    *,
+    skip_busy_ports: bool,
+    log: Callable[[str], None] | None = None,
+) -> None:
     """İsim çakışırsa eskiyi kaldırıp yeniden oluşturur (basit kurulum)."""
     import docker
 
     publish_ports = _publish_ports_dict(spec, skip_busy=skip_busy_ports)
+    image = spec.image
+    if spec.key == 'dovecot':
+        image = ensure_jir_dovecot_image(client, log=log)
 
     try:
         old = client.containers.get(spec.name)
@@ -279,7 +306,7 @@ def _create_or_replace_container(client, spec: ServiceSpec, *, skip_busy_ports: 
         pass
 
     kwargs: dict[str, Any] = {
-        'image': spec.image,
+        'image': image,
         'name': spec.name,
         'detach': True,
         'restart_policy': {'Name': spec.restart_policy},
@@ -333,21 +360,38 @@ def provision_mail_stack_docker(
     try:
         messages.append(f"Ağ: {p.docker_network}")
         _ensure_network_simple(client, p.docker_network)
+        messages.append('Dahili mail PKI (TLS) hazırlanıyor…')
+        pki = ensure_mail_pki_volume(
+            client,
+            mail_hostname=p.mail_hostname,
+            mail_domain=p.mail_domain,
+            postfix_container=p.postfix_container,
+            dovecot_container=p.dovecot_container,
+        )
         specs = build_mail_only_specs(p)
         _ensure_volumes_simple(client, specs)
 
+        ensure_jir_dovecot_image(client, log=lambda m: messages.append(m))
+
         if pull_images:
             for spec in specs:
+                if spec.key == 'dovecot':
+                    continue
                 messages.append(f"Pull: {spec.image}")
                 client.images.pull(spec.image)
 
         for spec in specs:
             messages.append(f"Konteyner oluşturuluyor: {spec.name}")
-            _create_or_replace_container(client, spec, skip_busy_ports=skip_busy_ports)
+            _create_or_replace_container(
+                client,
+                spec,
+                skip_busy_ports=skip_busy_ports,
+                log=lambda m: messages.append(m),
+            )
 
         messages.append(
-            f"Django ortamına ekleyin: JIR_CONTAINER_POSTFIX={p.postfix_container} "
-            f"JIR_CONTAINER_DOVECOT={p.dovecot_container}"
+            f'Mail uçları otomatik kaydedilir (SMTP/IMAP). Konteyner adları: '
+            f'{p.postfix_container}, {p.dovecot_container}'
         )
         return {
             'success': True,
@@ -355,6 +399,7 @@ def provision_mail_stack_docker(
             'compose_yaml': yaml_text,
             'params': mail_stack_params_summary(p),
             'messages': messages,
+            'tls_ca_pem': pki.ca_cert_pem.decode('utf-8'),
         }
     except Exception as exc:
         logger.exception('provision_mail_stack_docker')
@@ -394,7 +439,7 @@ def collect_installer_mail_stack_status(
 
     cap = probe_capabilities()
     docker_available = bool(cap.get('docker_available'))
-    has_db_url = bool((os.getenv('DATABASE_URL') or '').strip())
+    has_db_url = has_database_url()
     in_docker = bool(getattr(settings, 'IN_DOCKER', False))
     db_engine = str((settings.DATABASES.get('default') or {}).get('ENGINE') or '')
     django_uses_postgresql = 'postgresql' in db_engine
@@ -469,9 +514,7 @@ def collect_installer_mail_stack_status(
     if not has_db_url:
         if django_uses_postgresql:
             hints.append(
-                'Mail stack (otomatik Postfix/Dovecot) şu an yalnızca ortam değişkeni DATABASE_URL ile çalışır. '
-                'Coolify’da uygulama veritabanı bağlı olsa bile bu değişken yoksa burada “tanımlı değil” görünür; '
-                'ortam değişkenlerine DATABASE_URL ekleyin.'
+                'DATABASE_URL ortamda yok; Django PostgreSQL ayarları kurulumda kullanılacak.'
             )
         elif 'sqlite' in db_engine:
             hints.append(

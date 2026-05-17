@@ -320,7 +320,13 @@ CELERY_RESULT_BACKEND = os.getenv('CELERY_RESULT_BACKEND', f'redis://{REDIS_HOST
 
 IMAP_HOST = _resolve_mail_service_host('dovecot', 'jir_dovecot')
 IMAP_PORT = int(os.getenv('IMAP_PORT', '993'))
+# Mail uçtan uca TLS: panel ↔ Postfix/Dovecot (dahili PKI). Kapatmak için yalnızca MAIL_TLS_MODE=off
+MAIL_TLS_MODE = os.getenv('MAIL_TLS_MODE', 'e2e').strip().lower()
+_MAIL_E2E = MAIL_TLS_MODE != 'off'
 IMAP_SSL = os.getenv('IMAP_SSL', 'true').lower() == 'true'
+IMAP_SSL_VERIFY = os.getenv('IMAP_SSL_VERIFY', 'true' if _MAIL_E2E else 'false').lower() == 'true'
+SMTP_TLS_REQUIRED = os.getenv('SMTP_TLS_REQUIRED', 'true' if _MAIL_E2E else 'false').lower() == 'true'
+MAIL_TLS_CA_FILE = os.getenv('MAIL_TLS_CA_FILE', '/etc/jir-mail/tls/ca.crt')
 SMTP_HOST = _resolve_mail_service_host('postfix', 'jir_postfix')
 SMTP_PORT = int(os.getenv('SMTP_PORT', '587'))
 # Yerel compose: docker-compose.yml içinde DOCKER_HOST=tcp://docker-proxy:2375 verilir.

@@ -8,9 +8,9 @@ manage_sieve = yes
 log_path = /var/log/dovecot.log
 info_log_path = /var/log/dovecot-info.log
 
-ssl = yes
-ssl_cert = </etc/ssl/certs/ssl-cert-snakeoil.pem
-ssl_key = </etc/ssl/private/ssl-cert-snakeoil.key
+ssl = required
+ssl_cert = </etc/dovecot/ssl/dovecot.crt
+ssl_key = </etc/dovecot/ssl/dovecot.key
 
 mail_location = maildir:/var/mail/vhosts/%d/%n
 

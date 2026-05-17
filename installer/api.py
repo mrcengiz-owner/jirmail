@@ -25,6 +25,7 @@ from pydantic import Field
 from .models import InstallationRun, InstallationStep
 from .orchestrator import _resolve_profile_and_client, run_installation
 from .mail_connectivity import auto_setup_mail_services
+from .single_server import bootstrap_single_server, discover_stack_paths
 from .mail_stack import collect_installer_mail_stack_status, provision_mail_stack_docker
 from .port_check import scan_mail_stack_ports
 from .profiles import (
@@ -136,7 +137,38 @@ def installer_bootstrap(request: HttpRequest):
         }
     except Exception as exc:
         out['deploy_readiness'] = {'status': 'warning', 'message': str(exc)}
+    out['stack_paths'] = discover_stack_paths()
+    out['single_server'] = True
     return out
+
+
+class BootstrapStackSchema(Schema):
+    domain: str = ''
+    mail_hostname: str = ''
+    install_profile: str = 'docker_stack'
+    postgres_password: str = ''
+    postgres_db: str = 'jir_mail_prod'
+    postgres_user: str = 'postgres'
+    stack_service_policy: str = 'smart'
+    stack_skip_busy_host_ports: bool = True
+
+
+@router.post('/bootstrap-stack', summary='Tek sunucu — stack + mail TLS (sihirbaz başlangıcı)')
+@csrf_exempt
+def bootstrap_stack(request: HttpRequest, data: BootstrapStackSchema):
+    """Sayfa açılışında: dizinleri bul, Docker konteynerlerini oluştur, TLS doğrula."""
+    dom = (data.domain or '').strip()
+    cfg = {
+        'domain': dom,
+        'mail_hostname': (data.mail_hostname or '').strip() or (f'mail.{dom}' if dom else ''),
+        'install_profile': data.install_profile,
+        'postgres_password': data.postgres_password,
+        'postgres_db': data.postgres_db,
+        'postgres_user': data.postgres_user,
+        'stack_service_policy': data.stack_service_policy,
+        'stack_skip_busy_host_ports': bool(data.stack_skip_busy_host_ports),
+    }
+    return bootstrap_single_server(cfg)
 
 
 @router.post('/test-db', summary='PostgreSQL bağlantı testi')
@@ -180,6 +212,9 @@ class MailStackProvisionSchema(Schema):
     mail_hostname: str = ''
     docker_network: str = ''
     skip_busy_ports: bool = True
+    postgres_password: str = ''
+    postgres_db: str = 'jir_mail_prod'
+    postgres_user: str = 'postgres'
 
 
 @router.post('/mail-stack-provision', summary='Postfix+Dovecot kur (Docker)')
@@ -191,17 +226,24 @@ def mail_stack_provision(request: HttpRequest, data: MailStackProvisionSchema):
         'domain': dom,
         'mail_hostname': mh,
         'stack_skip_busy_host_ports': bool(data.skip_busy_ports),
+        'postgres_password': data.postgres_password,
+        'postgres_db': data.postgres_db,
+        'postgres_user': data.postgres_user,
     }
     if (data.docker_network or '').strip():
         os.environ['MAIL_STACK_DOCKER_NETWORK'] = data.docker_network.strip()
-    return auto_setup_mail_services(cfg, skip_busy_ports=bool(data.skip_busy_ports))
+    return bootstrap_single_server(cfg)
 
 
 class MailAutoSetupSchema(Schema):
     domain: str = ''
     mail_hostname: str = ''
-    install_profile: str = 'platform_env'
+    install_profile: str = 'docker_stack'
     skip_busy_ports: bool = True
+    postgres_password: str = ''
+    postgres_db: str = 'jir_mail_prod'
+    postgres_user: str = 'postgres'
+    stack_service_policy: str = 'smart'
 
 
 @router.post('/mail-auto-setup', summary='Mail stack + panel ağı (sihirbaz, otomatik)')
@@ -215,8 +257,12 @@ def mail_auto_setup(request: HttpRequest, data: MailAutoSetupSchema):
         'mail_hostname': mh,
         'install_profile': data.install_profile,
         'stack_skip_busy_host_ports': bool(data.skip_busy_ports),
+        'postgres_password': data.postgres_password,
+        'postgres_db': data.postgres_db,
+        'postgres_user': data.postgres_user,
+        'stack_service_policy': data.stack_service_policy,
     }
-    return auto_setup_mail_services(cfg, skip_busy_ports=bool(data.skip_busy_ports))
+    return bootstrap_single_server(cfg)
 
 
 @router.post('/start', summary='Kurulumu başlat')

@@ -200,8 +200,8 @@ def _resolve_mail_endpoint_in_docker(
 
     fallback = merged_container_name(sk) or f'jir_{sk}'
     logger.warning(
-        'Mail %s: hiçbir aday çözülmedi/TCP yok; fallback %r — Coolify ortamına '
-        'SMTP_HOST/IMAP_HOST veya JIR_CONTAINER_* ekleyin.',
+        'Mail %s: hiçbir aday çözülmedi/TCP yok; fallback %r — kurulum sihirbazı mail adımı '
+        'veya SMTP_HOST/IMAP_HOST / JIR_CONTAINER_*.',
         sk,
         fallback,
     )

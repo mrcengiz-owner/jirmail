@@ -10,7 +10,10 @@ from dataclasses import dataclass, field
 from typing import Any
 
 
+from installer.mail_pki import JIR_MAIL_TLS_VOLUME, MAIL_TLS_MOUNT, postfix_tls_environment
+
 JIR_NETWORK = 'jir_network'
+JIR_DOVECOT_IMAGE = 'jir-mail-dovecot:latest'
 
 
 @dataclass
@@ -86,15 +89,19 @@ def build_specs(config: dict) -> list[ServiceSpec]:
         },
     ))
 
+    pf_env = {
+        'ALLOWED_SENDER_DOMAINS': domain,
+        'HOSTNAME': mail_hostname,
+        'POSTFIX_mynetworks': '127.0.0.0/8,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16',
+    }
+    pf_env.update(postfix_tls_environment())
+
     specs.append(ServiceSpec(
         key='postfix',
         name='jir_postfix',
         image='boky/postfix:latest',
         hostname=mail_hostname,
-        environment={
-            'ALLOWED_SENDER_DOMAINS': domain,
-            'HOSTNAME': mail_hostname,
-        },
+        environment=pf_env,
         ports={
             '25/tcp': 25,
             '587/tcp': 587,
@@ -102,7 +109,7 @@ def build_specs(config: dict) -> list[ServiceSpec]:
         volumes={
             'jir_postfix_data': {'bind': '/etc/postfix', 'mode': 'rw'},
             'jir_mail_data': {'bind': '/var/mail', 'mode': 'rw'},
-            'jir_letsencrypt': {'bind': '/etc/letsencrypt', 'mode': 'ro'},
+            JIR_MAIL_TLS_VOLUME: {'bind': MAIL_TLS_MOUNT, 'mode': 'ro'},
         },
         depends_on=['postgres'],
     ))
@@ -110,22 +117,22 @@ def build_specs(config: dict) -> list[ServiceSpec]:
     specs.append(ServiceSpec(
         key='dovecot',
         name='jir_dovecot',
-        image='dovecot/dovecot:latest',
+        image=JIR_DOVECOT_IMAGE,
         environment={
             'DB_HOST': 'jir_postgres',
             'DB_PORT': '5432',
             'DB_NAME': pg_db,
             'DB_USER': pg_user,
             'DB_PASS': pg_password,
+            'MAIL_DOMAIN': domain,
         },
         ports={
             '993/tcp': 993,
-            '143/tcp': 143,
         },
         volumes={
             'jir_dovecot_data': {'bind': '/etc/dovecot', 'mode': 'rw'},
             'jir_mail_data': {'bind': '/var/mail', 'mode': 'rw'},
-            'jir_letsencrypt': {'bind': '/etc/letsencrypt', 'mode': 'ro'},
+            JIR_MAIL_TLS_VOLUME: {'bind': MAIL_TLS_MOUNT, 'mode': 'ro'},
         },
         depends_on=['postgres'],
     ))
