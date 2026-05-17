@@ -125,31 +125,50 @@ def _verify_mail_endpoints(
     smtp_port: int,
     imap_host: str,
     imap_port: int,
-) -> tuple[bool, bool, str, int, str, int]:
+) -> tuple[bool, bool, str, int, str, int, list[str]]:
     """TCP + zorunlu TLS (STARTTLS / IMAPS) doğrulaması."""
     smtp_ok = False
     imap_ok = False
+    imap_tcp = False
+    hints: list[str] = []
     deadline = time.monotonic() + MAIL_TCP_WAIT_SEC
     while time.monotonic() < deadline:
         if not smtp_ok and tcp_reachable(smtp_host, smtp_port, timeout=2.5):
             smtp_ok = verify_smtp_starttls(smtp_host, smtp_port)
-        if not imap_ok and tcp_reachable(imap_host, imap_port, timeout=2.5):
-            imap_ok = verify_imap_tls(imap_host, imap_port)
+        if not imap_ok:
+            imap_tcp = tcp_reachable(imap_host, imap_port, timeout=2.5)
+            if imap_tcp:
+                imap_ok = verify_imap_tls(imap_host, imap_port, log_failure=True)
         if smtp_ok and imap_ok:
             break
         time.sleep(MAIL_TCP_POLL_SEC)
 
     if smtp_ok and imap_ok:
-        return smtp_ok, imap_ok, smtp_host, smtp_port, imap_host, imap_port
+        return smtp_ok, imap_ok, smtp_host, smtp_port, imap_host, imap_port, hints
 
     rh, rp = resolve_mail_endpoint('postfix', smtp_port, auth_submission=True)
     ih, ip = resolve_mail_endpoint('dovecot', imap_port)
     if not smtp_ok and verify_smtp_starttls(rh, rp):
         smtp_ok, smtp_host, smtp_port = True, rh, rp
-    if not imap_ok and verify_imap_tls(ih, ip):
-        imap_ok, imap_host, imap_port = True, ih, ip
+    if not imap_ok:
+        imap_tcp = tcp_reachable(ih, ip, timeout=2.5)
+        if imap_tcp and verify_imap_tls(ih, ip, log_failure=True):
+            imap_ok, imap_host, imap_port = True, ih, ip
 
-    return smtp_ok, imap_ok, smtp_host, smtp_port, imap_host, imap_port
+    if not imap_ok:
+        if not imap_tcp:
+            hints.append(
+                f'IMAP TCP kapalı ({imap_host}:{imap_port}): jir_dovecot çalışıyor mu, '
+                '993 dinliyor mu? → docker ps -a | grep dovecot; '
+                'docker exec jir_dovecot doveconf -n; docker exec jir_dovecot ss -lntp'
+            )
+        else:
+            hints.append(
+                f'IMAP TCP açık ama TLS/CA doğrulaması başarısız ({imap_host}:{imap_port}). '
+                'jir_mail_tls volume ve panel MAIL_TLS_CA_FILE kontrol edin.'
+            )
+
+    return smtp_ok, imap_ok, smtp_host, smtp_port, imap_host, imap_port, hints
 
 
 def auto_setup_mail_services(
@@ -293,9 +312,10 @@ def auto_setup_mail_services(
     imap_port = int(os.getenv('IMAP_PORT', '993'))
 
     messages.append('Mail servisleri hazır olana kadar bekleniyor…')
-    smtp_ok, imap_ok, smtp_host, smtp_port, imap_host, imap_port = _verify_mail_endpoints(
+    smtp_ok, imap_ok, smtp_host, smtp_port, imap_host, imap_port, verify_hints = _verify_mail_endpoints(
         smtp_host, smtp_port, imap_host, imap_port,
     )
+    messages.extend(verify_hints)
 
     mail_endpoints = {
         'smtp_host': smtp_host,

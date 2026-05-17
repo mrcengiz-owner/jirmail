@@ -502,9 +502,19 @@ def collect_installer_mail_stack_status(
 
     hints: list[str] = []
     if postfix_running and dovecot_running and not mail_ready:
+        imap_tcp = tcp_reachable(imap_host, imap_port, timeout=2.5)
+        if not imap_tcp:
+            hints.append(
+                f'jir_dovecot çalışıyor görünüyor ama {imap_host}:{imap_port} dinlemiyor — '
+                'Dovecot şablonunda IMAPS 993 tanımlı olmalı; imajı yeniden derleyin.'
+            )
+        elif not imap_ok:
+            hints.append(
+                'IMAP portu açık ancak TLS/CA doğrulaması başarısız — mail PKI (jir_mail_tls) ve kurulum adımını tekrarlayın.'
+            )
         hints.append(
-            'Konteynerler çalışıyor ancak TLS doğrulaması başarısız — “Tekrar dene” ile bootstrap-stack '
-            'çalıştırın; panel jir_network ağına bağlı olmalı.'
+            'Konteynerler çalışıyor ancak mail TLS doğrulaması tam değil — bootstrap-stack veya '
+            'scripts/rebuild-dovecot-on-host.sh; panel jir_network ağında olmalı.'
         )
     if prof == 'docker_stack' and not mail_ready and not (postfix_running and dovecot_running):
         hints.append(

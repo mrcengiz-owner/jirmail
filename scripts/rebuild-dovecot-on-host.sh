@@ -25,6 +25,9 @@ docker cp "$PANEL:/app/dovecot" "$BUILD_DIR"
 if [ -f "$BUILD_DIR/dovecot.conf.tpl" ]; then
   sed -i '/manage_sieve/d' "$BUILD_DIR/dovecot.conf.tpl"
   sed -i 's/ lmtp submission/ lmtp/g; s/submission //g' "$BUILD_DIR/dovecot.conf.tpl"
+  if ! grep -q 'inet_listener imaps' "$BUILD_DIR/dovecot.conf.tpl" 2>/dev/null; then
+    echo "UYARI: Şablonda IMAPS 993 yok — panel kodunu deploy edin veya güncel dovecot.conf.tpl kopyalayın." >&2
+  fi
 fi
 
 echo "Docker imajı derleniyor…"

@@ -139,7 +139,13 @@ def verify_smtp_starttls(host: str, port: int, *, timeout: float = 5.0) -> bool:
         return False
 
 
-def verify_imap_tls(host: str, port: int, *, timeout: float = 5.0) -> bool:
+def verify_imap_tls(
+    host: str,
+    port: int,
+    *,
+    timeout: float = 5.0,
+    log_failure: bool = False,
+) -> bool:
     from imapclient import IMAPClient
 
     if not imap_ssl_verify_required():
@@ -149,5 +155,9 @@ def verify_imap_tls(host: str, port: int, *, timeout: float = 5.0) -> bool:
         with IMAPClient(host, port=port, ssl=True, ssl_context=ctx, timeout=timeout) as _:
             return True
     except Exception as exc:
-        logger.debug('IMAP TLS verify %s:%s: %s', host, port, exc)
+        msg = f'IMAP TLS verify {host}:{port}: {exc}'
+        if log_failure:
+            logger.warning(msg)
+        else:
+            logger.debug(msg)
         return False
