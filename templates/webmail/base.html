@@ -11,12 +11,13 @@
     <link rel="icon" type="image/svg+xml" href="{% static 'brand/favicon.svg' %}">
     <link rel="stylesheet" href="{% static 'css/main.css' %}">
     <link rel="stylesheet" href="{% static 'css/brand.css' %}">
-    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
     {% block extra_head %}{% endblock %}
 </head>
 <body class="bg-slate-950 text-slate-100 h-dvh overflow-hidden">
     {% block body %}{% endblock %}
     {% include "partials/toast.html" %}
+    <script src="{% static 'js/webmail/core.js' %}"></script>
     {% block extra_scripts %}{% endblock %}
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
 </body>
 </html>

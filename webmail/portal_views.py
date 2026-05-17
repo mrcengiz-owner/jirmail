@@ -33,20 +33,30 @@ def _require_webmail_session(view_func):
 @ensure_csrf_cookie
 @_require_webmail_session
 def inbox(request):
+    from django.template.response import TemplateResponse
     from core.models import MailAccount
 
     account = MailAccount.objects.filter(
         pk=request.session.get('account_id'),
     ).select_related('domain').first()
-    return render(
+
+    ai_on = False
+    if account and account.is_active:
+        try:
+            ai_on = bool(account.ai_available)
+        except Exception:
+            ai_on = False
+
+    ctx = {
+        'email': request.session.get('email', ''),
+        'role': request.session.get('role', ''),
+        'is_admin': request.session.get('role') == 'FULL',
+        'ai_enabled': ai_on,
+    }
+    return TemplateResponse(
         request,
-        'webmail/pages/inbox.html',
-        {
-            'email': request.session.get('email', ''),
-            'role': request.session.get('role', ''),
-            'is_admin': request.session.get('role') == 'FULL',
-            'ai_enabled': bool(account and account.ai_available),
-        },
+        ['webmail/pages/inbox.html', 'webmail/inbox.html'],
+        ctx,
     )
 
 

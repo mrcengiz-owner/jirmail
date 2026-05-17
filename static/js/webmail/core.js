@@ -1,5 +1,25 @@
-/** Webmail — CSRF ve toast (dashboard app.js’e bağımlılık yok) */
+/** Webmail — CSRF, toast store, yardımcılar (dashboard app.js gerekmez) */
 (function() {
+    document.addEventListener('alpine:init', function() {
+        if (typeof Alpine === 'undefined') return;
+        if (!Alpine.store('toast')) {
+            Alpine.store('toast', {
+                notifications: [],
+                add: function(message, type, duration) {
+                    type = type || 'info';
+                    duration = duration || 4000;
+                    var id = Date.now() + Math.random();
+                    this.notifications.push({ id: id, message: message, type: type, visible: true });
+                    var self = this;
+                    setTimeout(function() { self.remove(id); }, duration);
+                },
+                remove: function(id) {
+                    this.notifications = this.notifications.filter(function(n) { return n.id !== id; });
+                }
+            });
+        }
+    });
+
     function getCookie(name) {
         var m = document.cookie.match(new RegExp('(?:^|;\\s*)' + name + '=([^;]+)'));
         return m ? decodeURIComponent(m[1]) : '';
@@ -11,29 +31,16 @@
         return getCookie('csrftoken');
     };
 
-    if (!window.showToast) {
-        window.showToast = function(msg, type) {
-            type = type || 'info';
-            try {
-                var box = document.getElementById('toast-container');
-                if (!box) {
-                    box = document.createElement('div');
-                    box.id = 'toast-container';
-                    box.className = 'fixed bottom-4 right-4 z-[9999] space-y-2';
-                    document.body.appendChild(box);
-                }
-                var t = document.createElement('div');
-                t.className = 'px-4 py-2 rounded-lg text-sm shadow-lg bg-slate-800 text-white border border-slate-700';
-                if (type === 'error') t.classList.add('border-red-500/50');
-                if (type === 'success') t.classList.add('border-emerald-500/50');
-                t.textContent = msg;
-                box.appendChild(t);
-                setTimeout(function() { t.remove(); }, 4000);
-            } catch (e) {
-                console.log('[toast]', type, msg);
+    window.showToast = function(msg, type) {
+        type = type || 'info';
+        try {
+            if (typeof Alpine !== 'undefined' && Alpine.store('toast')) {
+                Alpine.store('toast').add(msg, type);
+                return;
             }
-        };
-    }
+        } catch (e) { /* fallback */ }
+        console.log('[toast]', type, msg);
+    };
 
     window.WmApi = {
         fetch: function(url, opts) {
