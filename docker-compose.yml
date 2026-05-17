@@ -35,7 +35,9 @@ services:
       - jir_mail_tls:/etc/jir-mail/tls
     expose:
       - "8000"
-    # Traefik: Dokploy UI → Domains → django:8000 (compose labels ile Host() çakışmasın)
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=dokploy-network
     depends_on:
       postgres:
         condition: service_healthy
@@ -46,8 +48,11 @@ services:
       dovecot:
         condition: service_started
     networks:
-      - jir_network
-      - dokploy-network
+      jir_network: {}
+      dokploy-network:
+        aliases:
+          - django
+          - jir_django
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health')"]
       interval: 30s
