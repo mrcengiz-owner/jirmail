@@ -24,6 +24,26 @@ MAIL_TCP_WAIT_SEC = float(os.getenv('MAIL_TCP_WAIT_SEC', '90'))
 MAIL_TCP_POLL_SEC = float(os.getenv('MAIL_TCP_POLL_SEC', '2'))
 
 
+def _ensure_runtime_mail_ca(ca_pem: str | bytes | None) -> None:
+    """Doğrulama öncesi dahili CA'yı panel sürecinde /tmp'ye yaz."""
+    if not ca_pem:
+        return
+    try:
+        import tempfile
+        from pathlib import Path
+
+        from installer.mail_pki import write_ca_to_path
+
+        raw = ca_pem.encode('utf-8') if isinstance(ca_pem, str) else ca_pem
+        if b'BEGIN CERTIFICATE' not in raw:
+            return
+        dest = Path(tempfile.gettempdir()) / 'jir-mail-internal-ca.crt'
+        write_ca_to_path(raw, dest)
+        os.environ['MAIL_TLS_CA_FILE'] = str(dest)
+    except Exception as exc:
+        logger.debug('runtime mail CA: %s', exc)
+
+
 def _panel_container_name() -> str:
     return (os.getenv('COOLIFY_CONTAINER_NAME') or os.getenv('HOSTNAME') or '').strip()
 
@@ -316,6 +336,8 @@ def auto_setup_mail_services(
 
     smtp_port = int(os.getenv('SMTP_PORT', '587'))
     imap_port = int(os.getenv('IMAP_PORT', '993'))
+
+    _ensure_runtime_mail_ca(pki_ca_pem)
 
     messages.append('Mail servisleri hazır olana kadar bekleniyor…')
     smtp_ok, imap_ok, smtp_host, smtp_port, imap_host, imap_port, verify_hints = _verify_mail_endpoints(

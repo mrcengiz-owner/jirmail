@@ -8,7 +8,8 @@ protocols = imap pop3 lmtp
 log_path = /dev/stderr
 info_log_path = /dev/stderr
 
-ssl = required
+# IMAPS 993 zaten ssl=yes; global required düz 143 ile çakışabiliyor
+ssl = yes
 ssl_cert = </etc/dovecot/ssl/dovecot.crt
 ssl_key = </etc/dovecot/ssl/dovecot.key
 

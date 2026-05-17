@@ -146,14 +146,25 @@ def verify_imap_tls(
     timeout: float = 5.0,
     log_failure: bool = False,
 ) -> bool:
-    from imapclient import IMAPClient
+    """IMAPS: TLS el sıkışması + Dovecot * OK satırı (IMAPClient bazen Broken pipe verir)."""
+    import socket
 
     if not imap_ssl_verify_required():
         return True
     try:
         ctx = imap_tls_context()
-        with IMAPClient(host, port=port, ssl=True, ssl_context=ctx, timeout=timeout) as _:
-            return True
+        with socket.create_connection((host, port), timeout=timeout) as raw:
+            with ctx.wrap_socket(raw, server_hostname=host) as tls:
+                tls.settimeout(timeout)
+                buf = b''
+                while len(buf) < 4096 and b'\n' not in buf:
+                    chunk = tls.recv(512)
+                    if not chunk:
+                        break
+                    buf += chunk
+                if not buf.startswith(b'* OK'):
+                    raise ssl.SSLError(f'IMAP greeting beklenmiyor: {buf[:120]!r}')
+        return True
     except Exception as exc:
         msg = f'IMAP TLS verify {host}:{port}: {exc}'
         if log_failure:
