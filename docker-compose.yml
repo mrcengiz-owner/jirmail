@@ -21,6 +21,8 @@ services:
       CELERY_RESULT_BACKEND: redis://redis:6379/0
       MAIL_DOMAIN: ${MAIL_DOMAIN:-jircode.com}
       MAIL_HOSTNAME: ${MAIL_HOSTNAME:-mail.jircode.com}
+      # Dokploy / Traefik Host() kuralı — panel domain (genelde mail. veya panel.)
+      PANEL_FQDN: ${PANEL_FQDN:-mail.jircode.com}
       SMTP_HOST: postfix
       SMTP_PORT: "587"
       IMAP_HOST: dovecot
@@ -35,15 +37,17 @@ services:
       - jir_mail_tls:/etc/jir-mail/tls
     expose:
       - "8000"
-    
-    # 🚨 TRAEFIK / DOKPLOY YÖNLENDİRME ETİKETLERİ (404'Ü ÇÖZEN KISIM):
     labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.jirmail-django.rule=Host(`${MAIL_HOSTNAME:-mail.jircode.com}`)"
-      - "traefik.http.routers.jirmail-django.entrypoints=websecure"
-      - "traefik.http.routers.jirmail-django.tls=true"
-      - "traefik.http.services.jirmail-django.loadbalancer.server.port=8000"
-    
+      - traefik.enable=true
+      - traefik.docker.network=dokploy-network
+      - traefik.http.routers.jirmail-web.rule=Host(`${PANEL_FQDN}`)
+      - traefik.http.routers.jirmail-web.entrypoints=web
+      - traefik.http.routers.jirmail-web.service=jirmail-svc
+      - traefik.http.routers.jirmail-secure.rule=Host(`${PANEL_FQDN}`)
+      - traefik.http.routers.jirmail-secure.entrypoints=websecure
+      - traefik.http.routers.jirmail-secure.tls=true
+      - traefik.http.routers.jirmail-secure.service=jirmail-svc
+      - traefik.http.services.jirmail-svc.loadbalancer.server.port=8000
     depends_on:
       postgres:
         condition: service_healthy
@@ -55,7 +59,7 @@ services:
         condition: service_started
     networks:
       - jir_network
-      - dokploy-network # 🚨 Dokploy proxy ağına bağlantı
+      - dokploy-network
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health')"]
       interval: 30s
@@ -196,6 +200,6 @@ volumes:
 networks:
   jir_network:
     driver: bridge
-  # 🚨 Dokploy'un halihazırda sunucuda koşturduğu proxy network'ünü dışarıdan bağlıyoruz:
   dokploy-network:
     external: true
+    name: dokploy-network
