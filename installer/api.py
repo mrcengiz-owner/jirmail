@@ -25,7 +25,8 @@ from pydantic import Field
 from .models import InstallationRun, InstallationStep
 from .orchestrator import _resolve_profile_and_client, run_installation
 from .mail_connectivity import auto_setup_mail_services
-from .single_server import bootstrap_single_server, discover_stack_paths
+from .bootstrap_jobs import bootstrap_state_snapshot, start_bootstrap_async
+from .single_server import discover_stack_paths
 from .mail_stack import collect_installer_mail_stack_status, provision_mail_stack_docker
 from .port_check import scan_mail_stack_ports
 from .profiles import (
@@ -168,7 +169,15 @@ def bootstrap_stack(request: HttpRequest, data: BootstrapStackSchema):
         'stack_service_policy': data.stack_service_policy,
         'stack_skip_busy_host_ports': bool(data.stack_skip_busy_host_ports),
     }
-    return bootstrap_single_server(cfg)
+    return start_bootstrap_async(cfg)
+
+
+@router.get('/bootstrap-stack/status', summary='Bootstrap iş durumu')
+def bootstrap_stack_status(request: HttpRequest):
+    snap = bootstrap_state_snapshot()
+    if snap.get('status') == 'done' and snap.get('result'):
+        return snap['result']
+    return snap
 
 
 @router.post('/test-db', summary='PostgreSQL bağlantı testi')
@@ -262,7 +271,7 @@ def mail_auto_setup(request: HttpRequest, data: MailAutoSetupSchema):
         'postgres_user': data.postgres_user,
         'stack_service_policy': data.stack_service_policy,
     }
-    return bootstrap_single_server(cfg)
+    return start_bootstrap_async(cfg)
 
 
 @router.post('/start', summary='Kurulumu başlat')

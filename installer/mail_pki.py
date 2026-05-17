@@ -133,11 +133,21 @@ def _ensure_volume(client, name: str) -> None:
         client.volumes.create(name=name)
 
 
+def _dispose_container(container) -> None:
+    """stop() Gunicorn zaman aşımına yol açabiliyor; doğrudan force remove."""
+    if not container:
+        return
+    try:
+        container.remove(force=True)
+    except Exception as exc:
+        logger.debug('PKI yardımcı konteyner kaldırılamadı: %s', exc)
+
+
 def _with_tls_volume_container(client, volume_name: str, *, read_only: bool = True):
     """Volume mount edilmiş kısa ömürlü alpine konteyner."""
     container = client.containers.create(
         'alpine:3.19',
-        ['sleep', '120'],
+        ['sleep', '300'],
         volumes={volume_name: {'bind': MAIL_TLS_MOUNT, 'mode': 'ro' if read_only else 'rw'}},
     )
     container.start()
@@ -167,15 +177,7 @@ def _volume_has_complete_pki(client, volume_name: str) -> bool:
     except Exception:
         return False
     finally:
-        if container:
-            try:
-                container.stop(timeout=5)
-            except Exception:
-                pass
-            try:
-                container.remove(force=True)
-            except Exception:
-                pass
+        _dispose_container(container)
 
 
 def _write_volume_files(client, volume_name: str, files: dict[str, bytes]) -> None:
@@ -189,15 +191,11 @@ def _write_volume_files(client, volume_name: str, files: dict[str, bytes]) -> No
             if exit_code != 0:
                 raise RuntimeError(f'PKI dosyası yazılamadı: {MAIL_TLS_MOUNT}/{name}')
     finally:
-        if container:
-            try:
-                container.stop(timeout=5)
-            except Exception:
-                pass
-            try:
-                container.remove(force=True)
-            except Exception:
-                pass
+        _dispose_container(container)
+
+
+def volume_has_mail_pki(client: Any, volume_name: str = JIR_MAIL_TLS_VOLUME) -> bool:
+    return _volume_has_complete_pki(client, volume_name)
 
 
 def ensure_mail_pki_volume(
@@ -208,10 +206,14 @@ def ensure_mail_pki_volume(
     postfix_container: str,
     dovecot_container: str,
     force: bool = False,
+    load_if_exists: bool = True,
 ) -> MailPkiMaterial:
     """Docker volume jir_mail_tls içinde CA + sunucu sertifikası."""
     _ensure_volume(client, JIR_MAIL_TLS_VOLUME)
     if not force and _volume_has_complete_pki(client, JIR_MAIL_TLS_VOLUME):
+        if not load_if_exists:
+            logger.info('PKI volume mevcut; PEM okuma atlandı (mount üzerinden kullanılır).')
+            return MailPkiMaterial(ca_cert_pem=b'', server_cert_pem=b'', server_key_pem=b'')
         try:
             return load_mail_pki_from_volume(client)
         except Exception as exc:
@@ -242,15 +244,7 @@ def load_mail_pki_from_volume(client: Any) -> MailPkiMaterial:
             server_key_pem=_exec_cat(container, SERVER_KEY_FILENAME),
         )
     finally:
-        if container:
-            try:
-                container.stop(timeout=5)
-            except Exception:
-                pass
-            try:
-                container.remove(force=True)
-            except Exception:
-                pass
+        _dispose_container(container)
 
 
 def mail_tls_volume_mount(*, read_only: bool = True) -> dict[str, dict[str, str]]:

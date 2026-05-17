@@ -131,8 +131,12 @@ def bootstrap_single_server(
                     'messages': messages,
                 }
 
+        mail_cfg = {
+            **config,
+            'stack_already_provisioned': profile == PROFILE_DOCKER_STACK,
+        }
         mail_result = auto_setup_mail_services(
-            config,
+            mail_cfg,
             docker_client=client,
             skip_busy_ports=bool(config.get('stack_skip_busy_host_ports', True)),
         )

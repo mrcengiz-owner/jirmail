@@ -327,6 +327,7 @@ def provision_mail_stack_docker(
     mail_domain_override: str | None = None,
     mail_hostname_override: str | None = None,
     docker_network_override: str | None = None,
+    skip_pki_setup: bool = False,
 ) -> dict[str, Any]:
     """Docker SDK ile Postfix+Dovecot başlat. Soket yoksa success=False + compose metni döner."""
     from installer.orchestrator import _get_docker_client_optional
@@ -360,14 +361,19 @@ def provision_mail_stack_docker(
     try:
         messages.append(f"Ağ: {p.docker_network}")
         _ensure_network_simple(client, p.docker_network)
-        messages.append('Dahili mail PKI (TLS) hazırlanıyor…')
-        pki = ensure_mail_pki_volume(
-            client,
-            mail_hostname=p.mail_hostname,
-            mail_domain=p.mail_domain,
-            postfix_container=p.postfix_container,
-            dovecot_container=p.dovecot_container,
-        )
+        pki = None
+        if skip_pki_setup:
+            messages.append('PKI zaten hazır (atlandı).')
+        else:
+            messages.append('Dahili mail PKI (TLS) hazırlanıyor…')
+            pki = ensure_mail_pki_volume(
+                client,
+                mail_hostname=p.mail_hostname,
+                mail_domain=p.mail_domain,
+                postfix_container=p.postfix_container,
+                dovecot_container=p.dovecot_container,
+                load_if_exists=False,
+            )
         specs = build_mail_only_specs(p)
         _ensure_volumes_simple(client, specs)
 
@@ -399,7 +405,7 @@ def provision_mail_stack_docker(
             'compose_yaml': yaml_text,
             'params': mail_stack_params_summary(p),
             'messages': messages,
-            'tls_ca_pem': pki.ca_cert_pem.decode('utf-8'),
+            'tls_ca_pem': (pki.ca_cert_pem.decode('utf-8') if pki and pki.ca_cert_pem else None),
         }
     except Exception as exc:
         logger.exception('provision_mail_stack_docker')

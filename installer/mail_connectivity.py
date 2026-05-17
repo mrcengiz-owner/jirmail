@@ -217,17 +217,23 @@ def auto_setup_mail_services(
             }
 
     need_provision = _needs_mail_provision(client, smtp_host, imap_host)
+    if config.get('stack_already_provisioned') and _mail_containers_running(client):
+        need_provision = False
+        messages.append('Mail konteynerleri docker_stack bootstrap ile zaten kuruldu.')
     if need_provision:
         if dovecot_container_needs_rebuild(client, imap_host):
             messages.append('Dovecot özel imajına yükseltiliyor (PostgreSQL passdb)…')
         else:
             messages.append('Postfix/Dovecot kuruluyor…')
+        from installer.mail_pki import volume_has_mail_pki
+
         prov = provision_mail_stack_docker(
             skip_busy_ports=skip_busy_ports,
             pull_images=True,
             mail_domain_override=domain or None,
             mail_hostname_override=mail_hostname or None,
             docker_network_override=network,
+            skip_pki_setup=bool(pki_ca_pem) or volume_has_mail_pki(client),
         )
         messages.extend(prov.get('messages') or [])
         if not pki_ca_pem and prov.get('tls_ca_pem'):
