@@ -1,8 +1,7 @@
-{% load static %}
 <aside class="wm-sidebar"
        :class="{ 'is-open': sidebarOpen }">
   <div class="wm-sidebar__brand">
-    <img src="{% static 'brand/logo-icon.svg' %}" alt="Jîr-Mail" class="wm-sidebar__logo">
+    <img src="{% url 'webmail:asset' asset_path='brand/logo-icon.svg' %}" alt="Jîr-Mail" class="wm-sidebar__logo">
     <span class="wm-sidebar__title">Jîr<span>Mail</span></span>
   </div>
 
@@ -48,9 +47,9 @@
     </div>
     <div class="wm-sidebar-actions">
       <button type="button" class="wm-btn-ghost" x-show="aiEnabled" @click="openAi()">AI</button>
-      <form method="post" action="{% url 'webmail:logout' %}" class="flex-1">
+      <form method="post" action="{% url 'webmail:logout' %}" class="wm-flex-1">
         {% csrf_token %}
-        <button type="submit" class="wm-btn-ghost wm-btn-ghost--danger w-full">Çıkış</button>
+        <button type="submit" class="wm-btn-ghost wm-btn-ghost--danger wm-w-full">Çıkış</button>
       </form>
     </div>
   </div>

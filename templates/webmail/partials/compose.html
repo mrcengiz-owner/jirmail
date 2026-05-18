@@ -33,7 +33,7 @@
     <span>Planla</span>
     <input type="datetime-local" x-model="scheduleAt">
   </label>
-  <span class="flex-1"></span>
+  <span class="wm-flex-1"></span>
   <button type="button" class="wm-btn wm-btn-secondary" @click="closeCompose()">İptal</button>
   <button type="button" class="wm-btn wm-btn-primary" @click="sendMail()" :disabled="sendingMail">
     <span x-text="sendingMail ? 'Gönderiliyor…' : (scheduleAt ? 'Planla' : 'Gönder')"></span>

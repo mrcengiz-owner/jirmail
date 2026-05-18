@@ -13,6 +13,12 @@ COPY . .
 
 RUN mkdir -p /app/staticfiles && chmod -R 755 /app/static /app/staticfiles
 
+# Statik dosyalar image içinde hazır (entrypoint collectstatic ile güncellenir)
+ENV SECRET_KEY=build-collectstatic-only
+ENV DEBUG=False
+RUN python manage.py collectstatic --noinput 2>/dev/null || true \
+    && test -f /app/staticfiles/css/webmail.css || test -f /app/static/css/webmail.css
+
 RUN chmod +x manage.py
 RUN chmod +x docker-entrypoint.sh
 

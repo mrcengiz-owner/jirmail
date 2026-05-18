@@ -40,6 +40,13 @@ fi
 echo "=== Collecting static files ==="
 mkdir -p /app/staticfiles
 python manage.py collectstatic --noinput --clear
+for rel in css/webmail.css js/webmail/core.js js/webmail/mail-app.js; do
+    if [ -f "/app/staticfiles/$rel" ] || [ -f "/app/static/$rel" ]; then
+        echo "  [ok] static $rel"
+    else
+        echo "  [WARN] Eksik: $rel — webmail /webmail/assets/ kaynaktan sunulur"
+    fi
+done
 
 echo "=== Deploy readiness (Coolify / PaaS) ==="
 python manage.py check_deploy || true

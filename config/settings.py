@@ -339,6 +339,10 @@ if not DEBUG:
 else:
     STATICFILES_STORAGE = 'django.contrib.staticfiles.storage.StaticFilesStorage'
 
+WHITENOISE_USE_FINDERS = DEBUG
+WHITENOISE_AUTOREFRESH = DEBUG
+WHITENOISE_MAX_AGE = 31536000 if not DEBUG else 0
+
 if not os.path.exists(STATIC_ROOT):
     os.makedirs(STATIC_ROOT, exist_ok=True)
 

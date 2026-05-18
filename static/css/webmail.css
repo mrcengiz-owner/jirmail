@@ -1076,4 +1076,12 @@
   min-height: 0;
 }
 
-.w-full { width: 100%; }
+.wm-flex-1 { flex: 1 1 0%; min-width: 0; }
+.wm-w-full { width: 100%; }
+.wm-m-0 { margin: 0; }
+.wm-truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wm-text-sm { font-size: 13px; }
+.wm-text-center { text-align: center; }
+.wm-py-8 { padding-top: 2rem; padding-bottom: 2rem; }
+.wm-font-semibold { font-weight: 600; }
+.wm-text-base { font-size: 15px; }

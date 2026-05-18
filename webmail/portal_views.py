@@ -53,11 +53,7 @@ def inbox(request):
         'is_admin': request.session.get('role') == 'FULL',
         'ai_enabled': ai_on,
     }
-    return TemplateResponse(
-        request,
-        ['webmail/pages/inbox.html', 'webmail/inbox.html'],
-        ctx,
-    )
+    return TemplateResponse(request, 'webmail/pages/inbox.html', ctx)
 
 
 @require_http_methods(['GET'])

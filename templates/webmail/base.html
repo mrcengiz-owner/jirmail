@@ -8,17 +8,17 @@
     <meta name="theme-color" content="#16141c">
     <meta name="color-scheme" content="dark">
     <title>{% block title %}Webmail — Jîr-Mail{% endblock %}</title>
-    <link rel="icon" type="image/svg+xml" href="{% static 'brand/favicon.svg' %}">
+    <link rel="icon" type="image/svg+xml" href="{% url 'webmail:asset' asset_path='brand/favicon.svg' %}">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="{% static 'css/webmail.css' %}">
+    <link rel="stylesheet" href="{% url 'webmail:asset' asset_path='css/webmail.css' %}?v=20260518">
     {% block extra_head %}{% endblock %}
 </head>
 <body class="wm-body">
     {% block body %}{% endblock %}
     <div id="wm-toast-root" class="wm-toast-root" aria-live="polite"></div>
-    <script src="{% static 'js/webmail/core.js' %}"></script>
+    <script src="{% url 'webmail:asset' asset_path='js/webmail/core.js' %}?v=20260518"></script>
     {% block extra_scripts %}{% endblock %}
     <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
 </body>
