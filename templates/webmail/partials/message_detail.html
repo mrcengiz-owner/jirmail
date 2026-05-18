@@ -14,18 +14,54 @@
     </button>
     <span class="wm-flex-1"></span>
     <button type="button" class="wm-icon-btn" x-show="aiEnabled" @click="openAi()" title="AI Asistan">
-      <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 00-2.456 2.456z"/></svg>
+      <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z"/></svg>
     </button>
   </div>
+
+  <div class="wm-sender-alert" x-show="selectedMail?.is_spoofed || selectedMail?.is_probable_scam" x-cloak>
+    <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" class="wm-sender-alert__icon"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z"/></svg>
+    <div>
+      <strong x-show="selectedMail?.is_spoofed">Sahte gönderen uyarısı</strong>
+      <strong x-show="!selectedMail?.is_spoofed && selectedMail?.is_probable_scam">Şüpheli içerik</strong>
+      <p x-text="selectedMail?.sender_warning || 'Bu iletiye dikkat edin; ödeme veya şifre taleplerine güvenmeyin.'"></p>
+    </div>
+  </div>
+
   <h1 x-text="selectedMail?.subject || '(konu yok)'"></h1>
+
   <div class="wm-message-from">
     <div class="wm-message-from__avatar"
-         :style="'background:' + avatarColor(selectedMail?.from)"
-         x-text="initials(selectedMail?.from)"></div>
-    <div>
+         :style="'background:' + avatarColor(selectedMail?.from_addr || selectedMail?.from)"
+         x-text="initials(displayFrom(selectedMail))"></div>
+    <div class="wm-message-from__details">
       <div class="wm-message-from__name" x-text="displayFrom(selectedMail)"></div>
-      <div class="wm-message-from__addr" x-text="selectedMail?.from_addr || selectedMail?.from"></div>
+      <dl class="wm-sender-dl">
+        <template x-if="selectedMail?.from_addr">
+          <div class="wm-sender-dl__row">
+            <dt>From</dt>
+            <dd x-text="selectedMail.from_addr"></dd>
+          </div>
+        </template>
+        <template x-if="selectedMail?.sender_return_path && selectedMail.sender_return_path !== selectedMail.from_addr">
+          <div class="wm-sender-dl__row">
+            <dt>Return-Path</dt>
+            <dd x-text="selectedMail.sender_return_path"></dd>
+          </div>
+        </template>
+        <template x-if="selectedMail?.sender_reply_to">
+          <div class="wm-sender-dl__row">
+            <dt>Reply-To</dt>
+            <dd x-text="selectedMail.sender_reply_to"></dd>
+          </div>
+        </template>
+        <template x-if="selectedMail?.sender_real_email && selectedMail.is_spoofed">
+          <div class="wm-sender-dl__row wm-sender-dl__row--highlight">
+            <dt>Gerçek kaynak</dt>
+            <dd x-text="selectedMail.sender_real_email"></dd>
+          </div>
+        </template>
+      </dl>
     </div>
   </div>
 </header>
-<div class="wm-message-body" x-html="selectedMail?.body || '<p class=\'text-muted\'>İçerik yükleniyor…</p>'"></div>
+<div class="wm-message-body" x-html="selectedMail?.body || '<p>İçerik yükleniyor…</p>'"></div>

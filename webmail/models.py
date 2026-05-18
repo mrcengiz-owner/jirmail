@@ -42,6 +42,7 @@ class MailMessageCache(models.Model):
     subject = models.CharField(max_length=998, blank=True, default='')
     from_addr = models.CharField(max_length=500, blank=True, default='')
     from_name = models.CharField(max_length=255, blank=True, default='')
+    sender_meta = models.JSONField(default=dict, blank=True)
     to_addr = models.TextField(blank=True, default='')
     cc_addr = models.TextField(blank=True, default='')
     date = models.DateTimeField(null=True, blank=True, db_index=True)

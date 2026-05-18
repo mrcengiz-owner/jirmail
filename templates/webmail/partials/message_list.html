@@ -18,10 +18,13 @@
           <span class="wm-mail-item__from" x-text="displayFrom(mail)"></span>
           <time class="wm-mail-item__date" x-text="formatDate(mail.date)"></time>
         </div>
+        <p class="wm-mail-item__from-addr wm-truncate" x-show="senderSubline(mail)" x-text="senderSubline(mail)"></p>
         <p class="wm-mail-item__subject" x-text="mail.subject"></p>
         <p class="wm-mail-item__preview" x-text="mail.preview"></p>
         <div class="wm-mail-item__meta">
           <span class="wm-unread-dot" x-show="mail.unread"></span>
+          <span class="wm-tag wm-tag--spoof" x-show="mail.is_spoofed">Sahte gönderen</span>
+          <span class="wm-tag wm-tag--scam" x-show="mail.is_probable_scam">Şüpheli</span>
           <span class="wm-tag wm-tag--attach" x-show="mail.hasAttachments">Ek</span>
           <span class="wm-tag" x-show="mail.starred">★</span>
         </div>

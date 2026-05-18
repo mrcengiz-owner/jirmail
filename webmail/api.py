@@ -24,6 +24,7 @@ from .imap_client import (
     sync_folder_metadata, sync_standard_folders,
 )
 from .models import MailFolder, MailMessageCache, MailOutboundLog
+from .sender import sender_info_from_cache_row
 from .smtp_client import send_mail
 from .sse import webmail_sse_response
 
@@ -80,6 +81,39 @@ def _outbound_as_messages(account, *, limit: int = 50) -> list[dict]:
             'outbound_id': row.id,
         })
     return out
+
+
+def _folder_is_inbound(folder: str) -> bool:
+    key = (folder or 'INBOX').strip().upper()
+    return key in ('INBOX',) or key.endswith('/INBOX')
+
+
+def _message_to_api(m: MailMessageCache, account: MailAccount, folder: str) -> dict:
+    inbound = _folder_is_inbound(folder)
+    sender = sender_info_from_cache_row(m, account.email, is_inbound=inbound)
+    return {
+        'uid': m.uid,
+        'subject': m.subject,
+        'from': sender.get('display') or m.from_addr,
+        'from_name': sender.get('from_name') or m.from_name,
+        'from_addr': sender.get('from_email') or m.from_addr,
+        'to': m.to_addr,
+        'date': m.date.isoformat() if m.date else None,
+        'is_seen': m.is_seen,
+        'is_flagged': m.is_flagged,
+        'is_answered': m.is_answered,
+        'has_attachments': m.has_attachments,
+        'snippet': m.snippet,
+        'size': m.raw_size,
+        'delivery_status': _imap_delivery_status(folder, m),
+        'source': 'imap',
+        'is_spoofed': bool(sender.get('is_spoofed')),
+        'is_probable_scam': bool(sender.get('is_probable_scam')),
+        'sender_warning': sender.get('warning'),
+        'sender_real_email': sender.get('real_email'),
+        'sender_reply_to': sender.get('reply_to'),
+        'sender_return_path': sender.get('return_path'),
+    }
 
 
 def _get_account_and_password(request: HttpRequest):
@@ -167,25 +201,7 @@ def list_messages(request: HttpRequest, folder: str = 'INBOX', page: int = 1, pa
     start = (page - 1) * page_size
     end = start + page_size
 
-    messages = [
-        {
-            'uid': m.uid,
-            'subject': m.subject,
-            'from': m.from_addr,
-            'from_name': m.from_name,
-            'to': m.to_addr,
-            'date': m.date.isoformat() if m.date else None,
-            'is_seen': m.is_seen,
-            'is_flagged': m.is_flagged,
-            'is_answered': m.is_answered,
-            'has_attachments': m.has_attachments,
-            'snippet': m.snippet,
-            'size': m.raw_size,
-            'delivery_status': _imap_delivery_status(folder, m),
-            'source': 'imap',
-        }
-        for m in qs[start:end]
-    ]
+    messages = [_message_to_api(m, account, folder) for m in qs[start:end]]
 
     if account and folder.lower() in ('sent', 'sent messages', 'inbox.sent'):
         outbound = _outbound_as_messages(account, limit=page_size)
@@ -226,6 +242,15 @@ def message_body(request: HttpRequest, uid: int, folder: str = 'INBOX'):
 
     try:
         result = fetch_message_body(account, password, folder, uid)
+        sender = result.get('sender') or {}
+        # Cache güncelle (sonraki liste görünümü için)
+        folder_obj = _find_folder_row(account, folder)
+        if folder_obj and sender:
+            MailMessageCache.objects.filter(folder=folder_obj, uid=uid).update(
+                from_addr=sender.get('from_email', '')[:500],
+                from_name=(sender.get('from_name') or '')[:255],
+                sender_meta=sender,
+            )
         return {'success': True, 'folder': folder, 'uid': uid, **result}
     except Exception as exc:
         return {'success': False, 'message': str(exc)}

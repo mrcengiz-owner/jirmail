@@ -111,8 +111,10 @@ document.addEventListener('alpine:init', function() {
                     var list = (r.data.messages || []).map(function(m) {
                         return {
                             uid: m.uid,
-                            from: m.from_name || m.from,
-                            from_addr: m.from,
+                            from: m.from,
+                            from_name: m.from_name,
+                            from_addr: m.from_addr || m.from,
+                            from_display: m.from,
                             subject: m.subject || '(konu yok)',
                             preview: m.snippet || '',
                             date: m.date,
@@ -121,7 +123,13 @@ document.addEventListener('alpine:init', function() {
                             unread: !m.is_seen,
                             starred: m.is_flagged,
                             hasAttachments: m.has_attachments,
-                            deliveryStatus: m.delivery_status || 'read'
+                            deliveryStatus: m.delivery_status || 'read',
+                            is_spoofed: !!m.is_spoofed,
+                            is_probable_scam: !!m.is_probable_scam,
+                            sender_warning: m.sender_warning || null,
+                            sender_real_email: m.sender_real_email || null,
+                            sender_reply_to: m.sender_reply_to || null,
+                            sender_return_path: m.sender_return_path || null
                         };
                     });
                     if (self.currentFolder === 'starred') {
@@ -162,6 +170,18 @@ document.addEventListener('alpine:init', function() {
                             if (r.data.success) {
                                 mail.body = r.data.html || '<pre>' + (r.data.plain || '') + '</pre>';
                                 mail.bodyLoaded = true;
+                                if (r.data.sender) {
+                                    var s = r.data.sender;
+                                    mail.from_display = s.display || mail.from_display;
+                                    mail.from_name = s.from_name || mail.from_name;
+                                    mail.from_addr = s.from_email || mail.from_addr;
+                                    mail.is_spoofed = !!s.is_spoofed;
+                                    mail.is_probable_scam = !!s.is_probable_scam;
+                                    mail.sender_warning = s.warning || mail.sender_warning;
+                                    mail.sender_real_email = s.real_email || mail.sender_real_email;
+                                    mail.sender_reply_to = s.reply_to || null;
+                                    mail.sender_return_path = s.return_path || null;
+                                }
                             }
                         });
                 }
@@ -384,8 +404,25 @@ document.addEventListener('alpine:init', function() {
 
             displayFrom: function(mail) {
                 if (!mail) return '';
-                var f = mail.from || '';
-                return f.replace(/<[^>]+>/g, '').trim() || mail.from_addr || f;
+                if (mail.from_display) return mail.from_display;
+                var name = mail.from_name || '';
+                var addr = mail.from_addr || mail.from || '';
+                if (name && addr && name.toLowerCase() !== addr.toLowerCase()) {
+                    return name + ' <' + addr + '>';
+                }
+                return addr || name || 'Bilinmeyen';
+            },
+
+            senderSubline: function(mail) {
+                if (!mail) return '';
+                if (mail.is_spoofed && mail.sender_real_email &&
+                    mail.sender_real_email !== mail.from_addr) {
+                    return 'Gerçek kaynak: ' + mail.sender_real_email;
+                }
+                if (mail.from_addr && mail.from_display && mail.from_addr !== mail.from_display) {
+                    return mail.from_addr;
+                }
+                return '';
             },
 
             formatDate: function(iso) {

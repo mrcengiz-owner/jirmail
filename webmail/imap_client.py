@@ -187,7 +187,21 @@ def sync_folder_metadata(account, password: str, folder_name: str = 'INBOX', *, 
             return {'folder': folder_name, 'fetched': 0}
 
         recent_uids = uids[-limit:]
-        fetch_data = client.fetch(recent_uids, ['ENVELOPE', 'FLAGS', 'RFC822.SIZE', 'BODYSTRUCTURE'])
+        fetch_data = client.fetch(
+            recent_uids,
+            [
+                'ENVELOPE',
+                'FLAGS',
+                'RFC822.SIZE',
+                'BODYSTRUCTURE',
+                'BODY.PEEK[HEADER.FIELDS (FROM SENDER REPLY-TO RETURN-PATH SUBJECT)]',
+            ],
+        )
+
+        from .sender import build_sender_info, sender_info_from_imap_headers
+
+        is_inbound = folder_name.upper() == 'INBOX'
+        account_email = account.email
 
         fetched = 0
         unread_count = 0
@@ -199,6 +213,25 @@ def sync_folder_metadata(account, password: str, folder_name: str = 'INBOX', *, 
                 continue
 
             meta = _parse_envelope_to_meta(envelope, size, list(flags))
+            header_raw = data.get(b'BODY[HEADER.FIELDS (FROM SENDER REPLY-TO RETURN-PATH SUBJECT)]')
+            if header_raw:
+                sender = sender_info_from_imap_headers(
+                    header_raw, account_email, is_inbound=is_inbound,
+                )
+            else:
+                sender = build_sender_info(
+                    from_raw=meta.get('from_name', '') + (
+                        f' <{meta["from_addr"]}>' if meta.get('from_addr') else ''
+                    ),
+                    account_email=account_email,
+                    is_inbound=is_inbound,
+                    subject=meta.get('subject', ''),
+                )
+            if sender.get('from_email'):
+                meta['from_addr'] = sender['from_email'][:500]
+                meta['from_name'] = (sender.get('from_name') or '')[:255]
+            meta['sender_meta'] = sender
+
             if not meta['is_seen']:
                 unread_count += 1
 
@@ -275,10 +308,26 @@ def fetch_message_body(account, password: str, folder_name: str, uid: int) -> di
             elif ctype == 'text/plain' and not plain_body:
                 plain_body = content
 
+        from .sender import build_sender_info
+
+        is_inbound = folder_name.upper() == 'INBOX'
+        subject = _decode_header(msg.get('Subject', '') or '')
+        sender = build_sender_info(
+            from_raw=msg.get('From', '') or '',
+            sender_raw=msg.get('Sender', '') or '',
+            reply_to_raw=msg.get('Reply-To', '') or '',
+            return_path_raw=msg.get('Return-Path', '') or '',
+            account_email=account.email,
+            is_inbound=is_inbound,
+            subject=subject,
+            snippet=(plain_body or html_body)[:480],
+        )
+
         return {
             'html': html_body,
             'plain': plain_body,
             'attachments': attachments,
+            'sender': sender,
         }
 
 

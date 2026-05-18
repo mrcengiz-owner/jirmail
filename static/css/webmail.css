@@ -448,6 +448,68 @@
   color: var(--wm-text-muted);
 }
 .wm-tag--attach { color: var(--wm-warning); background: rgba(245, 196, 81, 0.12); }
+.wm-tag--spoof { color: #fca5a5; background: rgba(246, 111, 122, 0.15); }
+.wm-tag--scam { color: #fdba74; background: rgba(251, 146, 60, 0.15); }
+
+.wm-mail-item__from-addr {
+  font-size: 11px;
+  color: var(--wm-danger);
+  margin-top: 1px;
+}
+
+.wm-sender-alert {
+  display: flex;
+  gap: 12px;
+  margin: 0 24px 16px;
+  padding: 12px 14px;
+  border-radius: var(--wm-radius);
+  background: rgba(246, 111, 122, 0.12);
+  border: 1px solid rgba(246, 111, 122, 0.35);
+  color: #fecaca;
+  font-size: 13px;
+  line-height: 1.5;
+}
+.wm-sender-alert__icon {
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+  color: var(--wm-danger);
+}
+.wm-sender-alert strong {
+  display: block;
+  color: #fff;
+  margin-bottom: 4px;
+  font-size: 13px;
+}
+.wm-sender-alert p { margin: 0; }
+
+.wm-message-from__details { flex: 1; min-width: 0; }
+
+.wm-sender-dl {
+  margin: 8px 0 0;
+  font-size: 12px;
+}
+.wm-sender-dl__row {
+  display: grid;
+  grid-template-columns: 88px 1fr;
+  gap: 8px;
+  padding: 4px 0;
+  border-bottom: 1px solid var(--wm-border);
+}
+.wm-sender-dl__row:last-child { border-bottom: none; }
+.wm-sender-dl dt {
+  color: var(--wm-text-muted);
+  font-weight: 500;
+}
+.wm-sender-dl dd {
+  margin: 0;
+  color: var(--wm-text-secondary);
+  word-break: break-all;
+}
+.wm-sender-dl__row--highlight dd {
+  color: var(--wm-warning);
+  font-weight: 600;
+}
 
 .wm-empty, .wm-loading {
   padding: 48px 24px;
