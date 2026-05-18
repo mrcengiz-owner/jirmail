@@ -122,7 +122,10 @@ def _get_account_and_password(request: HttpRequest):
     password = request.session.get('mail_password', '')
     if not account_id or not password:
         return None, ''
-    return MailAccount.objects.filter(id=account_id).first(), password
+    return (
+        MailAccount.objects.select_related('domain').filter(id=account_id).first(),
+        password,
+    )
 
 
 @router.get('/folders', summary='Folder listesi')
@@ -246,11 +249,17 @@ def message_body(request: HttpRequest, uid: int, folder: str = 'INBOX'):
         # Cache güncelle (sonraki liste görünümü için)
         folder_obj = _find_folder_row(account, folder)
         if folder_obj and sender:
-            MailMessageCache.objects.filter(folder=folder_obj, uid=uid).update(
-                from_addr=sender.get('from_email', '')[:500],
-                from_name=(sender.get('from_name') or '')[:255],
-                sender_meta=sender,
-            )
+            try:
+                MailMessageCache.objects.filter(folder=folder_obj, uid=uid).update(
+                    from_addr=sender.get('from_email', '')[:500],
+                    from_name=(sender.get('from_name') or '')[:255],
+                    sender_meta=sender,
+                )
+            except Exception:
+                MailMessageCache.objects.filter(folder=folder_obj, uid=uid).update(
+                    from_addr=sender.get('from_email', '')[:500],
+                    from_name=(sender.get('from_name') or '')[:255],
+                )
         return {'success': True, 'folder': folder, 'uid': uid, **result}
     except Exception as exc:
         return {'success': False, 'message': str(exc)}
@@ -267,80 +276,75 @@ class SendMailSchema(Schema):
 
 @router.post('/send', summary='Mail gönder')
 def send(request: HttpRequest, data: SendMailSchema):
-    account, password = _get_account_and_password(request)
-    if not account:
-        return {'success': False, 'message': 'Oturum yok'}
-
-    if not password:
-        return {
-            'success': False,
-            'message': (
-                'Oturumda mail parolası yok. Çıkış yapıp webmail’e tekrar giriş yapın '
-                '(IMAP/Sent için parola gerekir).'
-            ),
-        }
-
-    to_list = [x.strip() for x in data.to.split(',') if x.strip()]
-    if not to_list:
-        return {'success': False, 'message': 'En az bir alıcı gerekli.'}
-
-    cc_list = [x.strip() for x in data.cc.split(',') if x.strip()] if data.cc else None
-    bcc_list = [x.strip() for x in data.bcc.split(',') if x.strip()] if data.bcc else None
-
-    snippet = (data.body_text or data.body_html or '')[:480]
-    log_row = None
+    import logging
+    log = logging.getLogger(__name__)
     try:
-        log_row = MailOutboundLog.objects.create(
-            account=account,
-            to_addr=', '.join(to_list),
-            subject=data.subject,
-            snippet=snippet,
-            status=MailOutboundLog.STATUS_PENDING,
-        )
-    except Exception as exc:
-        import logging
-        logging.getLogger(__name__).warning('MailOutboundLog kaydı atlandı: %s', exc)
+        account, password = _get_account_and_password(request)
+        if not account:
+            return {'success': False, 'message': 'Oturum yok'}
 
-    try:
+        if not password:
+            return {
+                'success': False,
+                'message': (
+                    'Oturumda mail parolası yok. Çıkış yapıp webmail’e tekrar giriş yapın '
+                    '(IMAP/Sent için parola gerekir).'
+                ),
+            }
+
+        to_list = [x.strip() for x in data.to.split(',') if x.strip()]
+        if not to_list:
+            return {'success': False, 'message': 'En az bir alıcı gerekli.'}
+
+        cc_list = [x.strip() for x in data.cc.split(',') if x.strip()] if data.cc else None
+        bcc_list = [x.strip() for x in data.bcc.split(',') if x.strip()] if data.bcc else None
+
+        snippet = (data.body_text or data.body_html or '')[:480]
+        log_row = None
+        try:
+            log_row = MailOutboundLog.objects.create(
+                account=account,
+                to_addr=', '.join(to_list),
+                subject=data.subject,
+                snippet=snippet,
+                status=MailOutboundLog.STATUS_PENDING,
+            )
+        except Exception as exc:
+            log.warning('MailOutboundLog kaydı atlandı: %s', exc)
+
         result = send_mail(
             account, password,
             to=to_list, subject=data.subject,
             body_text=data.body_text, body_html=data.body_html,
             cc=cc_list, bcc=bcc_list,
         )
+
+        if result.get('success'):
+            if log_row:
+                log_row.status = MailOutboundLog.STATUS_SENT
+                log_row.message_id = (result.get('message_id') or '')[:512]
+                log_row.save(update_fields=['status', 'message_id'])
+                result['outbound_id'] = log_row.id
+            warn = result.get('sent_imap_warning') or ''
+            if warn and 'AUTHENTICATIONFAILED' in warn.upper():
+                result['message'] = (
+                    'Mesaj Postfix tarafından kabul edildi ancak Dovecot IMAP kimlik doğrulaması başarısız. '
+                    'Çıkış yapıp aynı parola ile tekrar giriş yapın.'
+                )
+            elif warn:
+                result['message'] = (
+                    'Mesaj gönderildi. Gönderilen klasörüne kopyalanamadı — klasörü yenileyin.'
+                )
+        else:
+            if log_row:
+                log_row.status = MailOutboundLog.STATUS_FAILED
+                log_row.error_message = (result.get('message') or '')[:2000]
+                log_row.save(update_fields=['status', 'error_message'])
+
+        return result
     except Exception as exc:
-        import logging
-        logging.getLogger(__name__).exception('send_mail')
-        if log_row:
-            log_row.status = MailOutboundLog.STATUS_FAILED
-            log_row.error_message = str(exc)[:2000]
-            log_row.save(update_fields=['status', 'error_message'])
-        return {'success': False, 'message': str(exc)}
-
-    if result.get('success'):
-        if log_row:
-            log_row.status = MailOutboundLog.STATUS_SENT
-            log_row.message_id = (result.get('message_id') or '')[:512]
-            log_row.save(update_fields=['status', 'message_id'])
-            result['outbound_id'] = log_row.id
-        warn = result.get('sent_imap_warning') or ''
-        if warn and 'AUTHENTICATIONFAILED' in warn.upper():
-            result['message'] = (
-                'Mesaj Postfix tarafından kabul edildi ancak Dovecot IMAP kimlik doğrulaması başarısız. '
-                'Çıkış yapıp aynı parola ile tekrar giriş yapın; sorun sürerse Dovecot konteynerini yeniden oluşturun.'
-            )
-        elif result.get('sent_imap_warning'):
-            result['message'] = (
-                'Mesaj Postfix tarafından kabul edildi. '
-                'Gönderilen klasörüne kopyalanamadı — “Gönderilen” klasörünü yenileyin.'
-            )
-    else:
-        if log_row:
-            log_row.status = MailOutboundLog.STATUS_FAILED
-            log_row.error_message = (result.get('message') or '')[:2000]
-            log_row.save(update_fields=['status', 'error_message'])
-
-    return result
+        log.exception('POST /api/mail/send')
+        return {'success': False, 'message': f'Gönderim hatası: {exc}'}
 
 
 class FlagPatchSchema(Schema):
@@ -585,34 +589,40 @@ def schedule_mail(request: HttpRequest, data: ScheduleMailSchema):
 
 @router.post('/send-attachments', summary='Ek dosyalı gönderim')
 def send_with_attachments(request: HttpRequest):
-    account, password = _get_account_and_password(request)
-    if not account:
-        return {'success': False, 'message': 'Oturum yok'}
-    if not password:
-        return {'success': False, 'message': 'Oturumda parola yok — yeniden giriş yapın.'}
+    import logging
+    log = logging.getLogger(__name__)
+    try:
+        account, password = _get_account_and_password(request)
+        if not account:
+            return {'success': False, 'message': 'Oturum yok'}
+        if not password:
+            return {'success': False, 'message': 'Oturumda parola yok — yeniden giriş yapın.'}
 
-    to_raw = request.POST.get('to', '')
-    subject = request.POST.get('subject', '')
-    body_text = request.POST.get('body_text', '')
-    to_list = [x.strip() for x in to_raw.split(',') if x.strip()]
-    if not to_list:
-        return {'success': False, 'message': 'Alıcı gerekli.'}
+        to_raw = request.POST.get('to', '')
+        subject = request.POST.get('subject', '')
+        body_text = request.POST.get('body_text', '')
+        to_list = [x.strip() for x in to_raw.split(',') if x.strip()]
+        if not to_list:
+            return {'success': False, 'message': 'Alıcı gerekli.'}
 
-    attachments = []
-    for f in request.FILES.getlist('attachments'):
-        attachments.append({
-            'filename': f.name,
-            'mime_type': f.content_type or 'application/octet-stream',
-            'content': f.read(),
-        })
+        attachments = []
+        for f in request.FILES.getlist('attachments'):
+            attachments.append({
+                'filename': f.name,
+                'mime_type': f.content_type or 'application/octet-stream',
+                'content': f.read(),
+            })
 
-    return send_mail(
-        account, password,
-        to=to_list,
-        subject=subject,
-        body_text=body_text,
-        attachments=attachments or None,
-    )
+        return send_mail(
+            account, password,
+            to=to_list,
+            subject=subject,
+            body_text=body_text,
+            attachments=attachments or None,
+        )
+    except Exception as exc:
+        log.exception('POST /api/mail/send-attachments')
+        return {'success': False, 'message': f'Gönderim hatası: {exc}'}
 
 
 def mail_stream(request: HttpRequest):

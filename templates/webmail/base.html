@@ -12,13 +12,13 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="{% url 'webmail:asset' asset_path='css/webmail.css' %}?v=20260518b">
+    <link rel="stylesheet" href="{% url 'webmail:asset' asset_path='css/webmail.css' %}?v=20260518c">
     {% block extra_head %}{% endblock %}
 </head>
 <body class="wm-body">
     {% block body %}{% endblock %}
     <div id="wm-toast-root" class="wm-toast-root" aria-live="polite"></div>
-    <script src="{% url 'webmail:asset' asset_path='js/webmail/core.js' %}?v=20260518"></script>
+    <script src="{% url 'webmail:asset' asset_path='js/webmail/core.js' %}?v=20260518c"></script>
     {% block extra_scripts %}{% endblock %}
     <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
 </body>

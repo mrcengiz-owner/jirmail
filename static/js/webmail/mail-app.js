@@ -276,6 +276,21 @@ document.addEventListener('alpine:init', function() {
                     return self.scheduleMail();
                 }
                 self.sendingMail = true;
+                var parseSendResponse = function(r) {
+                    return r.text().then(function(raw) {
+                        try {
+                            return JSON.parse(raw);
+                        } catch (e) {
+                            if (raw.indexOf('Server Error') !== -1) {
+                                return {
+                                    success: false,
+                                    message: 'Sunucu hatası (500). migrate ve Postfix yeniden başlatma gerekebilir.'
+                                };
+                            }
+                            return { success: false, message: raw.slice(0, 200) || 'Geçersiz yanıt' };
+                        }
+                    });
+                };
                 var done = function(ok, msg) {
                     self.sendingMail = false;
                     showToast(msg, ok ? 'success' : 'error');
@@ -292,13 +307,13 @@ document.addEventListener('alpine:init', function() {
                     fd.append('body_text', self.composeBody);
                     self.composeFiles.forEach(function(f) { fd.append('attachments', f); });
                     WmApi.fetch('/api/mail/send-attachments', { method: 'POST', body: fd })
-                        .then(function(r) { return r.json(); })
+                        .then(parseSendResponse)
                         .then(function(d) {
                             done(d.success, d.message || (d.success ? 'Gönderildi' : 'Hata'));
                         })
-                        .catch(function(e) { done(false, e.message); });
+                        .catch(function(e) { done(false, e.message || 'Bağlantı hatası'); });
                 } else {
-                    WmApi.json('/api/mail/send', {
+                    WmApi.fetch('/api/mail/send', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
@@ -307,9 +322,12 @@ document.addEventListener('alpine:init', function() {
                             subject: self.composeSubject,
                             body_text: self.composeBody
                         })
-                    }).then(function(r) {
-                        done(r.data.success, r.data.message || '');
-                    });
+                    })
+                        .then(parseSendResponse)
+                        .then(function(d) {
+                            done(d.success, d.message || '');
+                        })
+                        .catch(function(e) { done(false, e.message || 'Bağlantı hatası'); });
                 }
             },
 

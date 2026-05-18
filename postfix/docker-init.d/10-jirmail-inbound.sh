@@ -11,7 +11,7 @@ export DB_HOST DB_PORT DB_NAME DB_USER DB_PASS MAIL_DOMAIN
 
 echo "[jirmail-postfix] Inbound MX (domain=${DOMAIN}, db=${DB_NAME})"
 
-postconf -e 'smtpd_sender_restrictions=permit'
+# Gönderen kısıtları: 20-anti-spoof (port 25) ve 99-submission (587) scriptlerinde
 postconf -e 'smtpd_client_restrictions=permit'
 postconf -e 'smtpd_helo_restrictions=permit'
 postconf -e 'smtpd_tls_security_level=may'

@@ -235,10 +235,20 @@ def sync_folder_metadata(account, password: str, folder_name: str = 'INBOX', *, 
             if not meta['is_seen']:
                 unread_count += 1
 
-            MailMessageCache.objects.update_or_create(
-                folder=folder_obj, uid=uid,
-                defaults=meta,
-            )
+            try:
+                MailMessageCache.objects.update_or_create(
+                    folder=folder_obj, uid=uid,
+                    defaults=meta,
+                )
+            except Exception as exc:
+                if 'sender_meta' in str(exc):
+                    meta.pop('sender_meta', None)
+                    MailMessageCache.objects.update_or_create(
+                        folder=folder_obj, uid=uid,
+                        defaults=meta,
+                    )
+                else:
+                    raise
             fetched += 1
 
         folder_obj.unread = unread_count

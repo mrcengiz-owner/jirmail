@@ -1,6 +1,12 @@
 #!/bin/sh
-# boky ana betiği sonrası: gönderen kısıtını tekrar kaldır (deploy sonrası güvence)
+# Submission (587): yalnızca kimliği doğrulanmış gönderim — global permit yok (inbound spoof açmaz)
 set -e
-postconf -e 'smtpd_sender_restrictions=permit'
-postconf -e 'smtpd_client_restrictions=permit'
-echo "[jirmail-postfix] smtpd_sender_restrictions=permit (99 override)"
+
+if postconf -Mf submission/inet >/dev/null 2>&1; then
+  postconf -P submission/inet/smtpd_sender_restrictions \
+    "permit_mynetworks,permit_sasl_authenticated,reject" \
+    2>/dev/null || true
+  echo "[jirmail-postfix] submission/inet sender: SASL/mynetworks"
+else
+  echo "[jirmail-postfix] submission/inet yok — SASL gönderim master.cf kontrol edin"
+fi

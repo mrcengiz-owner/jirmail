@@ -52,6 +52,20 @@ def _smtp_submit(
     smtp.send_message(msg, from_addr=account.email, to_addrs=recipients)
 
 
+def _message_id_domain(account) -> str:
+    """Message-ID domain — domain FK yoksa e-postadan türet."""
+    try:
+        domain = getattr(account, 'domain', None)
+        if domain is not None and getattr(domain, 'name', None):
+            return domain.name
+    except Exception:
+        pass
+    email = getattr(account, 'email', '') or ''
+    if '@' in email:
+        return email.split('@', 1)[1]
+    return 'localhost'
+
+
 def send_mail(account, password: str, *, to: list[str] | str, subject: str, body_text: str,
               body_html: str = '', cc: list[str] | None = None, bcc: list[str] | None = None,
               attachments: list[dict] | None = None) -> dict:
@@ -59,40 +73,51 @@ def send_mail(account, password: str, *, to: list[str] | str, subject: str, body
 
     attachments: [{'filename': 'a.pdf', 'mime_type': 'application/pdf', 'content': bytes}]
     """
-    host, port = resolve_mail_endpoint(
-        'postfix',
-        int(getattr(settings, 'SMTP_PORT', 587)),
-        auth_submission=True,
-    )
+    try:
+        host, port = resolve_mail_endpoint(
+            'postfix',
+            int(getattr(settings, 'SMTP_PORT', 587)),
+            auth_submission=True,
+        )
 
-    msg = EmailMessage()
-    msg['From'] = formataddr((account.email.split('@')[0], account.email))
-    msg['To'] = ', '.join(to) if isinstance(to, list) else to
-    if cc:
-        msg['Cc'] = ', '.join(cc)
-    msg['Subject'] = subject
-    msg['Message-ID'] = make_msgid(domain=account.domain.name)
+        msg = EmailMessage()
+        local_part = account.email.split('@')[0] if '@' in account.email else account.email
+        msg['From'] = formataddr((local_part, account.email))
+        msg['To'] = ', '.join(to) if isinstance(to, list) else to
+        if cc:
+            msg['Cc'] = ', '.join(cc)
+        msg['Subject'] = subject or ''
+        msg['Message-ID'] = make_msgid(domain=_message_id_domain(account))
 
-    msg.set_content(body_text or '')
-    if body_html:
-        msg.add_alternative(body_html, subtype='html')
+        msg.set_content(body_text or '')
+        if body_html:
+            msg.add_alternative(body_html, subtype='html')
 
-    for att in (attachments or []):
-        content = att.get('content', b'')
-        maintype, _, subtype = (att.get('mime_type') or 'application/octet-stream').partition('/')
-        msg.add_attachment(content, maintype=maintype, subtype=subtype, filename=att.get('filename', 'file'))
+        for att in (attachments or []):
+            content = att.get('content', b'')
+            maintype, _, subtype = (att.get('mime_type') or 'application/octet-stream').partition('/')
+            msg.add_attachment(
+                content, maintype=maintype, subtype=subtype,
+                filename=att.get('filename', 'file'),
+            )
 
-    recipients = []
-    if isinstance(to, list):
-        recipients.extend(to)
-    else:
-        recipients.append(to)
-    if cc:
-        recipients.extend(cc)
-    if bcc:
-        recipients.extend(bcc)
+        recipients = []
+        if isinstance(to, list):
+            recipients.extend(to)
+        else:
+            recipients.append(to)
+        if cc:
+            recipients.extend(cc)
+        if bcc:
+            recipients.extend(bcc)
 
-    raw_bytes = msg.as_bytes()
+        if not recipients:
+            return {'success': False, 'message': 'En az bir alıcı gerekli.'}
+
+        raw_bytes = msg.as_bytes()
+    except Exception as exc:
+        logger.exception('send_mail prepare')
+        return {'success': False, 'message': f'Mesaj hazırlanamadı: {exc}'}
 
     try:
         with smtplib.SMTP(host, port, timeout=30) as smtp:
