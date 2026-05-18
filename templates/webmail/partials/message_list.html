@@ -1,17 +1,36 @@
-<div class="flex-1 overflow-y-auto">
-  <template x-if="loadingMails">
-    <p class="p-4 text-xs text-[var(--wm-muted)]">Yükleniyor…</p>
-  </template>
-  <template x-for="mail in mails" :key="mail.uid">
-    <div class="wm-mail-row" :class="selectedMail && selectedMail.uid === mail.uid && 'active'"
-         @click="selectMail(mail); mobileView='detail'">
-      <div class="flex justify-between gap-2">
-        <span class="wm-meta truncate" x-text="mail.from"></span>
-        <span class="wm-meta shrink-0" x-text="formatDate(mail.date)"></span>
+<div class="wm-mail-scroll">
+  <div class="wm-loading" x-show="loadingMails">
+    <p>Yükleniyor…</p>
+  </div>
+
+  <template x-for="mail in mails" :key="mail.uid + '-' + currentFolder">
+    <article class="wm-mail-item"
+             :class="{
+               'is-active': selectedMail && selectedMail.uid === mail.uid,
+               'is-unread': mail.unread
+             }"
+             @click="selectMail(mail)">
+      <div class="wm-mail-item__avatar"
+           :style="'background:' + avatarColor(mail.from)"
+           x-text="initials(mail.from)"></div>
+      <div class="wm-mail-item__body">
+        <div class="wm-mail-item__top">
+          <span class="wm-mail-item__from" x-text="displayFrom(mail)"></span>
+          <time class="wm-mail-item__date" x-text="formatDate(mail.date)"></time>
+        </div>
+        <p class="wm-mail-item__subject" x-text="mail.subject"></p>
+        <p class="wm-mail-item__preview" x-text="mail.preview"></p>
+        <div class="wm-mail-item__meta">
+          <span class="wm-unread-dot" x-show="mail.unread"></span>
+          <span class="wm-tag wm-tag--attach" x-show="mail.hasAttachments">Ek</span>
+          <span class="wm-tag" x-show="mail.starred">★</span>
+        </div>
       </div>
-      <p class="wm-subject mt-0.5" x-text="mail.subject"></p>
-      <p class="wm-meta truncate mt-0.5" x-text="mail.preview"></p>
-    </div>
+    </article>
   </template>
-  <p x-show="!loadingMails && mails.length===0" class="p-4 text-xs text-[var(--wm-muted)]">Mesaj yok</p>
+
+  <div class="wm-empty" x-show="!loadingMails && mails.length === 0">
+    <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75"/></svg>
+    <p x-text="emptyFolderMessage()"></p>
+  </div>
 </div>

@@ -1,0 +1,15 @@
+<nav class="wm-mobile-nav" aria-label="Mobil gezinme">
+  <div class="wm-mobile-nav__inner">
+    <button type="button" :class="mobileView === 'list' && 'is-active'" @click="mobileView = 'list'">
+      <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75"><path stroke-linecap="round" stroke-linejoin="round" d="M2.25 13.5h3.86a2.25 2.25 0 012.012 1.244l.256.512a2.25 2.25 0 002.013 1.244h3.218a2.25 2.25 0 002.013-1.244l.256-.512a2.25 2.25 0 012.013-1.244h3.859M12 3v10.5m0 0l-3.75-3.75M12 13.5l3.75-3.75"/></svg>
+      Gelen
+    </button>
+    <button type="button" class="wm-mobile-nav__compose" @click="openCompose()" aria-label="Yaz">
+      <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931z"/></svg>
+    </button>
+    <button type="button" :class="mobileView === 'folders' && 'is-active'" @click="sidebarOpen = true; mobileView = 'folders'">
+      <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75"><path stroke-linecap="round" stroke-linejoin="round" d="M2.25 12.75V12A2.25 2.25 0 014.5 9.75h15A2.25 2.25 0 0121.75 12v.75m-8.69-6.44l-2.12-2.12a1.5 1.5 0 00-1.061-.44H4.5A2.25 2.25 0 002.25 6v12a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9a2.25 2.25 0 00-2.25-2.25h-5.379a1.5 1.5 0 01-1.06-.44z"/></svg>
+      Klasör
+    </button>
+  </div>
+</nav>

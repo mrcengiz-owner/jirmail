@@ -1,14 +1,41 @@
-<div class="flex flex-col h-full p-3 gap-2">
-  <h2 class="text-xs font-semibold uppercase tracking-wide text-[var(--wm-muted)]">Yeni mesaj</h2>
-  <input class="wm-input" placeholder="Kime" x-model="composeTo">
-  <input class="wm-input" placeholder="Cc" x-model="composeCc">
-  <input class="wm-input" placeholder="Konu" x-model="composeSubject">
-  <textarea class="wm-textarea flex-1" placeholder="İçerik" x-model="composeBody"></textarea>
-  <input type="file" multiple class="text-xs text-[var(--wm-muted)]" @change="onFiles($event)">
-  <label class="text-[var(--wm-size-xs)] text-[var(--wm-muted)]">Planlı gönderim (ISO, örn. 2026-05-18T09:00)</label>
-  <input class="wm-input" type="datetime-local" x-model="scheduleAt">
-  <div class="flex gap-2">
-    <button type="button" class="wm-btn wm-btn-primary flex-1" @click="sendMail()" :disabled="sendingMail">Gönder</button>
-    <button type="button" class="wm-btn" @click="closeCompose()">İptal</button>
+<header class="wm-compose__header">
+  <button type="button" class="wm-icon-btn wm-hide-desktop" @click="closeCompose()" aria-label="Geri">
+    <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5"/></svg>
+  </button>
+  <h2>Yeni mesaj</h2>
+  <button type="button" class="wm-icon-btn" @click="closeCompose()" aria-label="Kapat">
+    <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+  </button>
+</header>
+
+<div class="wm-compose__fields">
+  <div class="wm-field-row">
+    <label for="wm-to">Kime</label>
+    <input id="wm-to" type="email" placeholder="ornek@domain.com" x-model="composeTo" autocomplete="off">
+  </div>
+  <div class="wm-field-row">
+    <label for="wm-cc">Cc</label>
+    <input id="wm-cc" type="text" placeholder="İsteğe bağlı" x-model="composeCc" autocomplete="off">
+  </div>
+  <div class="wm-field-row">
+    <label for="wm-subj">Konu</label>
+    <input id="wm-subj" type="text" placeholder="Konu satırı" x-model="composeSubject" autocomplete="off">
   </div>
 </div>
+
+<div class="wm-compose__editor">
+  <textarea placeholder="Mesajınızı yazın…" x-model="composeBody"></textarea>
+</div>
+
+<footer class="wm-compose__footer">
+  <input type="file" multiple class="wm-file-input" @change="onFiles($event)" aria-label="Ek dosyalar">
+  <label class="wm-schedule">
+    <span>Planla</span>
+    <input type="datetime-local" x-model="scheduleAt">
+  </label>
+  <span class="flex-1"></span>
+  <button type="button" class="wm-btn wm-btn-secondary" @click="closeCompose()">İptal</button>
+  <button type="button" class="wm-btn wm-btn-primary" @click="sendMail()" :disabled="sendingMail">
+    <span x-text="sendingMail ? 'Gönderiliyor…' : (scheduleAt ? 'Planla' : 'Gönder')"></span>
+  </button>
+</footer>

@@ -1,25 +1,5 @@
-/** Webmail — CSRF, toast store, yardımcılar (dashboard app.js gerekmez) */
+/** Webmail — CSRF ve toast bildirimleri */
 (function() {
-    document.addEventListener('alpine:init', function() {
-        if (typeof Alpine === 'undefined') return;
-        if (!Alpine.store('toast')) {
-            Alpine.store('toast', {
-                notifications: [],
-                add: function(message, type, duration) {
-                    type = type || 'info';
-                    duration = duration || 4000;
-                    var id = Date.now() + Math.random();
-                    this.notifications.push({ id: id, message: message, type: type, visible: true });
-                    var self = this;
-                    setTimeout(function() { self.remove(id); }, duration);
-                },
-                remove: function(id) {
-                    this.notifications = this.notifications.filter(function(n) { return n.id !== id; });
-                }
-            });
-        }
-    });
-
     function getCookie(name) {
         var m = document.cookie.match(new RegExp('(?:^|;\\s*)' + name + '=([^;]+)'));
         return m ? decodeURIComponent(m[1]) : '';
@@ -33,13 +13,21 @@
 
     window.showToast = function(msg, type) {
         type = type || 'info';
-        try {
-            if (typeof Alpine !== 'undefined' && Alpine.store('toast')) {
-                Alpine.store('toast').add(msg, type);
-                return;
-            }
-        } catch (e) { /* fallback */ }
-        console.log('[toast]', type, msg);
+        var root = document.getElementById('wm-toast-root');
+        if (!root) {
+            console.log('[toast]', type, msg);
+            return;
+        }
+        var el = document.createElement('div');
+        el.className = 'wm-toast wm-toast--' + type;
+        el.textContent = msg;
+        root.appendChild(el);
+        setTimeout(function() {
+            el.style.opacity = '0';
+            el.style.transform = 'translateY(8px)';
+            el.style.transition = 'opacity 0.25s, transform 0.25s';
+            setTimeout(function() { el.remove(); }, 280);
+        }, 4200);
     };
 
     window.WmApi = {
@@ -58,7 +46,11 @@
                     try {
                         return { ok: r.ok, status: r.status, data: JSON.parse(raw) };
                     } catch (e) {
-                        return { ok: false, status: r.status, data: { success: false, message: raw.slice(0, 200) } };
+                        return {
+                            ok: false,
+                            status: r.status,
+                            data: { success: false, message: raw.slice(0, 200) }
+                        };
                     }
                 });
             });

@@ -1,35 +1,55 @@
 {% extends "webmail/layouts/shell.html" %}
 {% load static %}
 
-{% block title %}Gelen Kutusu — Webmail{% endblock %}
+{% block title %}Gelen Kutusu — Jîr-Mail{% endblock %}
 
 {% block wm_body %}
-<div class="wm-app flex h-dvh w-full overflow-hidden" x-data="mailApp()">
+<div class="wm-shell"
+     x-data="mailApp()"
+     data-user-email="{{ email|default:''|escape }}"
+     data-ai-enabled="{{ ai_enabled|yesno:'true,false' }}">
+
+  <div class="wm-backdrop"
+       :class="{ 'is-open': sidebarOpen }"
+       @click="sidebarOpen = false"
+       x-show="sidebarOpen"
+       x-cloak></div>
 
   {% include "webmail/partials/sidebar.html" %}
 
-  <section class="wm-list flex flex-col min-h-0"
-           :class="mobileView === 'list' || mobileView === 'folders' ? 'flex' : 'hidden md:flex'">
-    {% include "webmail/partials/toolbar.html" %}
-    {% include "webmail/partials/message_list.html" %}
-  </section>
+  <div class="wm-main">
+  {% include "webmail/partials/mobile_header.html" %}
 
-  <section class="wm-detail flex flex-col min-h-0 min-w-0 flex-1"
-           :class="mobileView === 'detail' ? 'flex' : 'hidden md:flex'">
-    <div class="flex flex-col h-full" x-show="showCompose">
-      {% include "webmail/partials/compose.html" %}
-    </div>
-    <div class="flex flex-col h-full" x-show="selectedMail && !showCompose">
-      {% include "webmail/partials/message_detail.html" %}
-    </div>
-    <div class="flex-1 flex items-center justify-center text-[var(--wm-muted)] text-xs p-8"
-         x-show="!showCompose && !selectedMail">
-      Bir mesaj seçin veya «Yaz» ile başlayın.
-    </div>
-  </section>
+  <div class="wm-workspace">
+    <section class="wm-list-pane"
+             :class="{ 'is-hidden': mobileView === 'detail' || mobileView === 'compose' || mobileView === 'ai' }">
+      {% include "webmail/partials/toolbar.html" %}
+      {% include "webmail/partials/message_list.html" %}
+    </section>
 
-  <aside class="wm-ai-drawer flex flex-col min-h-0 shrink-0" x-show="showAi && aiEnabled" x-cloak>
-    {% include "webmail/partials/ai_panel.html" %}
-  </aside>
+    <section class="wm-read-pane"
+             :class="{ 'is-hidden': mobileView === 'list' || mobileView === 'folders' || mobileView === 'ai' }">
+      <div class="wm-compose" x-show="showCompose" x-cloak>
+        {% include "webmail/partials/compose.html" %}
+      </div>
+      <div class="wm-read-inner" x-show="selectedMail && !showCompose">
+        {% include "webmail/partials/message_detail.html" %}
+      </div>
+      <div class="wm-read-empty" x-show="!showCompose && !selectedMail">
+        <div class="wm-read-empty__icon">
+          <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75"/></svg>
+        </div>
+        <h3>Mesaj seçin</h3>
+        <p>Listedeki bir e-postaya tıklayın veya yeni mesaj yazın.</p>
+      </div>
+    </section>
+
+    <aside class="wm-ai-panel" x-show="showAi && aiEnabled" x-cloak>
+      {% include "webmail/partials/ai_panel.html" %}
+    </aside>
+  </div>
+
+  {% include "webmail/partials/mobile_nav.html" %}
+  </div>
 </div>
 {% endblock %}
