@@ -28,6 +28,7 @@ document.addEventListener('alpine:init', function() {
             sidebarOpen: false,
             showCompose: false,
             showAi: false,
+            showSourceDetails: false,
             selectedMail: null,
             searchQuery: '',
             unreadCount: 0,
@@ -129,7 +130,8 @@ document.addEventListener('alpine:init', function() {
                             sender_warning: m.sender_warning || null,
                             sender_real_email: m.sender_real_email || null,
                             sender_reply_to: m.sender_reply_to || null,
-                            sender_return_path: m.sender_return_path || null
+                            sender_return_path: m.sender_return_path || null,
+                            auth: m.auth || {}
                         };
                     });
                     if (self.currentFolder === 'starred') {
@@ -162,6 +164,7 @@ document.addEventListener('alpine:init', function() {
                 var self = this;
                 self.selectedMail = mail;
                 self.showCompose = false;
+                self.showSourceDetails = false;
                 self.mobileView = 'detail';
                 if (!mail.bodyLoaded && mail.uid > 0) {
                     WmApi.json('/api/mail/messages/' + mail.uid + '/body?folder=' +
@@ -181,6 +184,7 @@ document.addEventListener('alpine:init', function() {
                                     mail.sender_real_email = s.real_email || mail.sender_real_email;
                                     mail.sender_reply_to = s.reply_to || null;
                                     mail.sender_return_path = s.return_path || null;
+                                    mail.auth = s.auth || mail.auth || {};
                                 }
                             }
                         });
@@ -429,6 +433,20 @@ document.addEventListener('alpine:init', function() {
                     return name + ' <' + addr + '>';
                 }
                 return addr || name || 'Bilinmeyen';
+            },
+
+            authBadgeClass: function(status) {
+                if (status === 'pass') return 'wm-auth-badge--pass';
+                if (status === 'fail' || status === 'softfail' || status === 'permerror') return 'wm-auth-badge--fail';
+                return 'wm-auth-badge--neutral';
+            },
+
+            authLabel: function(status) {
+                var map = {
+                    pass: 'Geçti', fail: 'Başarısız', softfail: 'Zayıf', neutral: 'Nötr',
+                    none: 'Yok', temperror: 'Geçici hata', permerror: 'Kalıcı hata', bypass: 'Atlandı'
+                };
+                return map[status] || status || '—';
             },
 
             senderSubline: function(mail) {

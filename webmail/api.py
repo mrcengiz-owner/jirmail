@@ -24,7 +24,7 @@ from .imap_client import (
     sync_folder_metadata, sync_standard_folders,
 )
 from .models import MailFolder, MailMessageCache, MailOutboundLog
-from .sender import sender_info_from_cache_row
+from .sender import purge_blocked_inbound_cache, sender_info_from_cache_row, should_block_inbound
 from .smtp_client import send_mail
 from .sse import webmail_sse_response
 
@@ -113,6 +113,7 @@ def _message_to_api(m: MailMessageCache, account: MailAccount, folder: str) -> d
         'sender_real_email': sender.get('real_email'),
         'sender_reply_to': sender.get('reply_to'),
         'sender_return_path': sender.get('return_path'),
+        'auth': sender.get('auth') or {},
     }
 
 
@@ -197,6 +198,9 @@ def list_messages(request: HttpRequest, folder: str = 'INBOX', page: int = 1, pa
     qs = MailMessageCache.objects.filter(folder=folder_obj, is_deleted=False)
     if q:
         qs = qs.filter(subject__icontains=q) | qs.filter(from_addr__icontains=q)
+
+    if _folder_is_inbound(folder):
+        qs = qs.exclude(sender_meta__is_spoofed=True).exclude(sender_meta__is_probable_scam=True)
 
     total = qs.count()
     page = max(1, page)
@@ -447,11 +451,18 @@ def sync_all(request: HttpRequest):
     if not results and errors:
         return {'success': False, 'message': errors[0]['error'], 'errors': errors}
 
+    purged = 0
+    try:
+        purged = purge_blocked_inbound_cache(account)
+    except Exception:
+        pass
+
     return {
         'success': True,
         'synced': results,
         'errors': errors,
         'total_fetched': sum(r.get('fetched', 0) for r in results),
+        'purged_blocked': purged,
     }
 
 

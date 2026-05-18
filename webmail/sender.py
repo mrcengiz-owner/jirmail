@@ -145,9 +145,22 @@ def build_sender_info(
 
 def sender_info_from_message(msg, account_email: str, *, is_inbound: bool = True) -> dict:
     """email.message.Message nesnesinden gönderen bilgisi."""
+    from webmail.mail_auth import parse_mail_auth
+
     subject = _decode_header(msg.get('Subject', '') or '')
-    snippet = (msg.get('Subject', '') or '')[:200]
-    return build_sender_info(
+    body_snippet = ''
+    try:
+        if msg.is_multipart():
+            for part in msg.walk():
+                if part.get_content_type() == 'text/plain':
+                    body_snippet = (part.get_payload(decode=True) or b'')[:480].decode('utf-8', 'replace')
+                    break
+        else:
+            body_snippet = (msg.get_payload(decode=True) or b'')[:480].decode('utf-8', 'replace')
+    except Exception:
+        body_snippet = ''
+
+    info = build_sender_info(
         from_raw=msg.get('From', '') or '',
         sender_raw=msg.get('Sender', '') or '',
         reply_to_raw=msg.get('Reply-To', '') or '',
@@ -155,8 +168,39 @@ def sender_info_from_message(msg, account_email: str, *, is_inbound: bool = True
         account_email=account_email,
         is_inbound=is_inbound,
         subject=subject,
-        snippet=snippet,
+        snippet=body_snippet or subject,
     )
+    auth = parse_mail_auth(msg)
+    info['auth'] = auth
+    if is_inbound and auth.get('spf') == 'fail' and not info.get('is_spoofed'):
+        info['is_spoofed'] = True
+        info['warning'] = 'SPF doğrulaması başarısız — gönderen adresi sahte olabilir.'
+    return info
+
+
+def should_block_inbound(sender_meta: dict) -> bool:
+    """Gelen kutusunda gösterilmemesi / senkronize edilmemesi gereken ileti."""
+    if not sender_meta:
+        return False
+    return bool(sender_meta.get('is_spoofed') or sender_meta.get('is_probable_scam'))
+
+
+def purge_blocked_inbound_cache(account) -> int:
+    """Gelen kutusundaki spoof/scam cache kayıtlarını gizle."""
+    from webmail.models import MailFolder, MailMessageCache
+
+    folders = MailFolder.objects.filter(account=account, name__iexact='INBOX')
+    n = 0
+    for folder in folders:
+        for m in MailMessageCache.objects.filter(folder=folder, is_deleted=False).iterator(chunk_size=100):
+            meta = sender_info_from_cache_row(m, account.email, is_inbound=True)
+            if should_block_inbound(meta):
+                MailMessageCache.objects.filter(pk=m.pk).update(
+                    is_deleted=True,
+                    sender_meta=meta,
+                )
+                n += 1
+    return n
 
 
 def sender_info_from_imap_headers(raw_headers: bytes, account_email: str, *, is_inbound: bool = True) -> dict:
@@ -179,6 +223,7 @@ def sender_info_from_cache_row(row, account_email: str, *, is_inbound: bool = Tr
         info.setdefault('real_display', format_sender_display(
             info.get('real_name', ''), info.get('real_email', ''),
         ))
+        info.setdefault('auth', {})
         return info
     from_raw = row.from_addr or ''
     if row.from_name and row.from_addr:
