@@ -908,6 +908,7 @@ def _create_admin_account(config: dict, recorder: StepRecorder) -> None:
 
         config_obj = SystemConfig.objects.first() or SystemConfig()
         config_obj.is_installed = True
+        config_obj.bootstrap_admin_email = admin_email
         config_obj.instance_id = config.get('instance_id') or config_obj.instance_id
         config_obj.jir_local_key = config.get('jir_local_key', config_obj.jir_local_key)
         _apply_system_config_database(config_obj, config, recorder)

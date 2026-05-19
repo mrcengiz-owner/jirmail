@@ -1,6 +1,8 @@
 from django.shortcuts import render, redirect
 from django.conf import settings
-from django.http import JsonResponse, HttpResponseForbidden
+from django.http import JsonResponse
+from jir_core.dashboard_auth import session_has_panel_access
+from jir_core.permissions import apply_account_session
 from django.contrib.auth.decorators import login_required
 from django.views.decorators.http import require_http_methods
 from django.views.decorators.csrf import csrf_exempt, ensure_csrf_cookie
@@ -58,12 +60,33 @@ def require_session(view_func):
 
 
 def require_full_access(view_func):
-    """Decorator that checks if user has FULL role."""
+    """Mail sunucusu paneli — süper yönetici (FULL) gerekir."""
     def wrapper(request, *args, **kwargs):
-        if request.session.get('role') != 'FULL':
-            return redirect('webmail:inbox')
+        denied = require_panel_page(request)
+        if denied:
+            return denied
         return view_func(request, *args, **kwargs)
     return wrapper
+
+
+def require_panel_page(request):
+    """Panel sayfaları için oturum + süper yönetici kontrolü."""
+    if not request.session.get('is_logged_in'):
+        return redirect('login')
+    if not session_has_panel_access(request):
+        return render(request, 'pages/forbidden.html', {
+            'role_display': request.session.get('role_display', ''),
+        })
+    return None
+
+
+def forbidden_view(request):
+    """Yetkisiz panel erişimi."""
+    if not request.session.get('is_logged_in'):
+        return redirect('login')
+    return render(request, 'pages/forbidden.html', {
+        'role_display': request.session.get('role_display', ''),
+    })
 
 
 def get_jir_key():
@@ -95,8 +118,9 @@ def get_instance_info():
 def dashboard(request):
     if not is_installed():
         return redirect('setup')
-    if not request.session.get('is_logged_in'):
-        return redirect('login')
+    denied = require_panel_page(request)
+    if denied:
+        return denied
 
     instance_info = get_instance_info()
 
@@ -119,7 +143,7 @@ def dashboard(request):
         'active_accounts': active_accounts,
         'inactive_accounts': inactive_accounts,
         'can_manage_docker': (
-            request.session.get('role') == 'FULL'
+            session_has_panel_access(request)
             and _docker_api_available_for_panel()
         ),
     })
@@ -137,8 +161,7 @@ def login(request):
         return redirect('setup')
 
     if request.session.get('is_logged_in'):
-        role = request.session.get('role')
-        if role == 'FULL':
+        if session_has_panel_access(request):
             return redirect('dashboard')
         return redirect('webmail:inbox')
 
@@ -191,14 +214,8 @@ def login_success(request):
 
         request.session.flush()
 
-        request.session['email'] = account.email
-        request.session['role'] = account.role
-        request.session['domain'] = account.domain.name
-        request.session['is_logged_in'] = True
-        request.session['account_id'] = account.id
+        permissions = apply_account_session(request, account)
         # IMAP/SMTP istemcisi için kullanıcının düz parolası geçici cache'lenir.
-        # Session cookie SECURE+HttpOnly olduğu sürece tarayıcıdan erişilemez;
-        # uzun vadede credential vault'a taşımak ideal.
         request.session['mail_password'] = password
         request.session.set_expiry(86400)
         request.session.modified = True
@@ -208,7 +225,7 @@ def login_success(request):
         config = SystemConfig.objects.first()
         jir_key = config.jir_local_key if config else get_jir_key()
 
-        if account.role == 'FULL':
+        if account.can_access_panel:
             redirect_url = '/dashboard/'
         else:
             redirect_url = '/webmail/'
@@ -219,7 +236,11 @@ def login_success(request):
             'jir_key': jir_key,
             'email': account.email,
             'role': account.role,
-            'redirect_url': redirect_url
+            'role_display': account.get_role_display(),
+            'permissions': permissions,
+            'can_access_panel': permissions.get('can_access_panel', False),
+            'is_superuser': account.is_bootstrap_admin(),
+            'redirect_url': redirect_url,
         })
 
     except Exception as e:
@@ -237,10 +258,9 @@ def domains_view(request):
     """Domains Management Page"""
     if not is_installed():
         return redirect('setup')
-    if not request.session.get('is_logged_in'):
-        return redirect('login')
-    if request.session.get('role') != 'FULL':
-        return redirect('webmail:inbox')
+    denied = require_panel_page(request)
+    if denied:
+        return denied
 
     try:
         from core.models import MailDomain
@@ -281,10 +301,9 @@ def accounts_view(request):
     """Accounts Management Page"""
     if not is_installed():
         return redirect('setup')
-    if not request.session.get('is_logged_in'):
-        return redirect('login')
-    if request.session.get('role') != 'FULL':
-        return redirect('webmail:inbox')
+    denied = require_panel_page(request)
+    if denied:
+        return denied
 
     try:
         from core.models import MailDomain
@@ -295,17 +314,32 @@ def accounts_view(request):
 
     try:
         from core.models import MailAccount
-        accounts = list(MailAccount.objects.all().values('email', 'username', 'domain__name', 'is_active', 'role'))
+        accounts = []
+        for acc in MailAccount.objects.select_related('domain').all():
+            perms = acc.permissions_summary()
+            accounts.append({
+                'email': acc.email,
+                'username': acc.username,
+                'domain__name': acc.domain.name,
+                'is_active': acc.is_active,
+                'role': acc.role,
+                'role_display': acc.get_role_display(),
+                'is_superuser': acc.is_bootstrap_admin(),
+                'permissions': perms,
+            })
     except Exception:
         accounts = []
 
     import json
+
+    from jir_core.permissions import ROLE_CHOICES_FOR_UI
 
     return render(request, 'pages/accounts.html', {
         'JIR_LOCAL_KEY': get_jir_key(),
         'domains_json': domains_json,
         'accounts_bootstrap': json.dumps(accounts),
         'domains_list': json.dumps(domains_json),
+        'role_choices_json': json.dumps(ROLE_CHOICES_FOR_UI),
         'current_page': 'accounts',
     })
 
@@ -314,10 +348,9 @@ def containers_view(request):
     """Containers Management Page"""
     if not is_installed():
         return redirect('setup')
-    if not request.session.get('is_logged_in'):
-        return redirect('login')
-    if request.session.get('role') != 'FULL':
-        return redirect('webmail:inbox')
+    denied = require_panel_page(request)
+    if denied:
+        return denied
 
     try:
         from installer.compose_mode import is_compose_stack
@@ -337,10 +370,9 @@ def backups_view(request):
     """Backups Management Page"""
     if not is_installed():
         return redirect('setup')
-    if not request.session.get('is_logged_in'):
-        return redirect('login')
-    if request.session.get('role') != 'FULL':
-        return redirect('webmail:inbox')
+    denied = require_panel_page(request)
+    if denied:
+        return denied
 
     return render(request, 'pages/backups.html', {
         'JIR_LOCAL_KEY': get_jir_key(),
@@ -352,10 +384,9 @@ def logs_view(request):
     """System Logs Page"""
     if not is_installed():
         return redirect('setup')
-    if not request.session.get('is_logged_in'):
-        return redirect('login')
-    if request.session.get('role') != 'FULL':
-        return redirect('webmail:inbox')
+    denied = require_panel_page(request)
+    if denied:
+        return denied
 
     return render(request, 'pages/logs.html', {
         'JIR_LOCAL_KEY': get_jir_key(),
@@ -367,10 +398,9 @@ def settings_view(request):
     """Kurulum sonrası sistem ayarları (Docker adları, yollar; veritabanı salt okunur)."""
     if not is_installed():
         return redirect('setup')
-    if not request.session.get('is_logged_in'):
-        return redirect('login')
-    if request.session.get('role') != 'FULL':
-        return redirect('webmail:inbox')
+    denied = require_panel_page(request)
+    if denied:
+        return denied
 
     return render(request, 'pages/settings.html', {
         'JIR_LOCAL_KEY': get_jir_key(),

@@ -255,6 +255,7 @@ def setup_complete(request, data: SetupCompleteSchema):
             config.instance_id = data.instance_id
             config.is_installed = True
             config.jir_local_key = data.jir_local_key
+            config.bootstrap_admin_email = data.admin_email.lower()
 
             config.db_engine = db_engine
             if data.db_type == 'postgresql':
@@ -758,8 +759,9 @@ def docker_diagnostics(request):
 
     if not request.session.get('is_logged_in'):
         return {"status": "error", "message": "Oturum gerekli."}
-    if request.session.get('role') != 'FULL':
-        return {"status": "error", "message": "Bu işlem için FULL yetkisi gerekir."}
+    from jir_core.dashboard_auth import session_has_panel_access
+    if not session_has_panel_access(request):
+        return {"status": "error", "message": "Yetkiniz yok. Süper yönetici yetkisi gerekir.", "code": "forbidden"}
 
     out: dict = {
         "status": "ok",
@@ -851,8 +853,9 @@ def deploy_readiness_api(request):
     """Deploy sonrası ortam kontrolü: profil uyumu, Docker, mail, env."""
     if not request.session.get('is_logged_in'):
         return {"status": "error", "message": "Oturum gerekli."}
-    if request.session.get('role') != 'FULL':
-        return {"status": "error", "message": "Bu işlem için yönetici (FULL) yetkisi gerekir."}
+    from jir_core.dashboard_auth import session_has_panel_access
+    if not session_has_panel_access(request):
+        return {"status": "error", "message": "Yetkiniz yok. Süper yönetici yetkisi gerekir.", "code": "forbidden"}
 
     from .deploy_readiness import collect_deploy_readiness
 
@@ -865,8 +868,9 @@ def mail_stack_compose_api(request):
     """DATABASE_URL + MAIL_DOMAIN ile Coolify’a yapıştırılabilir docker-compose üretir."""
     if not request.session.get('is_logged_in'):
         return {"status": "error", "message": "Oturum gerekli."}
-    if request.session.get('role') != 'FULL':
-        return {"status": "error", "message": "Bu işlem için yönetici (FULL) yetkisi gerekir."}
+    from jir_core.dashboard_auth import session_has_panel_access
+    if not session_has_panel_access(request):
+        return {"status": "error", "message": "Yetkiniz yok. Süper yönetici yetkisi gerekir.", "code": "forbidden"}
 
     from installer.mail_stack import (
         mail_stack_instructions_markdown,
@@ -892,8 +896,9 @@ def mail_stack_compose_api(request):
 def get_system_settings(request):
     if not request.session.get('is_logged_in'):
         return {"status": "error", "message": "Oturum gerekli."}
-    if request.session.get('role') != 'FULL':
-        return {"status": "error", "message": "Bu sayfa için yönetici (FULL) yetkisi gerekir."}
+    from jir_core.dashboard_auth import session_has_panel_access
+    if not session_has_panel_access(request):
+        return {"status": "error", "message": "Yetkiniz yok. Süper yönetici yetkisi gerekir.", "code": "forbidden"}
 
     config = SystemConfig.objects.first()
     if not config:
@@ -933,8 +938,9 @@ def get_system_settings(request):
 def update_system_settings(request, data: SystemSettingsUpdateSchema):
     if not request.session.get('is_logged_in'):
         return {"status": "error", "message": "Oturum gerekli."}
-    if request.session.get('role') != 'FULL':
-        return {"status": "error", "message": "Bu sayfa için yönetici (FULL) yetkisi gerekir."}
+    from jir_core.dashboard_auth import session_has_panel_access
+    if not session_has_panel_access(request):
+        return {"status": "error", "message": "Yetkiniz yok. Süper yönetici yetkisi gerekir.", "code": "forbidden"}
 
     config = SystemConfig.objects.first()
     if not config:
@@ -1199,8 +1205,9 @@ def container_action(request, container_name, action):
     """Start, stop, or restart a Docker container (dashboard — FULL oturum gerekir)."""
     if not request.session.get('is_logged_in'):
         return {"status": "error", "message": "Oturum gerekli. Lütfen yeniden giriş yapın."}
-    if request.session.get('role') != 'FULL':
-        return {"status": "error", "message": "Bu işlem için yönetici (FULL) yetkisi gerekir."}
+    from jir_core.dashboard_auth import session_has_panel_access
+    if not session_has_panel_access(request):
+        return {"status": "error", "message": "Yetkiniz yok. Süper yönetici yetkisi gerekir.", "code": "forbidden"}
 
     if action not in ['start', 'stop', 'restart']:
         return {"status": "error", "message": "Invalid action. Use start, stop, or restart."}
@@ -1465,7 +1472,7 @@ class MailAccountSchema(Schema):
     username: str
     domain: str
     password: str
-    role: str = 'FULL'
+    role: str = 'USER'
 
 
 @router.post("/restart-container/{container_name}", summary="Container Yeniden Başlat")
@@ -1626,9 +1633,12 @@ def create_mail_account(request, data: MailAccountSchema):
     if MailAccount.objects.filter(email=full_email).exists():
         return {"status": "error", "message": f"{full_email} zaten kayıtlı."}
 
-    role = (data.role or 'FULL').upper()
-    if role not in dict(MailAccount._meta.get_field('role').choices):
-        role = 'FULL'
+    from core.models import MailRole
+
+    role = (data.role or MailRole.WEBMAIL_USER).upper()
+    valid = {c[0] for c in MailRole.choices}
+    if role not in valid:
+        role = MailRole.WEBMAIL_USER
 
     salt = bcrypt.gensalt()
     hashed_pw = bcrypt.hashpw(password.encode('utf-8'), salt).decode('utf-8')

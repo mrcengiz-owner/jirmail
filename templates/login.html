@@ -168,7 +168,13 @@ function loginForm() {
                 const data = await res.json();
 
                 if (data.status === 'success') {
-                    window.location.href = data.redirect_url || '/dashboard/';
+                    if (data.role_display && window.showToast) {
+                        var dest = data.can_access_panel ? 'yönetim paneline' : 'webmail\'e';
+                        window.showToast(data.role_display + ' — ' + dest + ' yönlendiriliyorsunuz', 'success');
+                    }
+                    setTimeout(function() {
+                        window.location.href = data.redirect_url || '/dashboard/';
+                    }, data.role_display ? 600 : 0);
                 } else {
                     this.errorMessage = data.message || 'Giriş başarısız. Bilgilerinizi kontrol edin.';
                 }

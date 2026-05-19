@@ -24,7 +24,7 @@ class JirInstallMiddleware:
         protected_paths = ['/master-panel/', '/mail-panel/', '/webmail/', '/dashboard/', '/domains/', '/accounts/', '/containers/', '/backups/', '/logs/', '/settings/', '/api/content/']
         auth_paths = [
             '/login/', '/webmail/login/', '/webmail/assets/', '/setup/',
-            '/logout/', '/webmail/logout/',
+            '/logout/', '/webmail/logout/', '/yetkisiz/',
             '/static/',
             '/api/health', '/api/login', '/api/test-db', '/api/setup-complete',
             '/api/installer/',
@@ -44,6 +44,16 @@ class JirInstallMiddleware:
                         if path.startswith('/webmail/'):
                             return redirect('webmail:login')
                         return redirect('login')
+        else:
+            # Giriş yapmış webmail kullanıcısı mail sunucusu paneline erişemez
+            from jir_core.dashboard_auth import session_has_panel_access
+            from jir_core.permissions import is_panel_path
+
+            if is_panel_path(path) and not session_has_panel_access(request):
+                from django.shortcuts import render
+                return render(request, 'pages/forbidden.html', {
+                    'role_display': request.session.get('role_display', ''),
+                })
 
         response = self.get_response(request)
         return response

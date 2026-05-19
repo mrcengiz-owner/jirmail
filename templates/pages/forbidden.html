@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Yetkiniz yok — JîrCode Mail{% endblock %}
+
+{% block sidebar %}{% endblock %}
+{% block navbar %}{% endblock %}
+{% block bottom_nav %}{% endblock %}
+
+{% block content %}
+<div class="auth-container">
+    <div class="auth-card text-center max-w-lg mx-auto">
+        <div class="w-16 h-16 mx-auto mb-6 rounded-2xl bg-danger-500/10 border border-danger-500/30 flex items-center justify-center">
+            <svg class="w-8 h-8 text-danger-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                      d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+            </svg>
+        </div>
+        <h1 class="text-xl font-semibold text-white mb-2">Yetkiniz yok</h1>
+        <p class="text-slate-400 text-sm mb-2">
+            Mail sunucusu yönetim paneline erişim yetkiniz bulunmuyor.
+        </p>
+        {% if role_display %}
+        <p class="text-slate-500 text-xs mb-6">
+            Hesap rolünüz: <span class="text-slate-300 font-medium">{{ role_display }}</span>
+        </p>
+        {% else %}
+        <p class="text-slate-500 text-xs mb-6">Yalnızca webmail kullanımı için yetkilendirildiniz.</p>
+        {% endif %}
+        <div class="flex flex-col sm:flex-row gap-3 justify-center">
+            <a href="{% url 'webmail:inbox' %}" class="btn btn-primary">Webmail'e git</a>
+            <a href="{% url 'logout' %}" class="btn btn-secondary">Çıkış yap</a>
+        </div>
+    </div>
+</div>
+{% endblock %}

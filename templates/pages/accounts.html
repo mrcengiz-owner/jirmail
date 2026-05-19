@@ -9,6 +9,7 @@
     window.DOMAINS = {{ domains_list|safe }};
 </script>
 {{ accounts_bootstrap|json_script:"accounts-bootstrap" }}
+{{ role_choices_json|json_script:"role-choices" }}
 {% endblock %}
 
 {% block content %}
@@ -17,7 +18,7 @@
     <header class="page-header">
         <div class="min-w-0">
             <h1 class="section-title">Mail Hesapları</h1>
-            <p class="section-subtitle">Tüm mail kullanıcılarını ve rollerini yönetin</p>
+            <p class="section-subtitle">Kullanıcıları oluşturun; mail sunucusu paneli veya yalnızca webmail yetkisi atayın</p>
         </div>
         <button type="button" class="btn btn-primary" @click="openAddModal()" :disabled="loading">
             <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -35,7 +36,7 @@
                     <th>E-posta</th>
                     <th>Kullanıcı</th>
                     <th>Domain</th>
-                    <th>Rol</th>
+                    <th>Yetki / Rol</th>
                     <th>Durum</th>
                     <th class="text-right">Aksiyon</th>
                 </tr>
@@ -48,13 +49,23 @@
                                 <div class="w-9 h-9 rounded-xl bg-gradient-to-br from-primary-500/20 to-primary-700/20 border border-primary-500/20 flex items-center justify-center shrink-0">
                                     <span class="text-primary-300 font-semibold text-xs" x-text="(acc.email || '').slice(0,2).toUpperCase()"></span>
                                 </div>
-                                <span class="font-medium text-white truncate" x-text="acc.email"></span>
+                                <div class="min-w-0">
+                                    <span class="font-medium text-white truncate block" x-text="acc.email"></span>
+                                    <span x-show="acc.is_superuser" class="text-[10px] text-amber-400/90 uppercase tracking-wide">Kurulum yöneticisi</span>
+                                </div>
                             </div>
                         </td>
                         <td data-label="Kullanıcı" class="text-slate-400" x-text="acc.username"></td>
                         <td data-label="Domain" class="text-slate-400" x-text="acc.domain || acc.domain__name || '—'"></td>
-                        <td data-label="Rol">
-                            <span class="badge badge-info" x-text="roleLabel(acc.role)"></span>
+                        <td data-label="Yetki">
+                            <div class="space-y-1">
+                                <span class="badge badge-info" x-text="roleLabel(acc.role)"></span>
+                                <p class="text-[11px] text-slate-500 max-w-[200px]" x-text="permissionHint(acc)"></p>
+                                <button type="button" class="text-xs text-primary-400 hover:text-primary-300"
+                                        @click="openRoleModal(acc)" x-show="!acc.is_superuser">
+                                    Yetkiyi değiştir
+                                </button>
+                            </div>
                         </td>
                         <td data-label="Durum">
                             <span class="badge" :class="acc.is_active ? 'badge-success' : 'badge-danger'">
@@ -69,7 +80,8 @@
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 5.636a9 9 0 010 12.728M5.636 5.636a9 9 0 000 12.728"/>
                                     </svg>
                                 </button>
-                                <button type="button" class="icon-btn hover:text-danger-400 hover:bg-danger-500/10" @click="deleteAccount(acc)" aria-label="Sil">
+                                <button type="button" class="icon-btn hover:text-danger-400 hover:bg-danger-500/10" @click="deleteAccount(acc)" aria-label="Sil"
+                                        :disabled="acc.is_superuser">
                                     <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
                                     </svg>
@@ -93,10 +105,11 @@
         <button type="button" @click="openAddModal()" class="btn btn-primary">İlk Hesabı Ekle</button>
     </div>
 
+    <!-- Yeni hesap -->
     <div x-show="showAddModal" x-cloak class="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4"
          @keydown.escape.window="showAddModal = false">
         <div class="absolute inset-0 bg-slate-950/80 backdrop-blur-sm" @click="showAddModal = false"></div>
-        <div class="relative w-full sm:max-w-md bg-slate-900 border border-slate-800 rounded-t-2xl sm:rounded-2xl p-5 sm:p-6 shadow-2xl">
+        <div class="relative w-full sm:max-w-md bg-slate-900 border border-slate-800 rounded-t-2xl sm:rounded-2xl p-5 sm:p-6 shadow-2xl max-h-[90vh] overflow-y-auto">
             <h2 class="text-lg font-semibold text-white mb-4">Yeni mail hesabı</h2>
             <div class="space-y-3">
                 <div>
@@ -115,10 +128,39 @@
                     <label class="label">Parola</label>
                     <input type="password" class="input w-full" x-model="newAccount.password" autocomplete="new-password">
                 </div>
+                <div>
+                    <label class="label">Yetki / Rol</label>
+                    <select class="input w-full" x-model="newAccount.role">
+                        <template x-for="r in roleChoices" :key="r.value">
+                            <option :value="r.value" x-text="r.label"></option>
+                        </template>
+                    </select>
+                    <p class="text-xs text-slate-500 mt-1" x-text="roleDescription(newAccount.role)"></p>
+                </div>
             </div>
             <div class="flex gap-2 mt-6">
                 <button type="button" class="btn btn-secondary flex-1" @click="showAddModal = false">İptal</button>
                 <button type="button" class="btn btn-primary flex-1" @click="createAccount()" :disabled="loading">Oluştur</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Rol düzenle -->
+    <div x-show="showRoleModal" x-cloak class="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4"
+         @keydown.escape.window="showRoleModal = false">
+        <div class="absolute inset-0 bg-slate-950/80 backdrop-blur-sm" @click="showRoleModal = false"></div>
+        <div class="relative w-full sm:max-w-md bg-slate-900 border border-slate-800 rounded-t-2xl sm:rounded-2xl p-5 sm:p-6 shadow-2xl">
+            <h2 class="text-lg font-semibold text-white mb-1">Yetki ata</h2>
+            <p class="text-sm text-slate-500 mb-4" x-text="editAccount ? editAccount.email : ''"></p>
+            <select class="input w-full" x-model="editRole">
+                <template x-for="r in roleChoices" :key="r.value">
+                    <option :value="r.value" x-text="r.label"></option>
+                </template>
+            </select>
+            <p class="text-xs text-slate-500 mt-2" x-text="roleDescription(editRole)"></p>
+            <div class="flex gap-2 mt-6">
+                <button type="button" class="btn btn-secondary flex-1" @click="showRoleModal = false">İptal</button>
+                <button type="button" class="btn btn-primary flex-1" @click="saveRole()" :disabled="loading">Kaydet</button>
             </div>
         </div>
     </div>

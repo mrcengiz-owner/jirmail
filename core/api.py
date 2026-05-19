@@ -98,20 +98,27 @@ def get_api_key():
 
 def check_auth(request, key: str = None) -> bool:
     """Key veya session ile yetki kontrolü."""
-    # Session'dan giriş yapmış kullanıcı her zaman yetkili
     if hasattr(request, 'session') and request.session.get('is_logged_in'):
         return True
-    # Key kontrolü
     expected = get_api_key()
     if expected and key == expected:
         return True
     return False
 
 
+def check_panel_auth(request, key: str = None) -> bool:
+    """Mail sunucusu paneli işlemleri — süper yönetici veya API anahtarı."""
+    from jir_core.dashboard_auth import session_has_panel_access
+
+    if hasattr(request, 'session') and request.session.get('is_logged_in'):
+        return session_has_panel_access(request)
+    return check_auth(request, key)
+
+
 @router.get("/list-accounts", summary="Tüm Mail Hesaplarını Listele")
 def list_mail_accounts(request, key: str = None):
-    if not check_auth(request, key):
-        return {"status": "error", "message": "Yetkisiz erişim!"}
+    if not check_panel_auth(request, key):
+        return {"status": "error", "message": "Yetkiniz yok. Süper yönetici yetkisi gerekir."}
 
     accounts = MailAccount.objects.select_related('domain').all()
     config = SystemConfig.objects.first()
@@ -127,6 +134,8 @@ def list_mail_accounts(request, key: str = None):
             "quota_mb": acc.quota_mb,
             "role": acc.role,
             "role_display": acc.get_role_display(),
+            "is_superuser": acc.is_bootstrap_admin(),
+            "permissions": acc.permissions_summary(),
         } for acc in accounts
     ]
 
@@ -142,8 +151,8 @@ def list_mail_accounts(request, key: str = None):
 
 @router.patch("/toggle-account/{email}", summary="Hesabı Aktif/Pasif Yap")
 def toggle_account(request, email: str, key: str = None):
-    if not check_auth(request, key):
-        return {"status": "error", "message": "Yetkisiz erişim!"}
+    if not check_panel_auth(request, key):
+        return {"status": "error", "message": "Yetkiniz yok. Süper yönetici yetkisi gerekir."}
 
     try:
         account = MailAccount.objects.get(email=email)
@@ -158,8 +167,8 @@ def toggle_account(request, email: str, key: str = None):
 
 @router.patch("/update-quota/{email}", summary="Hesap Kota Güncelle")
 def update_quota(request, email: str, key: str = None, data: QuotaUpdateSchema = None):
-    if not check_auth(request, key):
-        return {"status": "error", "message": "Yetkisiz erişim!"}
+    if not check_panel_auth(request, key):
+        return {"status": "error", "message": "Yetkiniz yok. Süper yönetici yetkisi gerekir."}
 
     try:
         account = MailAccount.objects.get(email=email)
@@ -173,21 +182,43 @@ def update_quota(request, email: str, key: str = None, data: QuotaUpdateSchema =
         return {"status": "error", "message": "Hesap bulunamadı."}
 
 
+def _active_full_admin_count() -> int:
+    return MailAccount.objects.filter(role=MailRole.FULL_ACCESS, is_active=True).count()
+
+
 @router.patch("/update-role/{email}", summary="Hesap Rol Güncelle")
 def update_role(request, email: str, key: str = None, data: RoleUpdateSchema = None):
-    if not check_auth(request, key):
-        return {"status": "error", "message": "Yetkisiz erişim!"}
+    if not check_panel_auth(request, key):
+        return {"status": "error", "message": "Yetkiniz yok. Süper yönetici yetkisi gerekir."}
 
     valid_roles = [choice[0] for choice in MailRole.choices]
-    if data.role not in valid_roles:
+    new_role = (data.role or '').upper()
+    if new_role not in valid_roles:
         return {"status": "error", "message": f"Geçersiz rol. Geçerli: {valid_roles}"}
 
     try:
         account = MailAccount.objects.get(email=email)
-        account.role = data.role
-        account.save()
+        if account.role == MailRole.FULL_ACCESS and new_role != MailRole.FULL_ACCESS:
+            if _active_full_admin_count() <= 1:
+                return {
+                    "status": "error",
+                    "message": "Son süper yöneticinin yetkisi kaldırılamaz.",
+                }
+        if account.is_bootstrap_admin() and new_role != MailRole.FULL_ACCESS:
+            return {
+                "status": "error",
+                "message": "Kurulum yöneticisinin süper yönetici yetkisi değiştirilemez.",
+            }
 
-        return {"status": "success", "message": f"Rol '{account.get_role_display()}' olarak güncellendi.", "role": account.role}
+        account.role = new_role
+        account.save(update_fields=['role'])
+
+        return {
+            "status": "success",
+            "message": f"Rol '{account.get_role_display()}' olarak güncellendi.",
+            "role": account.role,
+            "permissions": account.permissions_summary(),
+        }
     except MailAccount.DoesNotExist:
         return {"status": "error", "message": "Hesap bulunamadı."}
 
@@ -288,11 +319,15 @@ def update_account(request, email: str, key: str = None, data: AccountUpdateSche
 
 @router.delete("/delete-account/{email}", summary="Hesap Sil")
 def delete_account(request, email: str, key: str = None):
-    if not check_auth(request, key):
-        return {"status": "error", "message": "Yetkisiz erişim!"}
+    if not check_panel_auth(request, key):
+        return {"status": "error", "message": "Yetkiniz yok. Süper yönetici yetkisi gerekir."}
 
     try:
         account = MailAccount.objects.get(email=email)
+        if account.is_bootstrap_admin():
+            return {"status": "error", "message": "Kurulum yöneticisi silinemez."}
+        if account.role == MailRole.FULL_ACCESS and _active_full_admin_count() <= 1:
+            return {"status": "error", "message": "Son süper yönetici silinemez."}
         update_postfix_vmail(email, action="remove")
         account.delete()
 

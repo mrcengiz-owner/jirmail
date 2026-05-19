@@ -17,7 +17,7 @@ from webmail.portal_views import mail_panel_redirect
 from monitoring.api import router as monitoring_router
 from monitoring.api import logs_stream
 from management.views import (
-    dashboard, setup, login, login_success, logout_view,
+    dashboard, setup, login, login_success, logout_view, forbidden_view,
     domains_view, accounts_view, containers_view, backups_view, logs_view, settings_view,
 )
 from management.views import is_installed as check_installed
@@ -34,9 +34,14 @@ api.add_router("/monitoring/", monitoring_router)
 
 
 def root_redirect(request):
-    if check_installed():
-        return redirect('dashboard')
-    return redirect('setup')
+    if not check_installed():
+        return redirect('setup')
+    if request.session.get('is_logged_in'):
+        from jir_core.dashboard_auth import session_has_panel_access
+        if session_has_panel_access(request):
+            return redirect('dashboard')
+        return redirect('webmail:inbox')
+    return redirect('login')
 
 
 def favicon(request):
@@ -67,6 +72,7 @@ urlpatterns = [
     path('login/', login, name='login'),
     path('login-success/', login_success, name='login_success'),
     path('logout/', logout_view, name='logout'),
+    path('yetkisiz/', forbidden_view, name='forbidden'),
     path('webmail/', include('webmail.urls')),
     path('mail-panel/', mail_panel_redirect, name='mail_panel'),
     path('favicon.ico', favicon),

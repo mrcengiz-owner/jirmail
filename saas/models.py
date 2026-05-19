@@ -15,6 +15,11 @@ class SystemConfig(models.Model):
     instance_id = models.UUIDField(default=uuid.uuid4, unique=True)
     is_installed = models.BooleanField(default=False)
     jir_local_key = models.CharField(max_length=64, blank=True, null=True)
+    bootstrap_admin_email = models.EmailField(
+        blank=True,
+        default='',
+        help_text='Kurulumda oluşturulan süper yönetici e-postası (değiştirilemez işaret)',
+    )
 
     db_engine = models.CharField(
         max_length=50,

@@ -50,7 +50,7 @@ def inbox(request):
     ctx = {
         'email': request.session.get('email', ''),
         'role': request.session.get('role', ''),
-        'is_admin': request.session.get('role') == 'FULL',
+        'is_admin': bool(request.session.get('can_access_panel')),
         'ai_enabled': ai_on,
     }
     return TemplateResponse(request, 'webmail/pages/inbox.html', ctx)

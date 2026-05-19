@@ -3,7 +3,8 @@ import secrets
 
 
 class MailRole(models.TextChoices):
-    FULL_ACCESS = 'FULL', 'Tam Erişim'
+    FULL_ACCESS = 'FULL', 'Süper Yönetici'
+    WEBMAIL_USER = 'USER', 'Webmail Kullanıcısı'
     SEND_ONLY = 'SEND', 'Sadece Gönderme'
     RECEIVE_ONLY = 'RECV', 'Sadece Alma'
     EXTERNAL_BLOCK = 'BLOCK', 'Şirket İçi'
@@ -108,7 +109,7 @@ class MailAccount(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
 
     quota_bytes = models.BigIntegerField(default=52428800, help_text="Kota bayt cinsinden (50MB = 52428800, 0 = sınırsız)")
-    role = models.CharField(max_length=10, choices=MailRole.choices, default=MailRole.FULL_ACCESS)
+    role = models.CharField(max_length=10, choices=MailRole.choices, default=MailRole.WEBMAIL_USER)
 
     signature = models.TextField(blank=True, default='', help_text="Email imzası")
     auto_responder_enabled = models.BooleanField(default=False)
@@ -131,6 +132,29 @@ class MailAccount(models.Model):
 
     def __str__(self):
         return self.email
+
+    @property
+    def can_access_panel(self) -> bool:
+        from jir_core.permissions import can_access_panel
+        return can_access_panel(self.role)
+
+    def is_bootstrap_admin(self) -> bool:
+        """Kurulum sırasında oluşturulan ilk süper yönetici hesabı."""
+        try:
+            from saas.models import SystemConfig
+            cfg = SystemConfig.objects.first()
+            bootstrap = (getattr(cfg, 'bootstrap_admin_email', None) or '').strip().lower()
+            if bootstrap:
+                return self.email.lower() == bootstrap
+        except Exception:
+            pass
+        return False
+
+    def permissions_summary(self) -> dict:
+        from jir_core.permissions import role_permissions
+        data = role_permissions(self.role)
+        data['is_superuser'] = self.is_bootstrap_admin()
+        return data
 
     @property
     def ai_available(self) -> bool:

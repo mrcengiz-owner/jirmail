@@ -918,13 +918,24 @@
                     return fallback;
                 }
             }
+            var defaultRoles = [
+                { value: 'FULL', label: 'Süper Yönetici', description: 'Mail sunucusu paneli + webmail.' },
+                { value: 'USER', label: 'Webmail Kullanıcısı', description: 'Yalnızca webmail; panele erişim yok.' },
+                { value: 'SEND', label: 'Yalnızca Gönderme', description: 'Webmail; gönderim açık.' },
+                { value: 'RECV', label: 'Yalnızca Alma', description: 'Webmail; gelen kutusu açık.' },
+                { value: 'BLOCK', label: 'Şirket İçi', description: 'Webmail; dış gönderim kapalı.' }
+            ];
             return {
                 JIR_KEY: window.JIR_KEY || '',
                 accounts: parseJsonScript('accounts-bootstrap', []),
+                roleChoices: parseJsonScript('role-choices', defaultRoles),
                 domains: window.DOMAINS || [],
                 showAddModal: false,
+                showRoleModal: false,
+                editAccount: null,
+                editRole: 'USER',
                 loading: false,
-                newAccount: { username: '', domain: '', password: '', role: 'FULL' },
+                newAccount: { username: '', domain: '', password: '', role: 'USER' },
 
                 init: function() {
                     if (!this.domains.length) {
@@ -957,9 +968,50 @@
                         username: '',
                         domain: this.domains[0] || '',
                         password: '',
-                        role: 'FULL'
+                        role: 'USER'
                     };
                     this.showAddModal = true;
+                },
+
+                openRoleModal: function(acc) {
+                    this.editAccount = acc;
+                    this.editRole = acc.role || 'USER';
+                    this.showRoleModal = true;
+                },
+
+                saveRole: function() {
+                    var self = this;
+                    if (!this.editAccount) return;
+                    this.loading = true;
+                    fetch('/api/core/update-role/' + encodeURIComponent(this.editAccount.email) + '?key=' + encodeURIComponent(self.JIR_KEY), {
+                        method: 'PATCH',
+                        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': window.getCsrfToken() },
+                        credentials: 'same-origin',
+                        body: JSON.stringify({ role: this.editRole })
+                    })
+                        .then(function(r) { return r.json(); })
+                        .then(function(data) {
+                            if (data.status === 'success') {
+                                self.showRoleModal = false;
+                                window.showToast('Yetki güncellendi', 'success');
+                                self.refreshAccounts();
+                            } else {
+                                window.showToast(data.message || 'Güncellenemedi', 'error');
+                            }
+                        })
+                        .catch(function() { window.showToast('Bağlantı hatası', 'error'); })
+                        .finally(function() { self.loading = false; });
+                },
+
+                roleDescription: function(role) {
+                    var r = (this.roleChoices || []).find(function(x) { return x.value === role; });
+                    return r ? r.description : '';
+                },
+
+                permissionHint: function(acc) {
+                    var p = acc.permissions || {};
+                    if (p.can_access_panel) return 'Mail sunucusu paneli + webmail';
+                    return 'Yalnızca webmail';
                 },
 
                 createAccount: function() {
@@ -977,7 +1029,7 @@
                             username: this.newAccount.username,
                             domain: this.newAccount.domain,
                             password: this.newAccount.password,
-                            role: this.newAccount.role || 'FULL'
+                            role: this.newAccount.role || 'USER'
                         })
                     })
                         .then(function(r) {
@@ -1022,6 +1074,10 @@
                 },
 
                 deleteAccount: function(acc) {
+                    if (acc.is_superuser) {
+                        window.showToast('Kurulum yöneticisi silinemez.', 'warning');
+                        return;
+                    }
                     if (!confirm(acc.email + ' hesabı silinsin mi?')) return;
                     var self = this;
                     fetch('/api/core/delete-account/' + encodeURIComponent(acc.email) + '?key=' + encodeURIComponent(self.JIR_KEY), {
@@ -1043,7 +1099,13 @@
                 },
 
                 roleLabel: function(role) {
-                    var labels = { FULL: 'Tam erişim', SEND: 'Yalnız gönder', RECV: 'Yalnız al', BLOCK: 'Dahili' };
+                    var labels = {
+                        FULL: 'Süper Yönetici',
+                        USER: 'Webmail',
+                        SEND: 'Yalnız gönder',
+                        RECV: 'Yalnız al',
+                        BLOCK: 'Dahili'
+                    };
                     return labels[role] || role;
                 }
             };
