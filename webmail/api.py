@@ -25,6 +25,7 @@ from .imap_client import (
 )
 from .models import MailFolder, MailMessageCache, MailOutboundLog
 from .sender import purge_blocked_inbound_cache, sender_info_from_cache_row, should_block_inbound
+from .recipients import parse_recipient_list
 from .smtp_client import send_mail
 from .sse import webmail_sse_response
 
@@ -308,12 +309,15 @@ def send(request: HttpRequest, data: SendMailSchema):
                 ),
             }
 
-        to_list = [x.strip() for x in data.to.split(',') if x.strip()]
+        to_list = parse_recipient_list(data.to)
         if not to_list:
-            return {'success': False, 'message': 'En az bir alıcı gerekli.'}
+            return {
+                'success': False,
+                'message': 'Geçerli en az bir alıcı gerekli (ör. isim@domain.com).',
+            }
 
-        cc_list = [x.strip() for x in data.cc.split(',') if x.strip()] if data.cc else None
-        bcc_list = [x.strip() for x in data.bcc.split(',') if x.strip()] if data.bcc else None
+        cc_list = parse_recipient_list(data.cc) or None
+        bcc_list = parse_recipient_list(data.bcc) or None
 
         snippet = (data.body_text or data.body_html or '')[:480]
         log_row = None
@@ -624,9 +628,9 @@ def send_with_attachments(request: HttpRequest):
         to_raw = request.POST.get('to', '')
         subject = request.POST.get('subject', '')
         body_text = request.POST.get('body_text', '')
-        to_list = [x.strip() for x in to_raw.split(',') if x.strip()]
+        to_list = parse_recipient_list(to_raw)
         if not to_list:
-            return {'success': False, 'message': 'Alıcı gerekli.'}
+            return {'success': False, 'message': 'Geçerli alıcı gerekli (ör. isim@domain.com).'}
 
         attachments = []
         for f in request.FILES.getlist('attachments'):

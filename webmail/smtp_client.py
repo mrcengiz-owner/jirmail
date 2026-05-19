@@ -18,6 +18,7 @@ from django.conf import settings
 
 from management.mail_service_endpoint import resolve_mail_endpoint
 from management.mail_tls import smtp_starttls_required, smtp_tls_context
+from webmail.recipients import parse_recipient_list
 
 
 def _smtp_auth_supported(smtp: smtplib.SMTP) -> bool:
@@ -80,12 +81,21 @@ def send_mail(account, password: str, *, to: list[str] | str, subject: str, body
             auth_submission=True,
         )
 
+        if isinstance(to, list):
+            to_addrs = parse_recipient_list(', '.join(to))
+        else:
+            to_addrs = parse_recipient_list(str(to or ''))
+        cc_addrs = parse_recipient_list(', '.join(cc)) if cc else []
+        bcc_addrs = parse_recipient_list(', '.join(bcc)) if bcc else []
+
         msg = EmailMessage()
         local_part = account.email.split('@')[0] if '@' in account.email else account.email
         msg['From'] = formataddr((local_part, account.email))
-        msg['To'] = ', '.join(to) if isinstance(to, list) else to
-        if cc:
-            msg['Cc'] = ', '.join(cc)
+        msg['To'] = ', '.join(to_addrs)
+        if cc_addrs:
+            msg['Cc'] = ', '.join(cc_addrs)
+        if bcc_addrs:
+            msg['Bcc'] = ', '.join(bcc_addrs)
         msg['Subject'] = subject or ''
         msg['Message-ID'] = make_msgid(domain=_message_id_domain(account))
 
@@ -101,15 +111,9 @@ def send_mail(account, password: str, *, to: list[str] | str, subject: str, body
                 filename=att.get('filename', 'file'),
             )
 
-        recipients = []
-        if isinstance(to, list):
-            recipients.extend(to)
-        else:
-            recipients.append(to)
-        if cc:
-            recipients.extend(cc)
-        if bcc:
-            recipients.extend(bcc)
+        recipients = list(to_addrs)
+        recipients.extend(cc_addrs)
+        recipients.extend(bcc_addrs)
 
         if not recipients:
             return {'success': False, 'message': 'En az bir alıcı gerekli.'}

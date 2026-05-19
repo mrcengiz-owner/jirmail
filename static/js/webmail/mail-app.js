@@ -276,6 +276,10 @@ document.addEventListener('alpine:init', function() {
                     showToast('Alıcı ve konu zorunlu', 'warning');
                     return;
                 }
+                if (self.composeCc && self.composeCc.trim() && self.composeCc.indexOf('@') < 0) {
+                    showToast('Bilgi (Cc) alanına tam e-posta yazın veya boş bırakın', 'warning');
+                    return;
+                }
                 if (self.scheduleAt) {
                     return self.scheduleMail();
                 }
