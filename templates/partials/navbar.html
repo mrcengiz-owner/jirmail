@@ -5,9 +5,12 @@
 
     <!-- Left: hamburger (mobile) + breadcrumb -->
     <div class="flex items-center gap-2 min-w-0">
-        <button @click="sidebarOpen = !sidebarOpen"
-                aria-label="Menüyü aç"
-                class="md:hidden icon-btn -ml-1">
+        <button type="button"
+                @click="toggleSidebar()"
+                :aria-expanded="sidebarOpen || !sidebarCollapsed"
+                aria-label="Kenar çubuğunu aç/kapat"
+                class="icon-btn -ml-1 shrink-0"
+                title="Menü">
             <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
             </svg>

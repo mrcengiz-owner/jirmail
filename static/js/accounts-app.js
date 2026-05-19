@@ -39,6 +39,10 @@
             newAccount: { username: '', domain: '', password: '', role: 'USER' },
 
             init: function() {
+                var roles = parseJsonScript('role-choices', null);
+                if (Array.isArray(roles) && roles.length) {
+                    this.roleChoices = roles;
+                }
                 if (!this.domains.length) {
                     var d = parseJsonScript('domains-bootstrap', null);
                     if (Array.isArray(d)) {
@@ -47,6 +51,10 @@
                 }
                 if (this.domains.length && !this.newAccount.domain) {
                     this.newAccount.domain = this.domains[0];
+                }
+                var boot = parseJsonScript('accounts-bootstrap', null);
+                if (Array.isArray(boot)) {
+                    this.accounts = boot;
                 }
                 this.refreshAccounts();
             },

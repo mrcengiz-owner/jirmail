@@ -65,7 +65,8 @@
     }
     .accounts-modal-sheet__body {
         flex: 1 1 auto;
-        min-height: 0;
+        min-height: 6rem;
+        max-height: calc(min(88dvh, 88vh) - 9.5rem);
         overflow-y: auto;
         padding: 0.875rem 1rem;
         -webkit-overflow-scrolling: touch;
@@ -108,7 +109,7 @@
 {% endblock %}
 
 {% block extra_deferred_scripts %}
-<script defer src="{% static 'js/accounts-app.js' %}?v=20260519e"></script>
+<script defer src="{% static 'js/accounts-app.js' %}?v=20260519f"></script>
 {% endblock %}
 
 {% block content %}
@@ -263,6 +264,9 @@
             </div>
             <div class="accounts-modal-sheet__body">
                 <p class="text-xs text-slate-500 mb-2">Bir rol seçin:</p>
+                <p x-show="!roleChoices || roleChoices.length === 0" class="text-sm text-slate-500 py-3 text-center">
+                    Rol listesi yüklenemedi. Sayfayı yenileyin.
+                </p>
                 <template x-for="r in roleChoices" :key="r.value">
                     <button type="button" class="accounts-role-opt" :class="editRole === r.value ? 'is-active' : ''" @click="selectRole(r.value)">
                         <div class="accounts-role-opt__label" x-text="r.label"></div>

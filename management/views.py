@@ -337,9 +337,9 @@ def accounts_view(request):
     return render(request, 'pages/accounts.html', {
         'JIR_LOCAL_KEY': get_jir_key(),
         'domains_json': domains_json,
-        'accounts_bootstrap': json.dumps(accounts),
+        'accounts_bootstrap': accounts,
         'domains_list': json.dumps(domains_json),
-        'role_choices_json': json.dumps(ROLE_CHOICES_FOR_UI),
+        'role_choices_json': ROLE_CHOICES_FOR_UI,
         'current_page': 'accounts',
     })
 
