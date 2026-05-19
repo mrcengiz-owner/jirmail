@@ -278,6 +278,18 @@ class SendMailSchema(Schema):
     bcc: str = ''
 
 
+def _sanitize_send_result(result: dict) -> dict:
+    """SMTP yanıtını JSON-safe hale getir (bytes vb. kaldır)."""
+    if not isinstance(result, dict):
+        return {'success': False, 'message': 'Geçersiz gönderim yanıtı'}
+    safe = {}
+    for key, val in result.items():
+        if key == 'raw_message' or isinstance(val, (bytes, bytearray)):
+            continue
+        safe[key] = val
+    return safe
+
+
 @router.post('/send', summary='Mail gönder')
 def send(request: HttpRequest, data: SendMailSchema):
     import logging
@@ -345,7 +357,7 @@ def send(request: HttpRequest, data: SendMailSchema):
                 log_row.error_message = (result.get('message') or '')[:2000]
                 log_row.save(update_fields=['status', 'error_message'])
 
-        return result
+        return _sanitize_send_result(result)
     except Exception as exc:
         log.exception('POST /api/mail/send')
         return {'success': False, 'message': f'Gönderim hatası: {exc}'}
@@ -624,13 +636,14 @@ def send_with_attachments(request: HttpRequest):
                 'content': f.read(),
             })
 
-        return send_mail(
+        result = send_mail(
             account, password,
             to=to_list,
             subject=subject,
             body_text=body_text,
             attachments=attachments or None,
         )
+        return _sanitize_send_result(result)
     except Exception as exc:
         log.exception('POST /api/mail/send-attachments')
         return {'success': False, 'message': f'Gönderim hatası: {exc}'}

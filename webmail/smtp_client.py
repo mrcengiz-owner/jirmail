@@ -128,7 +128,8 @@ def send_mail(account, password: str, *, to: list[str] | str, subject: str, body
                 msg=msg,
                 recipients=recipients,
             )
-        out = {'success': True, 'message_id': msg['Message-ID'], 'raw_message': raw_bytes}
+        # raw_bytes yalnızca IMAP Sent append için; API JSON yanıtına eklenmez (bytes → 500).
+        out = {'success': True, 'message_id': msg['Message-ID']}
         if password:
             try:
                 from webmail.imap_client import append_message_to_sent, sync_folder_metadata
