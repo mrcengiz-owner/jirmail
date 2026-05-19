@@ -84,6 +84,10 @@
 </style>
 {% endblock %}
 
+{% block extra_deferred_scripts %}
+<script defer src="{% static 'js/accounts-app.js' %}?v=20260519b"></script>
+{% endblock %}
+
 {% block content %}
 <div class="page" x-data="accountsApp()" x-init="init()">
 
