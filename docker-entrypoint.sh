@@ -30,6 +30,8 @@ echo "=== Running migrations ==="
 python manage.py migrate --noinput
 
 if [ "${JIR_COMPOSE_STACK}" = "1" ]; then
+    echo "=== Deploy: tüm stack servislerini yeniden başlat ==="
+    python manage.py restart_compose_stack_on_deploy --quiet || true
     echo "=== Mail kutuları (Maildir) + Postfix eşlemesi ==="
     python manage.py provision_mail_stack 2>/dev/null || true
     echo "=== Mail stack otomatik doğrulama ve onarım ==="

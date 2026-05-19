@@ -30,6 +30,7 @@ services:
       MAIL_TLS_MODE: e2e
       MAIL_TLS_CA_FILE: /etc/jir-mail/tls/ca.crt
       JIR_LOCAL_KEY: ${JIR_LOCAL_KEY:-change-me}
+      JIR_AUTO_RESTART_STACK_ON_DEPLOY: ${JIR_AUTO_RESTART_STACK_ON_DEPLOY:-1}
       PYTHONUNBUFFERED: "1"
       DEBUG: "False"
     volumes:

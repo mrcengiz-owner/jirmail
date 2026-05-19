@@ -7,7 +7,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+ENV PIP_DEFAULT_TIMEOUT=180 \
+    PIP_RETRIES=10
+RUN pip install --no-cache-dir --timeout=180 --retries=10 -r requirements.txt
 
 COPY . .
 

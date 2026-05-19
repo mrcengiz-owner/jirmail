@@ -53,6 +53,19 @@ Sunucuda `git clone` + `docker compose up` **yapmayın** — PaaS deploy etsin. 
 4. Deploy; ilk açılışta `/setup/` sihirbazı
 5. DNS: `A` mail → sunucu IP; SMTP 25/587, IMAP 993 firewall’da açık
 
+**Her deploy’da tüm servislerin yeniden başlaması (manuel işlem yok):**
+
+- Django `entrypoint` her açılışta `restart_compose_stack_on_deploy` çalıştırır → postfix, dovecot, celery, redis, postgres yeniden başlar (`JIR_AUTO_RESTART_STACK_ON_DEPLOY=1`, varsayılan açık).
+- İsteğe bağlı Dokploy **Custom Deploy Command** (Compose ayarları):
+
+```bash
+bash scripts/dokploy-deploy.sh
+```
+
+Bu komut `docker compose up -d --build --force-recreate --remove-orphans` kullanır; imajları yeniden derler ve tüm konteynerleri sıfırdan oluşturur.
+
+**Build sırasında `pip … Read timed out`:** Dockerfile’da pip zaman aşımı 180s / 10 deneme ayarlıdır; yine olursa Dokploy’da redeploy deneyin veya sunucuda PyPI erişimini kontrol edin.
+
 **404 (Traefik “page not found”) ama `docker exec dokploy-traefik wget … jir_django:8000` → 200:**
 
 Dokploy bazen domain’i konteyner etiketine yazar, Traefik **file** provider’a eklemez. Kontrol:
