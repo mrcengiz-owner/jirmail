@@ -64,6 +64,11 @@
                     });
             },
 
+            closeAddModal: function() {
+                this.showAddModal = false;
+                if (!this.showRoleModal) document.body.style.overflow = '';
+            },
+
             openAddModal: function() {
                 this.newAccount = {
                     username: '',
@@ -72,6 +77,7 @@
                     role: 'USER'
                 };
                 this.showAddModal = true;
+                document.body.style.overflow = 'hidden';
             },
 
             openRoleModal: function(acc) {
@@ -260,6 +266,7 @@
         Alpine.data('accountsApp', accountsAppFactory);
     }
 
+    window.accountsApp = accountsAppFactory;
     document.addEventListener('alpine:init', registerAccountsApp);
     if (typeof Alpine !== 'undefined') {
         registerAccountsApp();

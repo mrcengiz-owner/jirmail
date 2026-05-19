@@ -8,95 +8,121 @@
     window.JIR_KEY = "{{ JIR_LOCAL_KEY|escapejs }}";
     window.DOMAINS = {{ domains_list|safe }};
 </script>
-{{ accounts_bootstrap|json_script:"accounts-bootstrap" }}
-{{ role_choices_json|json_script:"role-choices" }}
 <style>
-    .btn-permission {
+    .accounts-page .btn-permission {
         display: inline-flex;
         align-items: center;
         justify-content: center;
         gap: 0.35rem;
-        padding: 0.4rem 0.75rem;
-        font-size: 0.7rem;
+        padding: 0.45rem 0.85rem;
+        font-size: 0.72rem;
         font-weight: 600;
-        letter-spacing: 0.02em;
         color: #fff;
-        border: 1px solid rgb(139 92 246 / 0.45);
+        border: 1px solid rgb(139 92 246 / 0.5);
         border-radius: 0.65rem;
         background: linear-gradient(135deg, #8b5cf6 0%, #6366f1 45%, #3b82f6 100%);
         box-shadow: 0 4px 14px rgb(99 102 241 / 0.35);
-        transition: filter 0.2s, transform 0.15s, box-shadow 0.2s;
         white-space: nowrap;
+        cursor: pointer;
     }
-    .btn-permission:hover:not(:disabled) {
-        filter: brightness(1.1);
-        transform: translateY(-1px);
-        box-shadow: 0 6px 20px rgb(99 102 241 / 0.45);
+    .accounts-page .btn-permission:hover:not(:disabled) { filter: brightness(1.08); }
+    .accounts-page .btn-permission:disabled { opacity: 0.45; cursor: not-allowed; }
+
+    /* Modal — viewport içinde, kaydırılabilir gövde */
+    .accounts-modal-backdrop {
+        position: fixed;
+        inset: 0;
+        z-index: 9999;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 0.75rem;
+        padding-bottom: calc(0.75rem + var(--safe-bottom, 0px));
+        background: rgb(0 0 0 / 0.65);
+        backdrop-filter: blur(6px);
+        -webkit-backdrop-filter: blur(6px);
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
     }
-    .btn-permission:disabled { opacity: 0.45; cursor: not-allowed; }
-    .permission-modal-backdrop {
-        background: rgb(2 6 23 / 0.85);
-        backdrop-filter: blur(8px);
+    .accounts-modal-sheet {
+        width: 100%;
+        max-width: 26rem;
+        max-height: min(88dvh, 88vh);
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+        margin: auto;
+        background: linear-gradient(165deg, #0f172a, #1e1b4b);
+        border: 1px solid rgb(99 102 241 / 0.35);
+        border-radius: 1rem;
+        box-shadow: 0 25px 50px -12px rgb(0 0 0 / 0.55);
+        overflow: hidden;
     }
-    .permission-modal-panel {
-        background: linear-gradient(165deg, rgb(15 23 42) 0%, rgb(15 23 42 / 0.98) 40%, rgb(30 27 75 / 0.15) 100%);
-        border: 1px solid rgb(99 102 241 / 0.25);
-        box-shadow: 0 25px 50px -12px rgb(0 0 0 / 0.5), 0 0 0 1px rgb(139 92 246 / 0.1);
-    }
-    .permission-modal-header {
-        background: linear-gradient(90deg, rgb(139 92 246 / 0.15), rgb(59 130 246 / 0.08));
+    .accounts-modal-sheet__head {
+        flex-shrink: 0;
+        padding: 0.875rem 1rem;
         border-bottom: 1px solid rgb(51 65 85 / 0.6);
     }
-    .role-option {
+    .accounts-modal-sheet__body {
+        flex: 1 1 auto;
+        min-height: 0;
+        overflow-y: auto;
+        padding: 0.875rem 1rem;
+        -webkit-overflow-scrolling: touch;
+    }
+    .accounts-modal-sheet__foot {
+        flex-shrink: 0;
+        display: flex;
+        gap: 0.5rem;
+        padding: 0.875rem 1rem;
+        border-top: 1px solid rgb(51 65 85 / 0.6);
+        background: rgb(15 23 42 / 0.95);
+    }
+    .accounts-role-opt {
         display: block;
         width: 100%;
         text-align: left;
-        padding: 0.85rem 1rem;
-        border-radius: 0.75rem;
-        border: 1px solid rgb(51 65 85 / 0.8);
-        background: rgb(15 23 42 / 0.6);
-        transition: border-color 0.2s, background 0.2s, box-shadow 0.2s;
+        padding: 0.625rem 0.75rem;
+        margin-bottom: 0.375rem;
+        border-radius: 0.625rem;
+        border: 1px solid rgb(71 85 105 / 0.75);
+        background: rgb(15 23 42 / 0.9);
         cursor: pointer;
     }
-    .role-option:hover { border-color: rgb(99 102 241 / 0.5); background: rgb(30 41 59 / 0.5); }
-    .role-option--active {
-        border-color: rgb(139 92 246 / 0.7);
-        background: linear-gradient(135deg, rgb(139 92 246 / 0.12), rgb(59 130 246 / 0.08));
-        box-shadow: 0 0 0 1px rgb(139 92 246 / 0.25), inset 0 1px 0 rgb(255 255 255 / 0.05);
+    .accounts-role-opt.is-active {
+        border-color: rgb(167 139 250 / 0.7);
+        background: rgb(139 92 246 / 0.12);
     }
-    .role-option__title { font-weight: 600; color: #f1f5f9; font-size: 0.875rem; }
-    .role-option__desc { font-size: 0.75rem; color: #94a3b8; margin-top: 0.25rem; line-height: 1.35; }
-    .role-option__perms { display: flex; flex-wrap: wrap; gap: 0.35rem; margin-top: 0.5rem; }
-    .role-perm-pill {
-        font-size: 0.65rem;
-        padding: 0.15rem 0.45rem;
+    .accounts-role-opt__label { font-size: 0.8125rem; font-weight: 600; color: #f1f5f9; }
+    .accounts-role-opt__hint { font-size: 0.6875rem; color: #94a3b8; margin-top: 0.15rem; line-height: 1.35; }
+    .accounts-role-opt__tags { display: flex; flex-wrap: wrap; gap: 0.25rem; margin-top: 0.35rem; }
+    .accounts-tag {
+        font-size: 0.625rem;
+        padding: 0.1rem 0.4rem;
         border-radius: 9999px;
-        background: rgb(51 65 85 / 0.6);
+        background: rgb(51 65 85 / 0.65);
         color: #cbd5e1;
     }
-    .role-perm-pill--on { background: rgb(16 185 129 / 0.2); color: #6ee7b7; }
-    .btn-save-permission {
-        background: linear-gradient(135deg, #8b5cf6 0%, #6366f1 50%, #3b82f6 100%);
-        border: 1px solid rgb(139 92 246 / 0.4);
-        box-shadow: 0 4px 16px rgb(99 102 241 / 0.4);
-    }
-    .btn-save-permission:hover:not(:disabled) { filter: brightness(1.08); }
+    .accounts-tag.on { background: rgb(16 185 129 / 0.2); color: #6ee7b7; }
 </style>
 {% endblock %}
 
 {% block extra_deferred_scripts %}
-<script defer src="{% static 'js/accounts-app.js' %}?v=20260519b"></script>
+<script defer src="{% static 'js/accounts-app.js' %}?v=20260519e"></script>
 {% endblock %}
 
 {% block content %}
-<div class="page" x-data="accountsApp()" x-init="init()">
+{{ accounts_bootstrap|json_script:"accounts-bootstrap" }}
+{{ role_choices_json|json_script:"role-choices" }}
+
+<div class="page accounts-page" x-data="accountsApp()" x-init="init()">
 
     <header class="page-header">
         <div class="min-w-0">
             <h1 class="section-title">Mail Hesapları</h1>
-            <p class="section-subtitle">Kullanıcıları oluşturun; mail sunucusu paneli veya yalnızca webmail yetkisi atayın</p>
+            <p class="section-subtitle">Kullanıcıları oluşturun; panel veya yalnızca webmail yetkisi atayın</p>
         </div>
-        <button type="button" class="btn btn-primary" @click="openAddModal()" :disabled="loading">
+        <button type="button" class="btn btn-primary shrink-0" @click="openAddModal()" :disabled="loading">
             <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
             </svg>
@@ -104,15 +130,14 @@
         </button>
     </header>
 
-    <div x-show="accounts.length > 0" x-cloak
-         class="bg-slate-900/40 md:bg-slate-900/50 rounded-2xl md:border border-slate-800/70 md:overflow-hidden">
+    <div x-show="accounts.length > 0" class="bg-slate-900/40 md:bg-slate-900/50 rounded-2xl md:border border-slate-800/70 md:overflow-hidden">
         <table class="responsive-table">
             <thead>
                 <tr>
                     <th>E-posta</th>
                     <th>Kullanıcı</th>
                     <th>Domain</th>
-                    <th>Yetki / Rol</th>
+                    <th>Yetki</th>
                     <th>Durum</th>
                     <th class="text-right">Aksiyon</th>
                 </tr>
@@ -121,36 +146,30 @@
                 <template x-for="acc in accounts" :key="acc.email">
                     <tr class="hover:bg-slate-800/30 transition-colors">
                         <td data-label="E-posta">
-                            <div class="flex items-center gap-2 md:gap-3">
-                                <div class="w-9 h-9 rounded-xl bg-gradient-to-br from-primary-500/20 to-primary-700/20 border border-primary-500/20 flex items-center justify-center shrink-0">
+                            <div class="flex items-center gap-2 md:gap-3 min-w-0">
+                                <div class="w-9 h-9 rounded-xl bg-primary-500/15 border border-primary-500/25 flex items-center justify-center shrink-0">
                                     <span class="text-primary-300 font-semibold text-xs" x-text="(acc.email || '').slice(0,2).toUpperCase()"></span>
                                 </div>
                                 <div class="min-w-0">
                                     <span class="font-medium text-white truncate block" x-text="acc.email"></span>
-                                    <span x-show="acc.is_superuser" class="text-[10px] text-amber-400/90 uppercase tracking-wide">Kurulum yöneticisi</span>
+                                    <span x-show="acc.is_superuser" class="text-[10px] text-amber-400/90 uppercase">Kurulum yöneticisi</span>
                                 </div>
                             </div>
                         </td>
                         <td data-label="Kullanıcı" class="text-slate-400" x-text="acc.username"></td>
-                        <td data-label="Domain" class="text-slate-400" x-text="acc.domain || acc.domain__name || '—'"></td>
+                        <td data-label="Domain" class="text-slate-400" x-text="acc.domain__name || acc.domain || '—'"></td>
                         <td data-label="Yetki">
-                            <div class="space-y-2">
+                            <div class="space-y-1.5">
                                 <span class="badge badge-info" x-text="roleLabel(acc.role)"></span>
-                                <p class="text-[11px] text-slate-500 max-w-[220px]" x-text="permissionHint(acc)"></p>
-                                <button type="button" class="btn-permission"
-                                        @click.stop="openRoleModal(acc)"
-                                        :disabled="acc.is_superuser"
-                                        x-show="!acc.is_superuser">
-                                    <svg class="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                                        <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z"/>
-                                    </svg>
+                                <p class="text-[11px] text-slate-500" x-text="permissionHint(acc)"></p>
+                                <button type="button" class="btn-permission" x-show="!acc.is_superuser"
+                                        @click.stop="openRoleModal(acc)">
                                     Yetki değiştir
                                 </button>
                             </div>
                         </td>
                         <td data-label="Durum">
                             <span class="badge" :class="acc.is_active ? 'badge-success' : 'badge-danger'">
-                                <span class="w-1.5 h-1.5 rounded-full" :class="acc.is_active ? 'bg-success-400' : 'bg-danger-400'"></span>
                                 <span x-text="acc.is_active ? 'Aktif' : 'Pasif'"></span>
                             </span>
                         </td>
@@ -161,8 +180,7 @@
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 5.636a9 9 0 010 12.728M5.636 5.636a9 9 0 000 12.728"/>
                                     </svg>
                                 </button>
-                                <button type="button" class="icon-btn hover:text-danger-400 hover:bg-danger-500/10" @click="deleteAccount(acc)" aria-label="Sil"
-                                        :disabled="acc.is_superuser">
+                                <button type="button" class="icon-btn hover:text-danger-400" @click="deleteAccount(acc)" :disabled="acc.is_superuser" aria-label="Sil">
                                     <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
                                     </svg>
@@ -175,24 +193,30 @@
         </table>
     </div>
 
-    <div x-show="accounts.length === 0" x-cloak class="empty-state bento-card">
+    <div x-show="accounts.length === 0" class="empty-state bento-card">
         <div class="empty-state-icon">
             <svg class="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/>
             </svg>
         </div>
         <h3 class="empty-state-title">Henüz hesap yok</h3>
-        <p class="empty-state-body">Mail almak ve göndermek için ilk hesabınızı oluşturarak başlayın.</p>
-        <button type="button" @click="openAddModal()" class="btn btn-primary">İlk Hesabı Ekle</button>
+        <p class="empty-state-body">İlk mail hesabınızı oluşturarak başlayın.</p>
+        <button type="button" class="btn btn-primary" @click="openAddModal()">İlk Hesabı Ekle</button>
     </div>
 
     <!-- Yeni hesap -->
-    <div x-show="showAddModal" x-cloak class="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4"
-         @keydown.escape.window="showAddModal = false">
-        <div class="absolute inset-0 bg-slate-950/80 backdrop-blur-sm" @click="showAddModal = false"></div>
-        <div class="relative w-full sm:max-w-md bg-slate-900 border border-slate-800 rounded-t-2xl sm:rounded-2xl p-5 sm:p-6 shadow-2xl max-h-[90vh] overflow-y-auto">
-            <h2 class="text-lg font-semibold text-white mb-4">Yeni mail hesabı</h2>
-            <div class="space-y-3">
+    <div x-show="showAddModal" x-cloak
+         class="accounts-modal-backdrop"
+         @keydown.escape.window="closeAddModal()"
+         @click.self="closeAddModal()">
+        <div class="accounts-modal-sheet" @click.stop role="dialog" aria-modal="true" aria-labelledby="add-account-title">
+            <div class="accounts-modal-sheet__head flex items-center justify-between gap-2">
+                <h2 id="add-account-title" class="text-base font-semibold text-white">Yeni mail hesabı</h2>
+                <button type="button" class="icon-btn shrink-0" @click="closeAddModal()" aria-label="Kapat">
+                    <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                </button>
+            </div>
+            <div class="accounts-modal-sheet__body space-y-3">
                 <div>
                     <label class="label">Kullanıcı adı</label>
                     <input type="text" class="input w-full" x-model="newAccount.username" placeholder="ornek" autocomplete="off">
@@ -200,9 +224,7 @@
                 <div>
                     <label class="label">Domain</label>
                     <select class="input w-full" x-model="newAccount.domain">
-                        <template x-for="d in domains" :key="d">
-                            <option :value="d" x-text="d"></option>
-                        </template>
+                        <template x-for="d in domains" :key="d"><option :value="d" x-text="d"></option></template>
                     </select>
                 </div>
                 <div>
@@ -210,81 +232,59 @@
                     <input type="password" class="input w-full" x-model="newAccount.password" autocomplete="new-password">
                 </div>
                 <div>
-                    <label class="label">Yetki / Rol</label>
+                    <label class="label">Yetki</label>
                     <select class="input w-full" x-model="newAccount.role">
-                        <template x-for="r in roleChoices" :key="r.value">
-                            <option :value="r.value" x-text="r.label"></option>
-                        </template>
+                        <template x-for="r in roleChoices" :key="r.value"><option :value="r.value" x-text="r.label"></option></template>
                     </select>
                     <p class="text-xs text-slate-500 mt-1" x-text="roleDescription(newAccount.role)"></p>
                 </div>
             </div>
-            <div class="flex gap-2 mt-6">
-                <button type="button" class="btn btn-secondary flex-1" @click="showAddModal = false">İptal</button>
+            <div class="accounts-modal-sheet__foot">
+                <button type="button" class="btn btn-secondary flex-1" @click="closeAddModal()">İptal</button>
                 <button type="button" class="btn btn-primary flex-1" @click="createAccount()" :disabled="loading">Oluştur</button>
             </div>
         </div>
     </div>
 
-    <!-- Yetki popup -->
+    <!-- Yetki -->
     <div x-show="showRoleModal" x-cloak
-         class="fixed inset-0 z-[60] flex items-end sm:items-center justify-center p-0 sm:p-4"
+         class="accounts-modal-backdrop"
          @keydown.escape.window="closeRoleModal()"
-         role="dialog" aria-modal="true" aria-labelledby="permission-modal-title">
-        <div class="permission-modal-backdrop absolute inset-0" @click="closeRoleModal()"></div>
-        <div class="permission-modal-panel relative w-full sm:max-w-lg rounded-t-2xl sm:rounded-2xl overflow-hidden max-h-[92vh] flex flex-col"
-             x-transition:enter="transition ease-out duration-200"
-             x-transition:enter-start="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
-             x-transition:enter-end="opacity-100 translate-y-0 sm:scale-100"
-             @click.stop>
-            <div class="permission-modal-header px-5 py-4 flex items-start justify-between gap-3">
-                <div class="min-w-0">
-                    <h2 id="permission-modal-title" class="text-lg font-semibold text-white">Yetki yönetimi</h2>
-                    <p class="text-sm text-slate-400 mt-0.5 truncate" x-text="editAccount ? editAccount.email : ''"></p>
+         @click.self="closeRoleModal()">
+        <div class="accounts-modal-sheet" @click.stop role="dialog" aria-modal="true" aria-labelledby="role-modal-title">
+            <div class="accounts-modal-sheet__head flex items-start justify-between gap-2">
+                <div class="min-w-0 pr-2">
+                    <h2 id="role-modal-title" class="text-base font-semibold text-white">Yetki yönetimi</h2>
+                    <p class="text-xs text-slate-400 mt-0.5 truncate" x-text="editAccount ? editAccount.email : ''"></p>
                 </div>
                 <button type="button" class="icon-btn shrink-0" @click="closeRoleModal()" aria-label="Kapat">
-                    <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
-                    </svg>
+                    <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
                 </button>
             </div>
-            <div class="p-5 overflow-y-auto flex-1 space-y-4">
-                <p class="text-xs text-slate-500">Mail sunucusu paneli ve webmail erişimini seçin.</p>
-                <div class="space-y-2">
-                    <template x-for="r in roleChoices" :key="r.value">
-                        <button type="button"
-                                class="role-option"
-                                :class="editRole === r.value && 'role-option--active'"
-                                @click="selectRole(r.value)">
-                            <div class="flex items-start gap-3">
-                                <span class="mt-0.5 w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0"
-                                      :class="editRole === r.value ? 'border-violet-400 bg-violet-500' : 'border-slate-600'">
-                                    <span x-show="editRole === r.value" class="w-1.5 h-1.5 rounded-full bg-white"></span>
-                                </span>
-                                <div class="min-w-0 flex-1">
-                                    <div class="role-option__title" x-text="r.label"></div>
-                                    <p class="role-option__desc" x-text="r.description"></p>
-                                    <div class="role-option__perms">
-                                        <span class="role-perm-pill" :class="rolePermFlags(r.value).panel && 'role-perm-pill--on'">Panel</span>
-                                        <span class="role-perm-pill" :class="rolePermFlags(r.value).webmail && 'role-perm-pill--on'">Webmail</span>
-                                        <span class="role-perm-pill" :class="rolePermFlags(r.value).send && 'role-perm-pill--on'">Gönder</span>
-                                        <span class="role-perm-pill" :class="rolePermFlags(r.value).recv && 'role-perm-pill--on'">Al</span>
-                                    </div>
-                                </div>
-                            </div>
-                        </button>
-                    </template>
-                </div>
-                <p x-show="roleSaveError" x-cloak class="text-sm text-danger-400 bg-danger-500/10 border border-danger-500/20 rounded-lg px-3 py-2" x-text="roleSaveError"></p>
+            <div class="accounts-modal-sheet__body">
+                <p class="text-xs text-slate-500 mb-2">Bir rol seçin:</p>
+                <template x-for="r in roleChoices" :key="r.value">
+                    <button type="button" class="accounts-role-opt" :class="editRole === r.value ? 'is-active' : ''" @click="selectRole(r.value)">
+                        <div class="accounts-role-opt__label" x-text="r.label"></div>
+                        <div class="accounts-role-opt__hint" x-text="r.description"></div>
+                        <div class="accounts-role-opt__tags">
+                            <span class="accounts-tag" :class="rolePermFlags(r.value).panel ? 'on' : ''">Panel</span>
+                            <span class="accounts-tag" :class="rolePermFlags(r.value).webmail ? 'on' : ''">Webmail</span>
+                            <span class="accounts-tag" :class="rolePermFlags(r.value).send ? 'on' : ''">Gönder</span>
+                            <span class="accounts-tag" :class="rolePermFlags(r.value).recv ? 'on' : ''">Al</span>
+                        </div>
+                    </button>
+                </template>
+                <p x-show="roleSaveError" class="mt-2 text-xs text-danger-300 bg-danger-500/10 border border-danger-500/25 rounded-lg px-2 py-1.5" x-text="roleSaveError"></p>
             </div>
-            <div class="px-5 py-4 border-t border-slate-800/80 flex gap-2 bg-slate-900/50">
+            <div class="accounts-modal-sheet__foot">
                 <button type="button" class="btn btn-secondary flex-1" @click="closeRoleModal()" :disabled="roleSaving">İptal</button>
-                <button type="button" class="btn btn-primary flex-1 btn-save-permission text-white" @click="saveRole()" :disabled="roleSaving">
-                    <span x-show="!roleSaving">Yetkiyi kaydet</span>
-                    <span x-show="roleSaving">Kaydediliyor…</span>
+                <button type="button" class="btn btn-primary flex-1" @click="saveRole()" :disabled="roleSaving">
+                    <span x-text="roleSaving ? 'Kaydediliyor…' : 'Kaydet'"></span>
                 </button>
             </div>
         </div>
     </div>
+
 </div>
 {% endblock %}
