@@ -187,17 +187,20 @@ def _active_full_admin_count() -> int:
 
 
 @router.patch("/update-role/{email}", summary="Hesap Rol Güncelle")
-def update_role(request, email: str, key: str = None, data: RoleUpdateSchema = None):
+def update_role(request, email: str, data: RoleUpdateSchema, key: str = None):
     if not check_panel_auth(request, key):
         return {"status": "error", "message": "Yetkiniz yok. Süper yönetici yetkisi gerekir."}
 
     valid_roles = [choice[0] for choice in MailRole.choices]
-    new_role = (data.role or '').upper()
+    new_role = (data.role or '').strip().upper()
     if new_role not in valid_roles:
         return {"status": "error", "message": f"Geçersiz rol. Geçerli: {valid_roles}"}
 
     try:
-        account = MailAccount.objects.get(email=email)
+        from urllib.parse import unquote
+
+        email_key = unquote(email).strip().lower()
+        account = MailAccount.objects.get(email__iexact=email_key)
         if account.role == MailRole.FULL_ACCESS and new_role != MailRole.FULL_ACCESS:
             if _active_full_admin_count() <= 1:
                 return {

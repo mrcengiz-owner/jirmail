@@ -934,6 +934,8 @@
                 showRoleModal: false,
                 editAccount: null,
                 editRole: 'USER',
+                roleSaving: false,
+                roleSaveError: '',
                 loading: false,
                 newAccount: { username: '', domain: '', password: '', role: 'USER' },
 
@@ -976,31 +978,74 @@
                 openRoleModal: function(acc) {
                     this.editAccount = acc;
                     this.editRole = acc.role || 'USER';
+                    this.roleSaveError = '';
                     this.showRoleModal = true;
+                    document.body.style.overflow = 'hidden';
+                },
+
+                closeRoleModal: function() {
+                    if (this.roleSaving) return;
+                    this.showRoleModal = false;
+                    this.roleSaveError = '';
+                    this.editAccount = null;
+                    document.body.style.overflow = '';
+                },
+
+                selectRole: function(value) {
+                    this.editRole = value;
+                    this.roleSaveError = '';
+                },
+
+                rolePermFlags: function(role) {
+                    var r = (role || '').toUpperCase();
+                    return {
+                        panel: r === 'FULL',
+                        webmail: r === 'FULL' || r === 'USER' || r === 'SEND' || r === 'RECV' || r === 'BLOCK',
+                        send: r === 'FULL' || r === 'USER' || r === 'SEND',
+                        recv: r === 'FULL' || r === 'USER' || r === 'RECV'
+                    };
                 },
 
                 saveRole: function() {
                     var self = this;
-                    if (!this.editAccount) return;
-                    this.loading = true;
-                    fetch('/api/core/update-role/' + encodeURIComponent(this.editAccount.email) + '?key=' + encodeURIComponent(self.JIR_KEY), {
+                    if (!this.editAccount || !this.editRole) return;
+                    this.roleSaving = true;
+                    this.roleSaveError = '';
+                    var url = '/api/core/update-role/' + encodeURIComponent(this.editAccount.email);
+                    if (self.JIR_KEY) url += '?key=' + encodeURIComponent(self.JIR_KEY);
+                    fetch(url, {
                         method: 'PATCH',
-                        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': window.getCsrfToken() },
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Accept': 'application/json',
+                            'X-CSRFToken': window.getCsrfToken()
+                        },
                         credentials: 'same-origin',
                         body: JSON.stringify({ role: this.editRole })
                     })
-                        .then(function(r) { return r.json(); })
-                        .then(function(data) {
-                            if (data.status === 'success') {
-                                self.showRoleModal = false;
-                                window.showToast('Yetki güncellendi', 'success');
+                        .then(function(r) {
+                            return r.json().then(function(data) {
+                                return { ok: r.ok, status: r.status, data: data };
+                            }).catch(function() {
+                                return { ok: false, status: r.status, data: { message: 'Sunucu yanıtı okunamadı' } };
+                            });
+                        })
+                        .then(function(res) {
+                            if (res.ok && res.data && res.data.status === 'success') {
+                                self.closeRoleModal();
+                                window.showToast(res.data.message || 'Yetki güncellendi', 'success');
                                 self.refreshAccounts();
                             } else {
-                                window.showToast(data.message || 'Güncellenemedi', 'error');
+                                var msg = (res.data && res.data.message) || 'Yetki güncellenemedi';
+                                self.roleSaveError = msg;
+                                window.showToast(msg, 'error');
                             }
                         })
-                        .catch(function() { window.showToast('Bağlantı hatası', 'error'); })
-                        .finally(function() { self.loading = false; });
+                        .catch(function() {
+                            self.roleSaveError = 'Bağlantı hatası. Sayfayı yenileyip tekrar deneyin.';
+                            window.showToast('Bağlantı hatası', 'error');
+                        })
+                        .finally(function() { self.roleSaving = false; });
                 },
 
                 roleDescription: function(role) {
