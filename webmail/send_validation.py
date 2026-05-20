@@ -3,18 +3,33 @@ from __future__ import annotations
 
 from django.conf import settings
 
+from core.mail_domains import domain_hosting_error, is_reserved_public_domain, normalize_domain
 from core.models import MailAccount, MailDomain, MailRole
 from webmail.recipients import parse_recipient_list
 
 
 def active_local_domains() -> set[str]:
+    """Sunucuda gerçekten barındırılan domainler (harici sağlayıcılar hariç)."""
     names = set(
         MailDomain.objects.filter(is_active=True).values_list('name', flat=True)
     )
     extra = (getattr(settings, 'MAIL_DOMAIN', '') or '').strip().lower()
     if extra:
         names.add(extra.lower())
-    return {n.lower() for n in names if n}
+    return {
+        normalize_domain(n)
+        for n in names
+        if n and not is_reserved_public_domain(n)
+    }
+
+
+def misconfigured_hosted_domains() -> list[str]:
+    """Panelde yanlışlıkla eklenmiş harici sağlayıcı domainleri."""
+    return sorted(
+        normalize_domain(n)
+        for n in MailDomain.objects.filter(is_active=True).values_list('name', flat=True)
+        if n and is_reserved_public_domain(n)
+    )
 
 
 def _domain_of(email: str) -> str:
@@ -45,6 +60,21 @@ def validate_outbound_recipients(account, raw_to: str, raw_cc: str = '', raw_bcc
             'message': 'Geçerli en az bir alıcı gerekli (ör. isim@alanadi.com).',
             'invalid': [],
             'warnings': [],
+        }
+
+    misconfigured = misconfigured_hosted_domains()
+    if misconfigured:
+        return {
+            'ok': False,
+            'message': (
+                'Posta sunucusu yanlış yapılandırılmış: panelde harici sağlayıcı domain(ler) '
+                f'kayıtlı ({", ".join(misconfigured[:3])}). '
+                'Yönetim → Domainler bölümünden bu kayıtları silin veya pasifleştirin; '
+                'ardından `docker exec jir_postfix sh /docker-init.d/31-jirmail-transport-maps.sh` çalıştırın.'
+            ),
+            'invalid': [],
+            'warnings': [],
+            'misconfigured_domains': misconfigured,
         }
 
     local_domains = active_local_domains()
@@ -132,6 +162,12 @@ def extract_bounce_summary(body_html: str, body_plain: str = '') -> str:
 
     for line in text.split('\n'):
         low = line.lower()
+        if "user doesn't exist" in low and '@' in low:
+            return (
+                line.strip()[:500]
+                + ' — Bu adres sunucuda yerel kutu olarak arandı. Panelde harici domain '
+                '(ör. proton.me) yanlışlıkla eklenmiş olabilir; domaini silin ve dış adrese tekrar gönderin.'
+            )
         if any(k in low for k in ('550', '553', '554', 'user unknown', 'mailbox', 'relay', 'refused', 'timed out')):
             return line.strip()[:500]
 

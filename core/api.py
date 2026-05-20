@@ -522,6 +522,12 @@ def add_domain(request, data: AddDomainSchema, key: str = None):
     try:
         domain_name = data.name.lower().strip()
 
+        from core.mail_domains import domain_hosting_error
+
+        host_err = domain_hosting_error(domain_name)
+        if host_err:
+            return {"status": "error", "message": host_err}
+
         existing = MailDomain.objects.filter(name=domain_name).first()
         if existing:
             return {"status": "error", "message": "Bu domain zaten mevcut"}

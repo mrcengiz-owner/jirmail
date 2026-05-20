@@ -26,7 +26,8 @@ _write_pgsql_cf /etc/postfix/pgsql-transport-maps.cf \
   "SELECT 'lmtp:inet:dovecot:24' FROM core_maildomain WHERE is_active = true AND name='%d' LIMIT 1"
 
 postconf -e 'transport_maps=pgsql:/etc/postfix/pgsql-transport-maps.cf'
-postconf -e 'relay_domains=$virtual_mailbox_domains'
+# relay_domains=$virtual_mailbox_domains KULLANMAYIN — dış domainleri LMTP'ye düşürür (bounce).
+postconf -e 'relay_domains='
 postconf -e 'virtual_transport=lmtp:inet:dovecot:24'
 
 postfix reload 2>/dev/null || true
