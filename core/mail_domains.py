@@ -1,8 +1,11 @@
-"""Barındırılabilir domain kuralları — Gmail/Proton vb. yerel domain olamaz."""
+"""Panel domain kuralları — yalnızca barındırdığınız alan adları.
+
+Alıcı Gmail/Proton/Outlook vb. olsa bile domain listesine EKLENMEZ;
+dış gönderim Postfix internet SMTP (veya SMTP_RELAYHOST) ile yapılır.
+"""
 from __future__ import annotations
 
-# Bu alan adları bu sunucuda posta kutusu barındırmaz; panele eklenirse
-# dış adreslere gönderim Dovecot LMTP'ye düşer ve bounce oluşur.
+# Yönetim paneline eklenmemesi gereken (başkasının) sağlayıcı domainleri
 RESERVED_PUBLIC_DOMAINS: frozenset[str] = frozenset({
     'gmail.com', 'googlemail.com',
     'proton.me', 'protonmail.com', 'pm.me',
@@ -12,6 +15,25 @@ RESERVED_PUBLIC_DOMAINS: frozenset[str] = frozenset({
     'aol.com', 'zoho.com', 'mail.ru', 'gmx.com', 'gmx.net',
     'tutanota.com', 'tuta.io',
 })
+
+# Postfix pgsql: yalnızca en az bir aktif posta hesabı olan domainler yerel (LMTP)
+HOSTED_DOMAIN_SQL = (
+    'SELECT DISTINCT d.name FROM core_maildomain d '
+    'INNER JOIN core_mailaccount a ON a.domain_id = d.id AND a.is_active = true '
+    'WHERE d.is_active = true AND d.name=\'%s\' LIMIT 1'
+)
+
+HOSTED_DOMAIN_TRANSPORT_SQL = (
+    "SELECT 'lmtp:inet:dovecot:24' FROM core_maildomain d "
+    'INNER JOIN core_mailaccount a ON a.domain_id = d.id AND a.is_active = true '
+    "WHERE d.is_active = true AND d.name='%d' LIMIT 1"
+)
+
+HOSTED_DOMAIN_NAMES_SQL = (
+    'SELECT DISTINCT d.name FROM core_maildomain d '
+    'INNER JOIN core_mailaccount a ON a.domain_id = d.id AND a.is_active = true '
+    'WHERE d.is_active = true'
+)
 
 
 def normalize_domain(name: str) -> str:
@@ -23,15 +45,34 @@ def is_reserved_public_domain(name: str) -> bool:
 
 
 def domain_hosting_error(name: str) -> str | None:
-    """Domain bu sunucuda barındırılamazsa Türkçe hata metni."""
+    """Panelde yeni domain eklerken — alıcı domaini değil, barındırma domaini."""
     n = normalize_domain(name)
     if not n or '.' not in n:
         return 'Geçerli bir alan adı girin (ör. sirketim.com).'
     if is_reserved_public_domain(n):
         return (
-            f'"{n}" harici bir e-posta sağlayıcısıdır; bu sunucuda barındırılamaz. '
-            'Yalnızca size ait (DNS/MX bu sunucuya işaret eden) alan adlarını ekleyin. '
-            'Dış adrese posta göndermek için alıcı adresini doğrudan yazmanız yeterlidir; '
-            'domain listesine eklemeyin.'
+            f'"{n}" bir e-posta sağlayıcısıdır; buraya eklenmez. '
+            'Panele yalnızca DNS/MX kayıtlarını bu sunucuya yönlendirdiğiniz '
+            'kendi alan adınızı ekleyin (ör. sirketim.com). '
+            'Kullanıcılarınız @sirketim.com adresleriyle gönderir; alıcı @gmail.com, '
+            '@proton.me vb. olabilir — alıcı domainini eklemeniz gerekmez.'
         )
     return None
+
+
+def queryset_hosted_domains():
+    """Aktif hesabı olan domainler (Django)."""
+    from core.models import MailAccount, MailDomain
+
+    return MailDomain.objects.filter(
+        is_active=True,
+        mailaccount__is_active=True,
+    ).distinct()
+
+
+def hosted_domain_names() -> set[str]:
+    return {
+        normalize_domain(n)
+        for n in queryset_hosted_domains().values_list('name', flat=True)
+        if n and not is_reserved_public_domain(n)
+    }

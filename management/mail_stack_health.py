@@ -176,6 +176,36 @@ def verify_mail_stack(*, fix: bool = False, healthcheck: bool = False) -> dict[s
     add("smtp", smtp_ok, f"SMTP {smtp_host}:{smtp_port} {'OK' if smtp_ok else 'erişilemiyor'}")
     add("imap", imap_ok, f"IMAP {imap_host}:{imap_port} {'OK' if imap_ok else 'erişilemiyor'}")
 
+    # Dış posta çıkışı (port 25 veya relayhost)
+    try:
+        from management.outbound_connectivity import check_outbound_smtp
+        from webmail.send_validation import admin_stale_domain_warnings
+
+        outbound = check_outbound_smtp(include_django_probe=False)
+        stale = admin_stale_domain_warnings()
+        if stale:
+            add(
+                "panel_domain_hygiene",
+                True,
+                f"Yönetici notu (gönderimi engellemez): {stale[0][:120]}",
+                optional=True,
+            )
+        if outbound.get("mode") == "relay":
+            add(
+                "outbound_smtp",
+                True,
+                f"Dış posta relayhost: {outbound.get('relayhost')}",
+            )
+        else:
+            add(
+                "outbound_smtp",
+                bool(outbound.get("ok")),
+                outbound.get("message", "port 25"),
+                recommendation=(outbound.get("recommendation") or "")[:200],
+            )
+    except Exception as exc:
+        add("outbound_smtp", True, f"Kontrol atlandı: {exc}", skipped=True)
+
     # Postfix pgsql dosyası (docker exec ile oku)
     postfix_cf_ok = False
     try:

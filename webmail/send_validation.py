@@ -3,33 +3,38 @@ from __future__ import annotations
 
 from django.conf import settings
 
-from core.mail_domains import domain_hosting_error, is_reserved_public_domain, normalize_domain
-from core.models import MailAccount, MailDomain, MailRole
+from core.mail_domains import hosted_domain_names, is_reserved_public_domain, normalize_domain
+from core.models import MailAccount, MailRole
 from webmail.recipients import parse_recipient_list
 
 
 def active_local_domains() -> set[str]:
-    """Sunucuda gerçekten barındırılan domainler (harici sağlayıcılar hariç)."""
-    names = set(
-        MailDomain.objects.filter(is_active=True).values_list('name', flat=True)
-    )
+    """Bu sunucuda posta kutusu barındırılan domainler (hesabı olanlar)."""
+    names = hosted_domain_names()
     extra = (getattr(settings, 'MAIL_DOMAIN', '') or '').strip().lower()
-    if extra:
-        names.add(extra.lower())
-    return {
-        normalize_domain(n)
-        for n in names
-        if n and not is_reserved_public_domain(n)
-    }
+    if extra and not is_reserved_public_domain(extra):
+        names.add(normalize_domain(extra))
+    return names
 
 
-def misconfigured_hosted_domains() -> list[str]:
-    """Panelde yanlışlıkla eklenmiş harici sağlayıcı domainleri."""
-    return sorted(
-        normalize_domain(n)
-        for n in MailDomain.objects.filter(is_active=True).values_list('name', flat=True)
-        if n and is_reserved_public_domain(n)
-    )
+def admin_stale_domain_warnings() -> list[str]:
+    """Panelde hesapsız veya sağlayıcı domain — gönderimi engellemez, yönetici uyarısı."""
+    from core.models import MailDomain
+
+    warnings: list[str] = []
+    for dom in MailDomain.objects.filter(is_active=True):
+        name = normalize_domain(dom.name)
+        if not name:
+            continue
+        if is_reserved_public_domain(name):
+            warnings.append(
+                f'"{name}" panelde kayıtlı (e-posta sağlayıcısı; silinmeli). '
+                'Alıcılara göndermek için domain eklemeniz gerekmez.'
+            )
+            continue
+        if not MailAccount.objects.filter(domain=dom, is_active=True).exists():
+            warnings.append(f'"{name}" için aktif posta hesabı yok.')
+    return warnings
 
 
 def _domain_of(email: str) -> str:
@@ -39,7 +44,8 @@ def _domain_of(email: str) -> str:
 def validate_outbound_recipients(account, raw_to: str, raw_cc: str = '', raw_bcc: str = '') -> dict:
     """Gönderimden önce alıcıları kontrol et.
 
-    Returns: {ok: bool, message: str, invalid: list[str], warnings: list[str]}
+    Dünya genelindeki alıcılara izin verilir; yalnızca bu sunucuda barındırılan
+    @domain adresleri için yerel kutu doğrulanır.
     """
     perms = account.permissions_summary()
     if not perms.get('can_send_mail'):
@@ -60,21 +66,6 @@ def validate_outbound_recipients(account, raw_to: str, raw_cc: str = '', raw_bcc
             'message': 'Geçerli en az bir alıcı gerekli (ör. isim@alanadi.com).',
             'invalid': [],
             'warnings': [],
-        }
-
-    misconfigured = misconfigured_hosted_domains()
-    if misconfigured:
-        return {
-            'ok': False,
-            'message': (
-                'Posta sunucusu yanlış yapılandırılmış: panelde harici sağlayıcı domain(ler) '
-                f'kayıtlı ({", ".join(misconfigured[:3])}). '
-                'Yönetim → Domainler bölümünden bu kayıtları silin veya pasifleştirin; '
-                'ardından `docker exec jir_postfix sh /docker-init.d/31-jirmail-transport-maps.sh` çalıştırın.'
-            ),
-            'invalid': [],
-            'warnings': [],
-            'misconfigured_domains': misconfigured,
         }
 
     local_domains = active_local_domains()
@@ -116,22 +107,12 @@ def validate_outbound_recipients(account, raw_to: str, raw_cc: str = '', raw_bcc
         return {
             'ok': False,
             'message': (
-                f'Yerel posta kutusu bulunamadı: {sample}{more}. '
-                'Yönetim panelinden hesabın aktif olduğunu doğrulayın.'
+                f'Bu sunucudaki posta kutusu bulunamadı: {sample}{more}. '
+                'Yalnızca panelde oluşturduğunuz @alanadiniz.com hesaplarına yerel teslimat yapılır.'
             ),
             'invalid': invalid,
             'warnings': [],
         }
-
-    external = [a for a in recipients if _domain_of(a) not in local_domains]
-    if external:
-        relay = (getattr(settings, 'SMTP_RELAYHOST', '') or '').strip()
-        if not relay:
-            warnings.append(
-                'Dış adrese gönderim yapıyorsunuz. Sunucuda çıkış portu (25) kapalıysa '
-                'birkaç dakika içinde “Undelivered Mail” geri dönüşü alabilirsiniz. '
-                'Kalıcı çözüm: .env içinde SMTP_RELAYHOST (ör. [smtp.provider.com]:587) tanımlayın.'
-            )
 
     return {'ok': True, 'message': '', 'invalid': [], 'warnings': warnings}
 
@@ -162,12 +143,6 @@ def extract_bounce_summary(body_html: str, body_plain: str = '') -> str:
 
     for line in text.split('\n'):
         low = line.lower()
-        if "user doesn't exist" in low and '@' in low:
-            return (
-                line.strip()[:500]
-                + ' — Bu adres sunucuda yerel kutu olarak arandı. Panelde harici domain '
-                '(ör. proton.me) yanlışlıkla eklenmiş olabilir; domaini silin ve dış adrese tekrar gönderin.'
-            )
         if any(k in low for k in ('550', '553', '554', 'user unknown', 'mailbox', 'relay', 'refused', 'timed out')):
             return line.strip()[:500]
 

@@ -1,4 +1,4 @@
-"""Panelde yanlış eklenmiş harici domainleri (proton.me vb.) pasifleştirir."""
+"""Panelde yanlış eklenen sağlayıcı domainlerini pasifleştirir (gönderim için gerekli değil)."""
 from django.core.management.base import BaseCommand
 
 from core.mail_domains import is_reserved_public_domain, normalize_domain
@@ -7,7 +7,7 @@ from management.postfix_maps import reload_virtual_mailboxes
 
 
 class Command(BaseCommand):
-    help = 'Gmail/Proton gibi harici domainleri MailDomain listesinden pasifleştirir (Postfix LMTP hatası).'
+    help = 'Yanlışlıkla panele eklenmiş Gmail/Proton vb. domain kayıtlarını pasifleştirir (isteğe bağlı temizlik).'
 
     def add_arguments(self, parser):
         parser.add_argument(

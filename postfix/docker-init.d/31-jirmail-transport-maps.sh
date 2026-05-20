@@ -22,8 +22,9 @@ _write_pgsql_cf() {
   chmod 600 "$_dest"
 }
 
+# Yalnızca aktif posta hesabı olan domainler yerel (LMTP). Gmail/Proton vb. → internet SMTP.
 _write_pgsql_cf /etc/postfix/pgsql-transport-maps.cf \
-  "SELECT 'lmtp:inet:dovecot:24' FROM core_maildomain WHERE is_active = true AND name='%d' LIMIT 1"
+  "SELECT 'lmtp:inet:dovecot:24' FROM core_maildomain d INNER JOIN core_mailaccount a ON a.domain_id = d.id AND a.is_active = true WHERE d.is_active = true AND d.name='%d' LIMIT 1"
 
 postconf -e 'transport_maps=pgsql:/etc/postfix/pgsql-transport-maps.cf'
 # relay_domains=$virtual_mailbox_domains KULLANMAYIN — dış domainleri LMTP'ye düşürür (bounce).
@@ -31,4 +32,4 @@ postconf -e 'relay_domains='
 postconf -e 'virtual_transport=lmtp:inet:dovecot:24'
 
 postfix reload 2>/dev/null || true
-echo "[jirmail-postfix] transport_maps: virtual domain -> LMTP, diğerleri -> smtp"
+echo "[jirmail-postfix] transport_maps: hesaplı domain -> LMTP, tüm dış alıcılar -> internet SMTP"

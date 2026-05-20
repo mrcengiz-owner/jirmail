@@ -25,4 +25,9 @@ postconf -e 'smtp_bind_address='
 postconf -e 'smtp_bind_address6='
 
 postfix reload 2>/dev/null || true
-echo "[jirmail-postfix] outbound: virtual domain -> LMTP, diğerleri -> internet SMTP"
+if [ -z "$RELAYHOST" ]; then
+  echo "[jirmail-postfix] outbound: virtual domain -> LMTP, dış adresler -> internet SMTP (port 25)"
+  echo "[jirmail-postfix] ipucu: port 25 kapalıysa SMTP_RELAYHOST=[relay]:587 ayarlayın"
+else
+  echo "[jirmail-postfix] outbound: dış posta relayhost üzerinden"
+fi

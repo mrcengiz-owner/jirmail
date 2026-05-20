@@ -31,6 +31,8 @@ class HealthStatusSchema(Schema):
     database: bool
     postfix: bool
     dovecot: bool
+    outbound_delivery: bool = True
+    outbound_mode: str = ''
 
 
 class SystemSettingsUpdateSchema(Schema):
@@ -85,6 +87,8 @@ def health_check(request):
         'database': False,
         'postfix': False,
         'dovecot': False,
+        'outbound_delivery': True,
+        'outbound_mode': '',
     }
 
     try:
@@ -106,6 +110,18 @@ def health_check(request):
                     checks['dovecot'] = bool(chk.get('ok'))
                 elif cid == 'postfix_pgsql_cf' and chk.get('ok'):
                     checks['postfix'] = True
+                elif cid == 'panel_domain_hygiene':
+                    pass
+        except Exception:
+            pass
+
+    if os.getenv('JIR_COMPOSE_STACK') == '1':
+        try:
+            from management.outbound_connectivity import check_outbound_smtp
+
+            ob = check_outbound_smtp(include_django_probe=False)
+            checks['outbound_delivery'] = bool(ob.get('ok'))
+            checks['outbound_mode'] = ob.get('mode') or 'direct'
         except Exception:
             pass
 
@@ -127,13 +143,16 @@ def health_check(request):
         except Exception:
             pass
 
-    all_healthy = all(checks.values())
+    core_ok = checks['database'] and checks['postfix'] and checks['dovecot']
+    all_healthy = core_ok and checks.get('outbound_delivery', True)
 
     return {
         "status": "healthy" if all_healthy else "degraded",
         "database": checks['database'],
         "postfix": checks['postfix'],
         "dovecot": checks['dovecot'],
+        "outbound_delivery": checks.get('outbound_delivery', True),
+        "outbound_mode": checks.get('outbound_mode') or '',
     }
 
 
