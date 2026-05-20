@@ -63,6 +63,9 @@ document.addEventListener('alpine:init', function() {
             draftSavedAt: '',
             composeExpanded: false,
             themeSync: '',
+            bounceRawOpen: false,
+            diagRunning: false,
+            diagResult: null,
             _fetchSeq: 0,
             _syncInFlight: false,
             _streamDebounce: null,
@@ -275,8 +278,11 @@ document.addEventListener('alpine:init', function() {
                             if (r.data.success) {
                                 mail.body = r.data.html || '<pre>' + self.escapeHtml(r.data.plain || '') + '</pre>';
                                 mail.attachments = r.data.attachments || [];
+                                mail.bounceReport = r.data.bounce_report || null;
                                 mail.bounceSummary = r.data.bounce_summary || self.parseBounceSummary(mail);
                                 mail.bodyLoaded = true;
+                                self.bounceRawOpen = false;
+                                self.diagResult = null;
                             }
                         });
                 }
@@ -606,6 +612,33 @@ document.addEventListener('alpine:init', function() {
                         })
                         .catch(function(e) { done(false, e.message || 'Bağlantı hatası'); });
                 }
+            },
+
+            runOutboundDiagnostics: function() {
+                var self = this;
+                if (self.diagRunning) return;
+                self.diagRunning = true;
+                self.diagResult = null;
+                WmApi.json('/api/mail/diagnostics/outbound').then(function(r) {
+                    self.diagRunning = false;
+                    if (!r.ok || !r.data || r.data.success === false) {
+                        self.diagResult = {
+                            message: (r.data && r.data.message) || 'Tanılama başarısız',
+                            fix_steps: []
+                        };
+                        return;
+                    }
+                    self.diagResult = {
+                        message: r.data.message || '',
+                        fix_steps: r.data.fix_steps || [],
+                        ok: r.data.ok,
+                        mode: r.data.mode,
+                        relayhost: r.data.relayhost
+                    };
+                }).catch(function(e) {
+                    self.diagRunning = false;
+                    self.diagResult = { message: e.message || 'Bağlantı hatası', fix_steps: [] };
+                });
             },
 
             isBounceMail: function(mail) {

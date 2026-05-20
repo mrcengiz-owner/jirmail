@@ -272,11 +272,14 @@ def message_body(request: HttpRequest, uid: int, folder: str = 'INBOX'):
                 )
         out = {'success': True, 'folder': folder, 'uid': uid, **result}
         try:
-            from webmail.send_validation import extract_bounce_summary
+            from webmail.send_validation import parse_bounce_report
 
-            bounce = extract_bounce_summary(result.get('html') or '', result.get('plain') or '')
-            if bounce:
-                out['bounce_summary'] = bounce
+            report = parse_bounce_report(result.get('html') or '', result.get('plain') or '')
+            if report.get('is_bounce'):
+                out['bounce_report'] = report
+                out['bounce_summary'] = (
+                    (report.get('recipient') or '') + ' — ' + (report.get('reason') or '')
+                ).strip(' —')[:500]
         except Exception:
             pass
         return out
@@ -653,6 +656,46 @@ class WebmailSettingsPatchSchema(Schema):
     ai_model: Optional[str] = None
     ai_api_key: Optional[str] = None
     ai_system_prompt: Optional[str] = None
+
+
+@router.get('/diagnostics/outbound', summary='Dış gönderim tanılaması')
+def diagnostics_outbound(request: HttpRequest):
+    """Port 25 / relay kontrolü — bounce nedenini netleştirir."""
+    account, _ = _get_account_and_password(request)
+    if not account:
+        return {'success': False, 'message': 'Oturum yok'}
+
+    try:
+        from management.outbound_connectivity import check_outbound_smtp
+
+        report = check_outbound_smtp(include_django_probe=False)
+    except Exception as exc:
+        return {'success': False, 'message': f'Tanılama hatası: {exc}'}
+
+    fix_steps: list[str] = []
+    if report.get('mode') == 'relay':
+        fix_steps.append('Mod: SMTP RELAY aktif.')
+        fix_steps.append(f"Relay: {report.get('relayhost')}")
+        fix_steps.append('Bounce hala alıyorsanız relay sağlayıcısının gönderim limit/yetki ayarlarını kontrol edin.')
+    elif report.get('ok'):
+        fix_steps.append('Postfix konteynerinden port 25 OK — doğrudan internet SMTP çalışıyor.')
+        fix_steps.append('Bounce alıyorsanız alıcı SPF/DKIM/PTR doğrulayabilir. PTR (reverse DNS) kaydınızı VPS panelinden mail.alanadi.com olacak şekilde ayarlayın.')
+    else:
+        fix_steps.append('SORUN: Sunucudan port 25 dışa kapalı (VPS sağlayıcısı engelliyor).')
+        fix_steps.append('Çözüm 1 (önerilen): .env dosyasına SMTP_RELAYHOST=[smtp.saglayici.com]:587 ekleyin.')
+        fix_steps.append('Çözüm 2: VPS sağlayıcınızdan port 25 dışa erişimini açın (genelde destek talebi).')
+        fix_steps.append('Ardından: docker compose up -d postfix')
+
+    return {
+        'success': True,
+        'ok': bool(report.get('ok')) or report.get('mode') == 'relay',
+        'mode': report.get('mode'),
+        'relayhost': report.get('relayhost') or '',
+        'message': report.get('message') or '',
+        'probes': report.get('probes') or [],
+        'fix_steps': fix_steps,
+        'recommendation': report.get('recommendation') or '',
+    }
 
 
 @router.get('/settings', summary='Webmail ayarları')

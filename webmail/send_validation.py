@@ -117,33 +117,122 @@ def validate_outbound_recipients(account, raw_to: str, raw_cc: str = '', raw_bcc
     return {'ok': True, 'message': '', 'invalid': [], 'warnings': warnings}
 
 
-def extract_bounce_summary(body_html: str, body_plain: str = '') -> str:
-    """Bounce gövdesinden kısa Türkçe özet çıkar."""
+_BOUNCE_HINTS = (
+    ('network is unreachable', 'Sunucudan internete TCP çıkışı engelli (genelde port 25). SMTP_RELAYHOST tanımlayın.'),
+    ('connection timed out', 'Alıcı MX sunucusuna bağlanılamadı (port 25 engelli veya MX kayıtsız). SMTP_RELAYHOST tanımlayın.'),
+    ('connection refused', 'Alıcı MX bağlantıyı reddetti — IP itibarı/PTR sorunu olabilir. SMTP relay önerilir.'),
+    ('blocked using ', 'IP itibar listesinde — RBL engellemesi. Yeni IP veya kimliği doğrulanmış relay gerekir.'),
+    ('client host rejected', 'Alıcı sunucu IP/PTR doğrulamasında reddetti. Reverse DNS (PTR) ve SPF/DKIM kayıtlarını ekleyin.'),
+    ('access denied', 'Alıcı erişimi reddetti — RBL/SPF/DKIM kontrolü.'),
+    ('user unknown', 'Alıcı adresi mevcut değil — adresi kontrol edin.'),
+    ("user doesn't exist", 'Alıcı kutusu yok — adresi kontrol edin.'),
+    ('mailbox unavailable', 'Alıcı kutusu kullanılamıyor.'),
+    ('helo command rejected', 'EHLO/HELO kimliği reddedildi — mail hostname FQDN ve PTR olmalı.'),
+    ('relay access denied', 'Relay engellendi — sunucu MX olarak tanınmıyor.'),
+    ('does not resolve to an address', 'Mail hostname DNS\'te yok (A/AAAA).'),
+    ('host or domain name not found', 'Alıcı domaininin MX kaydı çözülemedi.'),
+    ('record not found', 'Alıcı domaininin MX kaydı yok.'),
+    ('greylisted', 'Greylisting — birkaç dakika sonra otomatik yeniden denenecek.'),
+    ('spam', 'Alıcı spam olarak işaretledi. SPF/DKIM/DMARC ve IP itibarı kontrol edin.'),
+)
+
+
+def _looks_like_bounce(text: str) -> bool:
+    low = (text or '').lower()
+    return (
+        'undelivered mail' in low
+        or 'returned to sender' in low
+        or 'delivery status notification' in low
+        or 'mail delivery failed' in low
+        or 'failure notice' in low
+        or 'this is the mail system at host' in low
+    )
+
+
+def parse_bounce_report(body_html: str, body_plain: str = '') -> dict:
+    """Bounce gövdesini yapısal olarak ayrıştır.
+
+    Döndürür: {is_bounce, recipient, status, action, diagnostic_code, mta, reason,
+               suggested_fix, raw_excerpt}
+    """
     import re
 
     text = body_plain or ''
     if not text.strip() and body_html:
         text = re.sub(r'<[^>]+>', ' ', body_html)
     text = text.replace('\r', '\n')
-    if 'undelivered' not in text.lower() and 'returned to sender' not in text.lower():
+
+    if not _looks_like_bounce(text):
+        return {'is_bounce': False}
+
+    def first(pattern: str) -> str:
+        m = re.search(pattern, text, re.IGNORECASE)
+        return (m.group(1).strip() if m else '')[:500]
+
+    recipient = first(r'Final-Recipient:\s*[^;]+;\s*([^\n]+)') or first(r'<([^>]+@[^>\s]+)>:')
+    status = first(r'Status:\s*([0-9.]+)')
+    action = first(r'Action:\s*([^\n]+)')
+    diag = first(r'Diagnostic-Code:\s*([^\n]+(?:\n[ \t][^\n]+)*)')
+    diag = re.sub(r'\s+', ' ', diag).strip()
+    mta = first(r'Remote-MTA:\s*[^;]+;\s*([^\n]+)')
+
+    said = first(r'said:\s*([^\n]+)')
+    smtp_code = first(r'\b(5\d\d[ -]\d\.\d\.\d[^\n]*)') or first(r'\b(4\d\d[ -]\d\.\d\.\d[^\n]*)')
+
+    reason = diag or said or smtp_code
+
+    suggested = ''
+    haystack = (diag + ' ' + said + ' ' + text).lower()
+    for needle, fix in _BOUNCE_HINTS:
+        if needle in haystack:
+            suggested = fix
+            break
+
+    if not suggested and ('5.4.' in status or 'timed out' in haystack or 'unreachable' in haystack):
+        suggested = (
+            'Sunucudan dış MX sunuculara doğrudan erişim yok — büyük olasılıkla port 25 engelli. '
+            'Kalıcı çözüm: SMTP_RELAYHOST ile gönderim relay\'i tanımlayın.'
+        )
+
+    # Ham özet — yapısal alanlar yoksa
+    if not reason:
+        for line in text.split('\n'):
+            low = line.lower()
+            if any(k in low for k in ('550', '553', '554', 'user unknown', 'mailbox', 'relay', 'refused', 'timed out')):
+                reason = line.strip()[:500]
+                break
+
+    excerpt = ''
+    # Postfix human-readable header bloku
+    m = re.search(
+        r'(This is the mail system at host[\s\S]+?(?:Action:|Diagnostic-Code:|Status:).+?)\n\n',
+        text,
+        re.IGNORECASE,
+    )
+    if m:
+        excerpt = m.group(1).strip()[:2000]
+
+    return {
+        'is_bounce': True,
+        'recipient': recipient,
+        'status': status,
+        'action': action,
+        'diagnostic_code': diag,
+        'mta': mta,
+        'reason': reason or 'Alıcıya teslim edilemedi (ayrıntı çıkarılamadı).',
+        'suggested_fix': suggested,
+        'raw_excerpt': excerpt,
+    }
+
+
+def extract_bounce_summary(body_html: str, body_plain: str = '') -> str:
+    """Geriye dönük tek satır özet."""
+    report = parse_bounce_report(body_html, body_plain)
+    if not report.get('is_bounce'):
         return ''
-
-    patterns = [
-        r'Diagnostic-Code:\s*([^\n]+)',
-        r'Status:\s*([^\n]+)',
-        r' said:\s*([^\n]+)',
-        r'<([^>]+@[^>]+)>:\s*([^\n]+)',
-    ]
-    for pat in patterns:
-        m = re.search(pat, text, re.IGNORECASE)
-        if m:
-            line = ' '.join(g.strip() for g in m.groups() if g).strip()
-            if line and len(line) > 8:
-                return line[:500]
-
-    for line in text.split('\n'):
-        low = line.lower()
-        if any(k in low for k in ('550', '553', '554', 'user unknown', 'mailbox', 'relay', 'refused', 'timed out')):
-            return line.strip()[:500]
-
-    return 'Alıcıya teslim edilemedi. Tam hata metni aşağıdaki iletide yer alır.'
+    bits = []
+    if report.get('recipient'):
+        bits.append(report['recipient'])
+    if report.get('reason'):
+        bits.append(report['reason'])
+    return (' — '.join(bits))[:500] or 'Alıcıya teslim edilemedi.'

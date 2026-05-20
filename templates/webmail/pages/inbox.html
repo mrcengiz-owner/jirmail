@@ -220,16 +220,68 @@
                 <h1 class="font-display-sm text-display-sm text-on-surface mb-6 tracking-tight break-words" x-text="selectedMail.subject"></h1>
 
                 <div x-show="isBounceMail(selectedMail)"
-                     class="wm-bounce-banner mb-6 rounded-xl border border-error/30 bg-error-container/25 dark:bg-error-container/15 px-4 py-3 text-left">
-                  <p class="font-headline-sm text-error dark:text-[#ffb4ab] mb-1 flex items-center gap-2">
+                     class="wm-bounce-banner mb-6 rounded-xl border border-error/40 bg-error-container/25 dark:bg-error-container/15 px-4 py-3 text-left">
+                  <p class="font-headline-sm text-error dark:text-[#ffb4ab] mb-2 flex items-center gap-2">
                     <span class="material-symbols-outlined text-[20px]">error</span>
-                    Teslim edilemedi (bounce)
+                    Teslim edilemedi
                   </p>
-                  <p class="font-body-md text-on-surface-variant leading-relaxed"
-                     x-text="selectedMail.bounceSummary || parseBounceSummary(selectedMail)"></p>
-                  <p class="font-label-sm text-on-surface-variant mt-2 opacity-90">
-                    Mesaj sunucuya ulaştı; alıcıya internet üzerinden teslim edilemedi. Dış adresler (Gmail, Proton, Outlook vb.) için sunucuda çıkış portu 25 veya SMTP relay gerekebilir — yöneticinize iletin.
+
+                  <template x-if="selectedMail.bounceReport && selectedMail.bounceReport.recipient">
+                    <p class="font-body-md text-on-surface mb-1">
+                      <span class="font-bold">Alıcı:</span>
+                      <span x-text="selectedMail.bounceReport.recipient"></span>
+                    </p>
+                  </template>
+
+                  <p class="font-body-md text-on-surface mb-1">
+                    <span class="font-bold">Sebep:</span>
+                    <span x-text="(selectedMail.bounceReport && selectedMail.bounceReport.reason) || selectedMail.bounceSummary || 'Ayrıntı çıkarılamadı.'"></span>
                   </p>
+
+                  <template x-if="selectedMail.bounceReport && selectedMail.bounceReport.status">
+                    <p class="font-label-md text-on-surface-variant mb-1">
+                      <span class="font-bold">SMTP durumu:</span>
+                      <code class="font-mono text-xs px-1.5 py-0.5 rounded bg-surface-container-high" x-text="selectedMail.bounceReport.status + (selectedMail.bounceReport.action ? ' / ' + selectedMail.bounceReport.action : '')"></code>
+                    </p>
+                  </template>
+
+                  <template x-if="selectedMail.bounceReport && selectedMail.bounceReport.suggested_fix">
+                    <p class="font-body-md text-on-surface mt-2 p-2.5 rounded-lg bg-surface-container-low dark:bg-tertiary/40 border border-outline-variant/40">
+                      <span class="font-bold">Çözüm önerisi:</span>
+                      <span x-text="selectedMail.bounceReport.suggested_fix"></span>
+                    </p>
+                  </template>
+
+                  <div class="flex flex-wrap gap-2 mt-3">
+                    <button type="button"
+                            class="font-label-md text-label-md px-3 py-1.5 rounded-lg bg-primary text-on-primary hover:opacity-90 flex items-center gap-1.5 transition-opacity"
+                            @click="runOutboundDiagnostics()" :disabled="diagRunning">
+                      <span class="material-symbols-outlined text-[16px]" :class="diagRunning && 'animate-spin'">network_check</span>
+                      <span x-text="diagRunning ? 'Kontrol ediliyor…' : 'Sunucu tanılaması çalıştır'"></span>
+                    </button>
+                    <button type="button"
+                            class="font-label-md text-label-md px-3 py-1.5 rounded-lg border border-outline-variant text-on-surface-variant hover:bg-surface-container"
+                            @click="bounceRawOpen = !bounceRawOpen"
+                            x-text="bounceRawOpen ? 'Ham metni gizle' : 'Ham bounce metnini göster'"></button>
+                  </div>
+
+                  <template x-if="diagResult">
+                    <div class="mt-3 p-3 rounded-lg bg-surface-container-low dark:bg-tertiary/40 border border-outline-variant/40">
+                      <p class="font-label-md text-on-surface mb-1">
+                        <span class="font-bold">Sonuç:</span>
+                        <span x-text="diagResult.message"></span>
+                      </p>
+                      <ul class="list-disc pl-5 font-body-md text-on-surface-variant space-y-1">
+                        <template x-for="step in (diagResult.fix_steps || [])" :key="step">
+                          <li x-text="step"></li>
+                        </template>
+                      </ul>
+                    </div>
+                  </template>
+
+                  <template x-if="bounceRawOpen && selectedMail.bounceReport && selectedMail.bounceReport.raw_excerpt">
+                    <pre class="mt-3 p-3 rounded-lg bg-surface-container-low dark:bg-[#1a1c1d] border border-outline-variant/40 text-xs whitespace-pre-wrap font-mono overflow-x-auto" x-text="selectedMail.bounceReport.raw_excerpt"></pre>
+                  </template>
                 </div>
 
                 <div class="flex flex-wrap items-start justify-between gap-4 mb-10 pb-6 border-b border-outline-variant dark:border-outline">
