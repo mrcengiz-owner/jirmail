@@ -198,7 +198,12 @@ def list_messages(request: HttpRequest, folder: str = 'INBOX', page: int = 1, pa
 
     qs = MailMessageCache.objects.filter(folder=folder_obj, is_deleted=False)
     if q:
-        qs = qs.filter(subject__icontains=q) | qs.filter(from_addr__icontains=q)
+        qs = qs.filter(
+            models.Q(subject__icontains=q)
+            | models.Q(from_addr__icontains=q)
+            | models.Q(from_name__icontains=q)
+            | models.Q(snippet__icontains=q)
+        )
 
     if _folder_is_inbound(folder):
         qs = qs.exclude(sender_meta__is_spoofed=True).exclude(sender_meta__is_probable_scam=True)
@@ -415,6 +420,125 @@ def move(request: HttpRequest, uid: int, data: MoveSchema):
         return {'success': True}
     except Exception as exc:
         return {'success': False, 'message': str(exc)}
+
+
+class BulkActionSchema(Schema):
+    folder: str = 'INBOX'
+    uids: list[int]
+    action: str  # seen | unseen | delete | star | unstar
+
+
+@router.post('/messages/bulk', summary='Toplu işlem')
+def bulk_messages(request: HttpRequest, data: BulkActionSchema):
+    account, password = _get_account_and_password(request)
+    if not account:
+        return {'success': False, 'message': 'Oturum yok'}
+    if not data.uids:
+        return {'success': False, 'message': 'UID listesi boş'}
+
+    imap_folder = resolve_imap_folder(account, password, data.folder)
+    folder_obj = _find_folder_row(account, data.folder) or MailFolder.objects.filter(
+        account=account, name=imap_folder
+    ).first()
+    ok = 0
+    errors = []
+    for uid in data.uids:
+        if uid < 0:
+            continue
+        try:
+            if data.action == 'seen':
+                set_flag(account, password, imap_folder, uid, '\\Seen', add=True)
+                if folder_obj:
+                    MailMessageCache.objects.filter(folder=folder_obj, uid=uid).update(is_seen=True)
+            elif data.action == 'unseen':
+                set_flag(account, password, imap_folder, uid, '\\Seen', add=False)
+                if folder_obj:
+                    MailMessageCache.objects.filter(folder=folder_obj, uid=uid).update(is_seen=False)
+            elif data.action == 'star':
+                set_flag(account, password, imap_folder, uid, '\\Flagged', add=True)
+                if folder_obj:
+                    MailMessageCache.objects.filter(folder=folder_obj, uid=uid).update(is_flagged=True)
+            elif data.action == 'unstar':
+                set_flag(account, password, imap_folder, uid, '\\Flagged', add=False)
+                if folder_obj:
+                    MailMessageCache.objects.filter(folder=folder_obj, uid=uid).update(is_flagged=False)
+            elif data.action == 'delete':
+                delete_message(account, password, imap_folder, uid)
+                if folder_obj:
+                    MailMessageCache.objects.filter(folder=folder_obj, uid=uid).update(is_deleted=True)
+            else:
+                return {'success': False, 'message': f'Bilinmeyen işlem: {data.action}'}
+            ok += 1
+        except Exception as exc:
+            errors.append({'uid': uid, 'error': str(exc)})
+    return {'success': True, 'processed': ok, 'errors': errors}
+
+
+class SaveDraftSchema(Schema):
+    to: str = ''
+    cc: str = ''
+    subject: str = ''
+    body_text: str = ''
+    body_html: str = ''
+    draft_uid: Optional[int] = None
+
+
+@router.post('/drafts', summary='Taslak kaydet')
+def save_draft(request: HttpRequest, data: SaveDraftSchema):
+    account, password = _get_account_and_password(request)
+    if not account:
+        return {'success': False, 'message': 'Oturum yok'}
+    if not password:
+        return {'success': False, 'message': 'Oturumda parola yok — yeniden giriş yapın.'}
+
+    try:
+        from webmail.imap_client import (
+            append_message_to_drafts,
+            build_mime_draft,
+            remove_draft_message,
+            sync_folder_metadata,
+        )
+
+        if data.draft_uid and data.draft_uid > 0:
+            try:
+                remove_draft_message(account, password, data.draft_uid)
+            except Exception:
+                pass
+
+        raw = build_mime_draft(
+            account,
+            to=data.to,
+            cc=data.cc,
+            subject=data.subject,
+            body_text=data.body_text,
+            body_html=data.body_html,
+        )
+        folder = append_message_to_drafts(account, password, raw)
+        sync_folder_metadata(account, password, folder, limit=50)
+        return {'success': True, 'message': 'Taslak kaydedildi', 'folder': folder}
+    except Exception as exc:
+        return {'success': False, 'message': str(exc)}
+
+
+@router.get('/quota', summary='Depolama kotası')
+def mail_quota(request: HttpRequest):
+    account, _ = _get_account_and_password(request)
+    if not account:
+        return {'success': False, 'message': 'Oturum yok'}
+
+    used = account.current_storage_bytes
+    quota = account.quota_bytes
+    if quota > 0:
+        percent = min(100.0, round((used / quota) * 100, 1))
+    else:
+        percent = 0.0
+    return {
+        'success': True,
+        'used_bytes': used,
+        'quota_bytes': quota,
+        'percent': percent,
+        'unlimited': quota == 0,
+    }
 
 
 @router.delete('/messages/{uid}', summary='Mesajı sil')
@@ -682,6 +806,7 @@ def send_with_attachments(request: HttpRequest):
         to_raw = request.POST.get('to', '')
         subject = request.POST.get('subject', '')
         body_text = request.POST.get('body_text', '')
+        body_html = request.POST.get('body_html', '')
         to_list = parse_recipient_list(to_raw)
         if not to_list:
             return {'success': False, 'message': 'Geçerli alıcı gerekli (ör. isim@domain.com).'}
@@ -699,6 +824,7 @@ def send_with_attachments(request: HttpRequest):
             to=to_list,
             subject=subject,
             body_text=body_text,
+            body_html=body_html,
             attachments=attachments or None,
         )
         return _sanitize_send_result(result)

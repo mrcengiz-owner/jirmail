@@ -1,0 +1,117 @@
+/* ProtonMail esintili webmail — Tailwind üzerine ince katman */
+
+.wm-proton {
+  font-family: Inter, system-ui, sans-serif;
+}
+
+.wm-toast-root {
+  position: fixed;
+  top: 1rem;
+  right: 1rem;
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  max-width: min(360px, calc(100vw - 2rem));
+  pointer-events: none;
+}
+
+.wm-toast {
+  pointer-events: auto;
+  padding: 0.65rem 1rem;
+  border-radius: 0.75rem;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  background: rgb(30 41 59);
+  border: 1px solid rgb(51 65 85);
+  color: rgb(241 245 249);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+}
+
+.wm-toast--success { border-color: rgba(52, 211, 153, 0.4); color: #6ee7b7; }
+.wm-toast--error { border-color: rgba(248, 113, 113, 0.4); color: #fca5a5; }
+.wm-toast--warning { border-color: rgba(251, 191, 36, 0.4); color: #fcd34d; }
+
+/* Quill karanlık tema */
+.wm-compose-editor .ql-toolbar {
+  border-color: rgb(51 65 85) !important;
+  background: rgb(15 23 42);
+  border-radius: 0.5rem 0.5rem 0 0;
+}
+.wm-compose-editor .ql-container {
+  border-color: rgb(51 65 85) !important;
+  background: rgb(15 23 42);
+  color: rgb(226 232 240);
+  min-height: 140px;
+  border-radius: 0 0 0.5rem 0.5rem;
+  font-size: 0.875rem;
+}
+.wm-compose-editor .ql-editor.ql-blank::before {
+  color: rgb(100 116 139);
+  font-style: normal;
+}
+
+.wm-mail-body {
+  line-height: 1.65;
+  font-size: 0.875rem;
+  word-break: break-word;
+}
+.wm-mail-body img { max-width: 100%; height: auto; border-radius: 0.5rem; }
+.wm-mail-body a { color: rgb(129 140 248); }
+.wm-mail-body pre {
+  background: rgb(15 23 42);
+  padding: 0.75rem;
+  border-radius: 0.5rem;
+  overflow-x: auto;
+}
+
+.wm-quota-bar {
+  height: 4px;
+  border-radius: 999px;
+  background: rgb(51 65 85);
+  overflow: hidden;
+}
+.wm-quota-bar__fill {
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, rgb(99 102 241), rgb(129 140 248));
+  transition: width 0.3s ease;
+}
+
+.wm-compose-modal {
+  box-shadow: 0 -8px 40px rgba(0, 0, 0, 0.45);
+}
+
+@media (max-width: 1023px) {
+  .wm-col-list.is-hidden,
+  .wm-col-read.is-hidden {
+    display: none !important;
+  }
+}
+
+/* Giriş sayfası */
+.wm-login-page {
+  min-height: 100dvh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+  background: radial-gradient(ellipse 80% 50% at 50% -20%, rgba(99, 102, 241, 0.2), transparent), rgb(2 6 23);
+}
+.wm-login-card {
+  width: 100%;
+  max-width: 400px;
+  padding: 2rem;
+  border-radius: 1rem;
+  background: rgb(15 23 42);
+  border: 1px solid rgb(51 65 85);
+}
+.wm-login-card__brand { text-align: center; margin-bottom: 1.5rem; }
+.wm-login-card__brand img { width: 48px; height: 48px; margin: 0 auto 0.75rem; }
+.wm-login-card__brand h1 { font-size: 1.25rem; font-weight: 700; color: white; }
+.wm-login-card__brand h1 span { color: rgb(129 140 248); }
+.wm-form-group { margin-bottom: 1rem; }
+.wm-form-group label { display: block; font-size: 0.75rem; font-weight: 600; color: rgb(148 163 184); margin-bottom: 0.35rem; }
+.wm-alert--error { padding: 0.5rem 0.75rem; border-radius: 0.5rem; background: rgba(248, 113, 113, 0.15); color: #fca5a5; font-size: 0.8125rem; margin-bottom: 0.75rem; }
+.wm-login-footer { text-align: center; margin-top: 1rem; font-size: 0.75rem; }
+.wm-login-footer a { color: rgb(129 140 248); }

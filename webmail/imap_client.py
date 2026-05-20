@@ -134,6 +134,7 @@ FOLDER_ALIASES = {
     'sent': ['Sent', 'Sent Messages', 'INBOX.Sent', '.Sent'],
     'drafts': ['Drafts', 'INBOX.Drafts', '.Drafts'],
     'trash': ['Trash', 'INBOX.Trash', '.Trash', 'Deleted Messages'],
+    'archive': ['Archive', 'INBOX.Archive', '.Archive', 'Archives'],
 }
 
 
@@ -274,7 +275,7 @@ def sync_standard_folders(account, password: str, *, limit: int = 200) -> dict:
     seen = set()
     results = []
     errors = []
-    for ui_key in ('inbox', 'sent', 'drafts', 'trash'):
+    for ui_key in ('inbox', 'sent', 'drafts', 'trash', 'archive'):
         try:
             seed = FOLDER_ALIASES[ui_key][0]
             imap_name = resolve_imap_folder(account, password, seed)
@@ -386,3 +387,44 @@ def append_message_to_sent(account, password: str, raw_message: bytes) -> str:
     with imap_connection(account, password) as client:
         client.append(folder, raw_message, [b'\\Seen'], None)
     return folder
+
+
+def build_mime_draft(
+    account,
+    *,
+    to: str = '',
+    subject: str = '',
+    body_text: str = '',
+    body_html: str = '',
+    cc: str = '',
+) -> bytes:
+    """Taslak için RFC822 ham mesaj."""
+    from email.message import EmailMessage
+
+    msg = EmailMessage()
+    msg['From'] = account.email
+    if to:
+        msg['To'] = to
+    if cc:
+        msg['Cc'] = cc
+    msg['Subject'] = subject or '(taslak)'
+    if body_html:
+        msg.set_content(body_text or '', subtype='plain', charset='utf-8')
+        msg.add_alternative(body_html, subtype='html', charset='utf-8')
+    else:
+        msg.set_content(body_text or '', subtype='plain', charset='utf-8')
+    return msg.as_bytes()
+
+
+def append_message_to_drafts(account, password: str, raw_message: bytes) -> str:
+    """Taslağı IMAP Drafts klasörüne ekle."""
+    folder = resolve_imap_folder(account, password, 'Drafts')
+    with imap_connection(account, password) as client:
+        client.append(folder, raw_message, [b'\\Draft'], None)
+    return folder
+
+
+def remove_draft_message(account, password: str, uid: int) -> None:
+    """Önceki taslak satırını sil (yeniden kayıt öncesi)."""
+    folder = resolve_imap_folder(account, password, 'Drafts')
+    delete_message(account, password, folder, uid)

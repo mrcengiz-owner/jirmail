@@ -1,11 +1,12 @@
 /**
- * Jîr-Mail Webmail — Proton tarzı Alpine uygulaması
+ * Jîr-Mail Webmail — Proton tarzı SPA (Alpine.js + Fetch API)
  */
 document.addEventListener('alpine:init', function() {
     var FOLDER_MAP = {
         inbox: 'INBOX',
         sent: 'Sent',
         drafts: 'Drafts',
+        archive: 'Archive',
         trash: 'Trash',
         starred: 'INBOX'
     };
@@ -13,22 +14,36 @@ document.addEventListener('alpine:init', function() {
         inbox: 'Gelen kutusu',
         sent: 'Gönderilen',
         drafts: 'Taslaklar',
+        archive: 'Arşiv',
         trash: 'Çöp kutusu',
         starred: 'Yıldızlı'
     };
     var AVATAR_COLORS = [
-        '#8b6cef', '#6d4aff', '#3dd68c', '#f66f7a',
-        '#f5c451', '#5b8def', '#e879f9', '#38bdf8'
+        '#6366f1', '#8b5cf6', '#10b981', '#f43f5e',
+        '#f59e0b', '#3b82f6', '#ec4899', '#06b6d4'
     ];
+    var ICON_INBOX = '<svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75"><path stroke-linecap="round" stroke-linejoin="round" d="M2.25 13.5h3.86a2.25 2.25 0 012.012 1.244l.256.512a2.25 2.25 0 002.013 1.244h3.218a2.25 2.25 0 002.013-1.244l.256-.512a2.25 2.25 0 012.013-1.244h3.859M12 3v10.5m0 0l-3.75-3.75M12 13.5l3.75-3.75"/></svg>';
+    var ICON_SENT = '<svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75"><path stroke-linecap="round" stroke-linejoin="round" d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5"/></svg>';
+    var ICON_DRAFT = '<svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75"><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z"/></svg>';
+    var ICON_ARCHIVE = '<svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75"><path stroke-linecap="round" stroke-linejoin="round" d="M20.25 7.5l-.625 10.632a2.25 2.25 0 01-2.247 2.118H6.622a2.25 2.25 0 01-2.247-2.118L3.75 7.5M10 11.25h4M3.375 7.5h17.25c.621 0 1.125-.504 1.125-1.125v-1.5a1.125 1.125 0 00-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125z"/></svg>';
+    var ICON_TRASH = '<svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75"><path stroke-linecap="round" stroke-linejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0"/></svg>';
+    var ICON_STAR = '<svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75"><path stroke-linecap="round" stroke-linejoin="round" d="M11.48 3.499a.562.562 0 011.04 0l2.125 5.111a.563.563 0 00.475.345l5.518.442c.499.04.701.663.321.988l-4.204 3.602a.563.563 0 00-.182.557l1.285 5.385a.562.562 0 01-.84.61l-4.725-2.885a.563.563 0 00-.586 0L6.982 20.54a.562.562 0 01-.84-.61l1.285-5.386a.562.562 0 00-.182-.557l-4.204-3.602a.563.563 0 01.321-.988l5.518-.442a.563.563 0 00.475-.345L11.48 3.5z"/></svg>';
 
     Alpine.data('mailApp', function() {
         return {
+            folderNav: [
+                { id: 'inbox', label: 'Gelen kutusu', icon: ICON_INBOX },
+                { id: 'sent', label: 'Gönderilen', icon: ICON_SENT },
+                { id: 'drafts', label: 'Taslaklar', icon: ICON_DRAFT },
+                { id: 'archive', label: 'Arşiv', icon: ICON_ARCHIVE },
+                { id: 'starred', label: 'Yıldızlı', icon: ICON_STAR },
+                { id: 'trash', label: 'Çöp kutusu', icon: ICON_TRASH }
+            ],
             currentFolder: 'inbox',
             mobileView: 'list',
             sidebarOpen: false,
-            showCompose: false,
-            showAi: false,
-            showSourceDetails: false,
+            composeOpen: false,
+            composeMinimized: false,
             selectedMail: null,
             searchQuery: '',
             unreadCount: 0,
@@ -38,50 +53,40 @@ document.addEventListener('alpine:init', function() {
             composeTo: '',
             composeCc: '',
             composeSubject: '',
-            composeBody: '',
+            composeBodyHtml: '',
+            composeBodyText: '',
             composeFiles: [],
-            scheduleAt: '',
             sendingMail: false,
             loadingMails: false,
             syncing: false,
-            aiEnabled: false,
             userEmail: '',
-            aiMessages: [],
-            aiInput: '',
-            aiLoading: false,
+            selectedIds: [],
+            allSelected: false,
+            quota: null,
+            quill: null,
+            draftTimer: null,
+            draftUid: null,
+            draftSaving: false,
+            draftSavedAt: '',
             eventSource: null,
-            theme: 'dark',
+
+            get hasSelection() {
+                return this.selectedIds.length > 0;
+            },
 
             init: function() {
                 var self = this;
                 var root = this.$el;
-                self.theme = window.WmTheme ? window.WmTheme.get() : 'dark';
-                window.addEventListener('wm-theme-change', function(e) {
-                    self.theme = (e.detail && e.detail.theme) || self.theme;
-                });
                 self.userEmail = root.dataset.userEmail || '';
-                if (root.dataset.aiEnabled === 'true') {
-                    self.aiEnabled = true;
-                }
-                self.loadAiStatus();
+                self.loadQuota();
                 self.syncAllFolders().then(function() { self.fetchMails(); });
                 self.$watch('currentFolder', function() {
                     self.page = 1;
                     self.selectedMail = null;
+                    self.clearSelection();
                     self.fetchMails();
                 });
                 self.openStream();
-            },
-
-            toggleTheme: function() {
-                if (window.WmTheme) this.theme = window.WmTheme.toggle();
-            },
-
-            loadAiStatus: function() {
-                var self = this;
-                WmApi.json('/api/mail/ai/status').then(function(r) {
-                    if (r.data.success) self.aiEnabled = r.data.ai_available;
-                });
             },
 
             imapFolder: function() {
@@ -97,12 +102,32 @@ document.addEventListener('alpine:init', function() {
                 return 'Bu klasörde mesaj yok.';
             },
 
+            quotaLabel: function() {
+                if (!this.quota) return '';
+                if (this.quota.unlimited) return 'Sınırsız';
+                var u = (this.quota.used_bytes / (1024 * 1024)).toFixed(1);
+                var q = (this.quota.quota_bytes / (1024 * 1024)).toFixed(0);
+                return u + ' / ' + q + ' MB';
+            },
+
+            loadQuota: function() {
+                var self = this;
+                WmApi.json('/api/mail/quota').then(function(r) {
+                    if (r.data.success) self.quota = r.data;
+                });
+            },
+
+            onSearch: function() {
+                this.page = 1;
+                this.fetchMails();
+            },
+
             setFolder: function(id) {
                 this.currentFolder = id;
                 this.mobileView = 'list';
                 this.sidebarOpen = false;
                 this.selectedMail = null;
-                this.showCompose = false;
+                this.closeCompose();
             },
 
             fetchMails: function() {
@@ -130,24 +155,20 @@ document.addEventListener('alpine:init', function() {
                             date: m.date,
                             body: '',
                             bodyLoaded: false,
+                            attachments: [],
                             unread: !m.is_seen,
                             starred: m.is_flagged,
-                            hasAttachments: m.has_attachments,
-                            deliveryStatus: m.delivery_status || 'read',
-                            is_spoofed: !!m.is_spoofed,
-                            is_probable_scam: !!m.is_probable_scam,
-                            sender_warning: m.sender_warning || null,
-                            sender_real_email: m.sender_real_email || null,
-                            sender_reply_to: m.sender_reply_to || null,
-                            sender_return_path: m.sender_return_path || null,
-                            auth: m.auth || {}
+                            hasAttachments: m.has_attachments
                         };
                     });
                     if (self.currentFolder === 'starred') {
                         list = list.filter(function(m) { return m.starred; });
                     }
                     self.mails = list;
-                    self.unreadCount = list.filter(function(m) { return m.unread; }).length;
+                    if (self.currentFolder === 'inbox') {
+                        self.unreadCount = list.filter(function(m) { return m.unread; }).length;
+                    }
+                    self.clearSelection();
                 }).finally(function() {
                     self.loadingMails = false;
                 });
@@ -172,29 +193,16 @@ document.addEventListener('alpine:init', function() {
             selectMail: function(mail) {
                 var self = this;
                 self.selectedMail = mail;
-                self.showCompose = false;
-                self.showSourceDetails = false;
+                self.composeOpen = false;
                 self.mobileView = 'detail';
                 if (!mail.bodyLoaded && mail.uid > 0) {
                     WmApi.json('/api/mail/messages/' + mail.uid + '/body?folder=' +
                         encodeURIComponent(self.imapFolder()))
                         .then(function(r) {
                             if (r.data.success) {
-                                mail.body = r.data.html || '<pre>' + (r.data.plain || '') + '</pre>';
+                                mail.body = r.data.html || '<pre>' + self.escapeHtml(r.data.plain || '') + '</pre>';
+                                mail.attachments = r.data.attachments || [];
                                 mail.bodyLoaded = true;
-                                if (r.data.sender) {
-                                    var s = r.data.sender;
-                                    mail.from_display = s.display || mail.from_display;
-                                    mail.from_name = s.from_name || mail.from_name;
-                                    mail.from_addr = s.from_email || mail.from_addr;
-                                    mail.is_spoofed = !!s.is_spoofed;
-                                    mail.is_probable_scam = !!s.is_probable_scam;
-                                    mail.sender_warning = s.warning || mail.sender_warning;
-                                    mail.sender_real_email = s.real_email || mail.sender_real_email;
-                                    mail.sender_reply_to = s.reply_to || null;
-                                    mail.sender_return_path = s.return_path || null;
-                                    mail.auth = s.auth || mail.auth || {};
-                                }
                             }
                         });
                 }
@@ -214,23 +222,200 @@ document.addEventListener('alpine:init', function() {
                 this.selectedMail = null;
             },
 
-            openCompose: function() {
-                this.showCompose = true;
-                this.selectedMail = null;
-                this.mobileView = 'compose';
-                this.sidebarOpen = false;
-            },
-
-            openAi: function() {
-                this.showAi = true;
-                this.mobileView = 'ai';
-            },
-
-            closeAi: function() {
-                this.showAi = false;
-                if (this.mobileView === 'ai') {
-                    this.mobileView = this.selectedMail ? 'detail' : 'list';
+            sanitizeHtml: function(html) {
+                if (!html) return '';
+                if (window.DOMPurify) {
+                    return DOMPurify.sanitize(html, {
+                        USE_PROFILES: { html: true },
+                        FORBID_TAGS: ['script', 'iframe', 'object', 'embed', 'form'],
+                        FORBID_ATTR: ['onerror', 'onload', 'onclick']
+                    });
                 }
+                return this.escapeHtml(html).replace(/\n/g, '<br>');
+            },
+
+            escapeHtml: function(s) {
+                var d = document.createElement('div');
+                d.textContent = s || '';
+                return d.innerHTML;
+            },
+
+            openCompose: function() {
+                var self = this;
+                self.composeOpen = true;
+                self.composeMinimized = false;
+                self.selectedMail = null;
+                self.mobileView = 'detail';
+                self.sidebarOpen = false;
+                self.$nextTick(function() { self.initQuill(); self.startDraftAutosave(); });
+            },
+
+            closeCompose: function() {
+                var self = this;
+                if (self.composeTo || self.composeSubject || self.getEditorText()) {
+                    self.saveDraft(false);
+                }
+                self.stopDraftAutosave();
+                self.destroyQuill();
+                self.composeOpen = false;
+                self.composeMinimized = false;
+                self.composeTo = '';
+                self.composeCc = '';
+                self.composeSubject = '';
+                self.composeBodyHtml = '';
+                self.composeBodyText = '';
+                self.composeFiles = [];
+                self.draftUid = null;
+                self.draftSavedAt = '';
+                self.mobileView = self.selectedMail ? 'detail' : 'list';
+            },
+
+            initQuill: function() {
+                if (this.quill || typeof Quill === 'undefined') return;
+                var el = document.getElementById('wm-quill-editor');
+                if (!el) return;
+                this.quill = new Quill(el, {
+                    theme: 'snow',
+                    placeholder: 'Mesajınızı yazın…',
+                    modules: {
+                        toolbar: [
+                            ['bold', 'italic', 'underline'],
+                            [{ list: 'ordered' }, { list: 'bullet' }],
+                            ['link'],
+                            ['clean']
+                        ]
+                    }
+                });
+                var self = this;
+                this.quill.on('text-change', function() {
+                    self.composeBodyHtml = self.quill.root.innerHTML;
+                    self.composeBodyText = self.quill.getText().trim();
+                });
+            },
+
+            destroyQuill: function() {
+                if (this.quill) {
+                    var el = document.getElementById('wm-quill-editor');
+                    if (el) el.innerHTML = '';
+                    this.quill = null;
+                }
+            },
+
+            getEditorText: function() {
+                if (this.quill) return this.quill.getText().trim();
+                return this.composeBodyText || '';
+            },
+
+            getEditorHtml: function() {
+                if (this.quill) return this.quill.root.innerHTML;
+                return this.composeBodyHtml || '';
+            },
+
+            startDraftAutosave: function() {
+                var self = this;
+                self.stopDraftAutosave();
+                self.draftTimer = setInterval(function() {
+                    if (self.composeOpen && !self.composeMinimized) {
+                        self.saveDraft(false);
+                    }
+                }, 10000);
+            },
+
+            stopDraftAutosave: function() {
+                if (this.draftTimer) {
+                    clearInterval(this.draftTimer);
+                    this.draftTimer = null;
+                }
+            },
+
+            saveDraft: function(showToastOnSuccess) {
+                var self = this;
+                if (!self.composeTo && !self.composeSubject && !self.getEditorText()) return;
+                self.draftSaving = true;
+                WmApi.json('/api/mail/drafts', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        to: self.composeTo,
+                        cc: self.composeCc,
+                        subject: self.composeSubject,
+                        body_text: self.getEditorText(),
+                        body_html: self.getEditorHtml(),
+                        draft_uid: self.draftUid || null
+                    })
+                }).then(function(r) {
+                    self.draftSaving = false;
+                    if (r.data.success) {
+                        var now = new Date();
+                        self.draftSavedAt = now.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
+                        if (showToastOnSuccess) showToast('Taslak kaydedildi', 'success');
+                    } else if (showToastOnSuccess) {
+                        showToast(r.data.message || 'Taslak kaydedilemedi', 'error');
+                    }
+                }).catch(function() {
+                    self.draftSaving = false;
+                });
+            },
+
+            isSelected: function(uid) {
+                return this.selectedIds.indexOf(uid) >= 0;
+            },
+
+            toggleSelect: function(uid) {
+                var i = this.selectedIds.indexOf(uid);
+                if (i >= 0) this.selectedIds.splice(i, 1);
+                else this.selectedIds.push(uid);
+                this.allSelected = this.mails.length > 0 && this.selectedIds.length === this.mails.length;
+            },
+
+            toggleSelectAll: function(checked) {
+                if (checked) {
+                    this.selectedIds = this.mails.map(function(m) { return m.uid; });
+                } else {
+                    this.selectedIds = [];
+                }
+                this.allSelected = checked;
+            },
+
+            clearSelection: function() {
+                this.selectedIds = [];
+                this.allSelected = false;
+            },
+
+            bulkAction: function(action) {
+                var self = this;
+                var uids = self.selectedIds.filter(function(u) { return u > 0; });
+                if (!uids.length) return;
+                if (action === 'delete' && !confirm(uids.length + ' mesaj silinsin mi?')) return;
+                WmApi.json('/api/mail/messages/bulk', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        folder: self.imapFolder(),
+                        uids: uids,
+                        action: action
+                    })
+                }).then(function(r) {
+                    if (r.data.success) {
+                        showToast('İşlem tamamlandı', 'success');
+                        if (action === 'delete') {
+                            self.mails = self.mails.filter(function(m) {
+                                return uids.indexOf(m.uid) < 0;
+                            });
+                        } else if (action === 'seen') {
+                            self.mails.forEach(function(m) {
+                                if (uids.indexOf(m.uid) >= 0) m.unread = false;
+                            });
+                        }
+                        self.clearSelection();
+                        if (self.selectedMail && uids.indexOf(self.selectedMail.uid) >= 0 && action === 'delete') {
+                            self.selectedMail = null;
+                            self.mobileView = 'list';
+                        }
+                    } else {
+                        showToast(r.data.message || 'Hata', 'error');
+                    }
+                });
             },
 
             replyTo: function() {
@@ -239,8 +424,13 @@ document.addEventListener('alpine:init', function() {
                 var match = addr.match(/<([^>]+)>/) || [null, addr];
                 this.composeTo = match[1] || addr;
                 this.composeSubject = 'Re: ' + (this.selectedMail.subject || '').replace(/^Re:\s*/i, '');
-                this.composeBody = '\n\n---\n';
                 this.openCompose();
+                var self = this;
+                this.$nextTick(function() {
+                    if (self.quill) {
+                        self.quill.setText('\n\n---\n');
+                    }
+                });
             },
 
             toggleStar: function(mail) {
@@ -286,32 +476,17 @@ document.addEventListener('alpine:init', function() {
                     return;
                 }
                 if (self.composeCc && self.composeCc.trim() && self.composeCc.indexOf('@') < 0) {
-                    showToast('Bilgi (Cc) alanına tam e-posta yazın veya boş bırakın', 'warning');
+                    showToast('Cc alanına geçerli e-posta yazın veya boş bırakın', 'warning');
                     return;
                 }
-                if (self.scheduleAt) {
-                    return self.scheduleMail();
-                }
                 self.sendingMail = true;
-                var parseSendResponse = function(r) {
-                    return r.text().then(function(raw) {
-                        try {
-                            return JSON.parse(raw);
-                        } catch (e) {
-                            if (raw.indexOf('Server Error') !== -1) {
-                                return {
-                                    success: false,
-                                    message: 'Sunucu hatası (500). migrate ve Postfix yeniden başlatma gerekebilir.'
-                                };
-                            }
-                            return { success: false, message: raw.slice(0, 200) || 'Geçersiz yanıt' };
-                        }
-                    });
-                };
+                var bodyText = self.getEditorText();
+                var bodyHtml = self.getEditorHtml();
                 var done = function(ok, msg) {
                     self.sendingMail = false;
                     showToast(msg, ok ? 'success' : 'error');
                     if (ok) {
+                        self.stopDraftAutosave();
                         self.closeCompose();
                         self.currentFolder = 'sent';
                         self.fetchMails();
@@ -321,13 +496,12 @@ document.addEventListener('alpine:init', function() {
                     var fd = new FormData();
                     fd.append('to', self.composeTo);
                     fd.append('subject', self.composeSubject);
-                    fd.append('body_text', self.composeBody);
+                    fd.append('body_text', bodyText);
+                    fd.append('body_html', bodyHtml);
                     self.composeFiles.forEach(function(f) { fd.append('attachments', f); });
                     WmApi.fetch('/api/mail/send-attachments', { method: 'POST', body: fd })
-                        .then(parseSendResponse)
-                        .then(function(d) {
-                            done(d.success, d.message || (d.success ? 'Gönderildi' : 'Hata'));
-                        })
+                        .then(function(r) { return r.json(); })
+                        .then(function(d) { done(d.success, d.message || (d.success ? 'Gönderildi' : 'Hata')); })
                         .catch(function(e) { done(false, e.message || 'Bağlantı hatası'); });
                 } else {
                     WmApi.fetch('/api/mail/send', {
@@ -337,109 +511,21 @@ document.addEventListener('alpine:init', function() {
                             to: self.composeTo,
                             cc: self.composeCc,
                             subject: self.composeSubject,
-                            body_text: self.composeBody
+                            body_text: bodyText,
+                            body_html: bodyHtml
                         })
                     })
-                        .then(parseSendResponse)
-                        .then(function(d) {
-                            done(d.success, d.message || '');
-                        })
+                        .then(function(r) { return r.json(); })
+                        .then(function(d) { done(d.success, d.message || ''); })
                         .catch(function(e) { done(false, e.message || 'Bağlantı hatası'); });
                 }
-            },
-
-            scheduleMail: function() {
-                var self = this;
-                WmApi.json('/api/mail/schedule', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        to: self.composeTo,
-                        subject: self.composeSubject,
-                        body_text: self.composeBody,
-                        send_at: self.scheduleAt,
-                        cc: self.composeCc
-                    })
-                }).then(function(r) {
-                    if (r.data.success) {
-                        showToast('Planlandı: ' + r.data.send_at, 'success');
-                        self.closeCompose();
-                    } else {
-                        showToast(r.data.message || 'Planlama başarısız', 'error');
-                    }
-                });
-            },
-
-            closeCompose: function() {
-                this.showCompose = false;
-                this.composeTo = '';
-                this.composeCc = '';
-                this.composeSubject = '';
-                this.composeBody = '';
-                this.composeFiles = [];
-                this.scheduleAt = '';
-                this.mobileView = this.selectedMail ? 'detail' : 'list';
-            },
-
-            aiQuick: function(prompt) {
-                if (!this.aiEnabled) {
-                    showToast('AI için ayarlardan API anahtarı ekleyin', 'warning');
-                    return;
-                }
-                this.aiInput = prompt;
-                this.sendAi();
-            },
-
-            sendAi: function() {
-                var self = this;
-                if (!self.aiInput.trim() || self.aiLoading) return;
-                if (!self.aiEnabled) {
-                    showToast('AI için ayarlardan API anahtarı ekleyin', 'warning');
-                    return;
-                }
-                var msg = self.aiInput.trim();
-                self.aiMessages.push({ role: 'user', text: msg });
-                self.aiInput = '';
-                self.aiLoading = true;
-                WmApi.json('/api/mail/ai/chat', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        message: msg,
-                        context_subject: self.selectedMail ? self.selectedMail.subject : ''
-                    })
-                }).then(function(r) {
-                    if (r.data.success) {
-                        self.aiMessages.push({ role: 'assistant', text: r.data.reply });
-                        var act = r.data.action || {};
-                        if (act.intent === 'send_mail' && act.to) {
-                            self.composeTo = act.to;
-                            self.composeSubject = act.subject || '';
-                            self.composeBody = act.body || '';
-                            self.openCompose();
-                        }
-                        if (act.intent === 'schedule_mail' && act.to) {
-                            self.composeTo = act.to;
-                            self.composeSubject = act.subject || '';
-                            self.composeBody = act.body || '';
-                            if (act.send_at) self.scheduleAt = act.send_at;
-                            self.openCompose();
-                        }
-                    } else {
-                        showToast(r.data.message || 'AI hatası', 'error');
-                    }
-                }).finally(function() {
-                    self.aiLoading = false;
-                });
             },
 
             initials: function(name) {
                 if (!name) return '?';
                 var s = String(name).replace(/<[^>]+>/g, '').trim();
                 var parts = s.split(/\s+/).filter(Boolean);
-                if (parts.length >= 2) {
-                    return (parts[0][0] + parts[1][0]).toUpperCase();
-                }
+                if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
                 return s.slice(0, 2).toUpperCase();
             },
 
@@ -461,32 +547,6 @@ document.addEventListener('alpine:init', function() {
                 return addr || name || 'Bilinmeyen';
             },
 
-            authBadgeClass: function(status) {
-                if (status === 'pass') return 'wm-auth-badge--pass';
-                if (status === 'fail' || status === 'softfail' || status === 'permerror') return 'wm-auth-badge--fail';
-                return 'wm-auth-badge--neutral';
-            },
-
-            authLabel: function(status) {
-                var map = {
-                    pass: 'Geçti', fail: 'Başarısız', softfail: 'Zayıf', neutral: 'Nötr',
-                    none: 'Yok', temperror: 'Geçici hata', permerror: 'Kalıcı hata', bypass: 'Atlandı'
-                };
-                return map[status] || status || '—';
-            },
-
-            senderSubline: function(mail) {
-                if (!mail) return '';
-                if (mail.is_spoofed && mail.sender_real_email &&
-                    mail.sender_real_email !== mail.from_addr) {
-                    return 'Gerçek kaynak: ' + mail.sender_real_email;
-                }
-                if (mail.from_addr && mail.from_display && mail.from_addr !== mail.from_display) {
-                    return mail.from_addr;
-                }
-                return '';
-            },
-
             formatDate: function(iso) {
                 if (!iso) return '';
                 var d = new Date(iso);
@@ -494,12 +554,14 @@ document.addEventListener('alpine:init', function() {
                 if (d.toDateString() === n.toDateString()) {
                     return d.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
                 }
-                var y = new Date();
-                y.setFullYear(y.getFullYear() - 1);
-                if (d > y) {
-                    return d.toLocaleDateString('tr-TR', { day: 'numeric', month: 'short' });
-                }
-                return d.toLocaleDateString('tr-TR', { day: 'numeric', month: 'short', year: 'numeric' });
+                return d.toLocaleDateString('tr-TR', { day: 'numeric', month: 'short' });
+            },
+
+            formatSize: function(bytes) {
+                if (!bytes) return '0 B';
+                if (bytes < 1024) return bytes + ' B';
+                if (bytes < 1048576) return (bytes / 1024).toFixed(1) + ' KB';
+                return (bytes / 1048576).toFixed(1) + ' MB';
             },
 
             openStream: function() {

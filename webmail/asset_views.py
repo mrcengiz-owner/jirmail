@@ -1,18 +1,14 @@
 """Webmail statik dosyaları — Traefik yalnızca /webmail/ yönlendirdiğinde CSS/JS garantisi."""
 from __future__ import annotations
 
-import os
 from pathlib import Path
 
 from django.conf import settings
 from django.http import FileResponse, Http404, HttpResponseNotModified
 from django.views.decorators.http import require_GET
 
-# Güvenlik: yalnızca bu dosyalar
-ALLOWED_ASSETS = frozenset({
-    'css/webmail.css',
-    'js/webmail/core.js',
-    'js/webmail/mail-app.js',
+# Kesin izin listesi + webmail css/js önekleri
+ALLOWED_EXACT = frozenset({
     'brand/logo-icon.svg',
     'brand/favicon.svg',
 })
@@ -24,14 +20,23 @@ CONTENT_TYPES = {
 }
 
 
+def _is_allowed(relative_path: str) -> bool:
+    if relative_path in ALLOWED_EXACT:
+        return True
+    if relative_path.startswith('css/webmail') and relative_path.endswith('.css'):
+        return True
+    if relative_path.startswith('js/webmail/') and relative_path.endswith('.js'):
+        return True
+    return False
+
+
 def _resolve_asset(relative_path: str) -> Path | None:
     relative_path = relative_path.lstrip('/').replace('\\', '/')
-    if relative_path not in ALLOWED_ASSETS:
+    if not _is_allowed(relative_path):
         return None
     static_root = Path(settings.STATIC_ROOT)
     static_src = Path(settings.BASE_DIR) / 'static'
-    candidates = [static_root / relative_path, static_src / relative_path]
-    for path in candidates:
+    for path in (static_root / relative_path, static_src / relative_path):
         if path.is_file():
             return path
     return None
