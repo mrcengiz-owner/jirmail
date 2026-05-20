@@ -23,9 +23,9 @@
   --wm-radius-lg: 14px;
   --wm-radius-pill: 999px;
   --wm-sidebar-w: 260px;
-  --wm-list-w: min(340px, 42vw);
-  --wm-ai-w: 300px;
-  --wm-fs-base: 14px;
+  --wm-list-w: 272px;
+  --wm-ai-w: 260px;
+  --wm-fs-base: 13px;
   --wm-fs-sm: 13px;
   --wm-fs-xs: 11px;
   --wm-sidebar-bg: #1c1934;
@@ -811,7 +811,7 @@
 .wm-compose__editor textarea {
   flex: 1;
   width: 100%;
-  min-height: 200px;
+  min-height: 100px;
   border: none;
   background: transparent;
   color: var(--wm-text);
@@ -955,10 +955,10 @@
   align-items: center;
   justify-content: center;
   gap: 6px;
-  padding: 10px 18px;
+  padding: 6px 14px;
   border: none;
   border-radius: var(--wm-radius-pill);
-  font-size: 14px;
+  font-size: 12px;
   font-weight: 600;
   font-family: inherit;
   cursor: pointer;
@@ -1180,7 +1180,7 @@
 
 /* ——— Responsive ——— */
 @media (max-width: 1024px) {
-  :root { --wm-list-w: min(340px, 45vw); }
+  :root { --wm-list-w: min(272px, 36vw); }
 }
 
 @media (max-width: 768px) {
@@ -1225,7 +1225,7 @@
   }
 
   .wm-read-empty { display: none; }
-  .wm-message-header h1 { font-size: 18px; }
+  .wm-message-header h1 { font-size: 15px; }
   .wm-compose__footer { flex-direction: column; align-items: stretch; }
   .wm-compose__footer .wm-btn { width: 100%; }
 }
