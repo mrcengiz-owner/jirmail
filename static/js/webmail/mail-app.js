@@ -381,9 +381,22 @@ document.addEventListener('alpine:init', function() {
                 this.mobileView = this.selectedMail ? 'detail' : 'list';
             },
 
+            aiQuick: function(prompt) {
+                if (!this.aiEnabled) {
+                    showToast('AI için ayarlardan API anahtarı ekleyin', 'warning');
+                    return;
+                }
+                this.aiInput = prompt;
+                this.sendAi();
+            },
+
             sendAi: function() {
                 var self = this;
                 if (!self.aiInput.trim() || self.aiLoading) return;
+                if (!self.aiEnabled) {
+                    showToast('AI için ayarlardan API anahtarı ekleyin', 'warning');
+                    return;
+                }
                 var msg = self.aiInput.trim();
                 self.aiMessages.push({ role: 'user', text: msg });
                 self.aiInput = '';

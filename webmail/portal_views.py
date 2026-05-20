@@ -76,8 +76,22 @@ def logout_view(request):
 @ensure_csrf_cookie
 @_require_webmail_session
 def settings_view(request):
+    from core.models import MailAccount
+
+    account = MailAccount.objects.filter(
+        pk=request.session.get('account_id'),
+    ).select_related('domain').first()
+    ai_on = False
+    if account and account.is_active:
+        try:
+            ai_on = bool(account.ai_available)
+        except Exception:
+            ai_on = False
+
     return render(request, 'webmail/pages/settings.html', {
         'email': request.session.get('email', ''),
+        'is_admin': bool(request.session.get('can_access_panel')),
+        'ai_enabled': ai_on,
     })
 
 

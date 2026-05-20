@@ -34,9 +34,16 @@
         return next;
     }
 
+    function set(theme) {
+        var t = apply(theme);
+        window.dispatchEvent(new CustomEvent('wm-theme-change', { detail: { theme: t } }));
+        return t;
+    }
+
     window.WmTheme = {
         get: getStored,
         apply: apply,
+        set: set,
         toggle: toggle,
         init: function() { apply(getStored()); }
     };

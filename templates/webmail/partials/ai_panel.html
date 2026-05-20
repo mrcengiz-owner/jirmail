@@ -1,6 +1,6 @@
 <header class="wm-ai-panel__header">
   <h3>
-    <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z"/></svg>
+    <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z"/></svg>
     AI Asistan
   </h3>
   <button type="button" class="wm-icon-btn" @click="closeAi()" aria-label="Kapat">
@@ -8,23 +8,32 @@
   </button>
 </header>
 
-<div class="wm-ai-chat">
-  <template x-if="aiMessages.length === 0">
-    <p class="wm-text-sm wm-text-center wm-py-8" style="color: var(--wm-text-muted)">
-      Taslak yazdırın, özet isteyin veya «yarın 09:00 teşekkür maili» gibi komutlar verin.
-    </p>
+<div class="wm-ai-quick" x-show="aiMessages.length === 0 && !aiLoading">
+  <button type="button" class="wm-ai-quick__btn" @click="aiQuick('Bu e-postayı kısaca özetle.')">Özetle</button>
+  <button type="button" class="wm-ai-quick__btn" @click="aiQuick('Kibar bir yanıt taslağı yaz.')">Yanıt taslağı</button>
+  <button type="button" class="wm-ai-quick__btn" @click="aiQuick('Profesyonel bir teşekkür maili yaz.')">Teşekkür maili</button>
+</div>
+
+<div class="wm-ai-chat" role="log" aria-live="polite">
+  <template x-if="aiMessages.length === 0 && !aiLoading">
+    <div class="wm-ai-empty">
+      <p>Seçili mesaj veya komutlarınız üzerinden yardım alın.</p>
+      <p class="wm-ai-empty__hint" x-show="!aiEnabled">
+        <a href="{% url 'webmail:settings' %}">Ayarlardan</a> API anahtarınızı ekleyin.
+      </p>
+    </div>
   </template>
   <template x-for="(m, i) in aiMessages" :key="i">
     <div class="wm-ai-bubble"
          :class="m.role === 'user' ? 'wm-ai-bubble--user' : 'wm-ai-bubble--bot'"
          x-text="m.text"></div>
   </template>
-  <p x-show="aiLoading" style="color: var(--wm-text-muted); font-size: 13px;">Düşünüyor…</p>
+  <p class="wm-ai-thinking" x-show="aiLoading">Düşünüyor…</p>
 </div>
 
 <div class="wm-ai-input-wrap">
-  <textarea placeholder="AI'ya yazın… Enter ile gönder" x-model="aiInput" @keydown.enter.prevent="sendAi()"></textarea>
-  <button type="button" class="wm-btn wm-btn-primary" @click="sendAi()" :disabled="aiLoading || !aiInput.trim()">
-  Gönder
+  <textarea placeholder="AI'ya yazın… (Enter gönderir)" x-model="aiInput" @keydown.enter.prevent="sendAi()" rows="3"></textarea>
+  <button type="button" class="wm-btn wm-btn-primary wm-w-full" @click="sendAi()" :disabled="aiLoading || !aiInput.trim()">
+    Gönder
   </button>
 </div>
