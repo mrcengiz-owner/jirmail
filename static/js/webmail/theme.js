@@ -1,5 +1,5 @@
 /**
- * Webmail tema — karanlık / aydınlık (localStorage: wm-theme)
+ * Webmail tema — wm-theme verisi + Tailwind darkMode: 'class'
  */
 (function() {
     'use strict';
@@ -11,16 +11,23 @@
             var t = localStorage.getItem(STORAGE_KEY);
             if (t === 'light' || t === 'dark') return t;
         } catch (e) { /* ignore */ }
-        return 'dark';
+        return 'light';
     }
 
     function apply(theme) {
         var t = theme === 'light' ? 'light' : 'dark';
-        document.documentElement.setAttribute('data-wm-theme', t);
-        document.documentElement.classList.toggle('wm-light', t === 'light');
-        document.documentElement.classList.toggle('wm-dark', t === 'dark');
+        var root = document.documentElement;
+        if (t === 'dark') {
+            root.classList.add('dark');
+        } else {
+            root.classList.remove('dark');
+        }
+        root.setAttribute('data-wm-theme', t);
+        root.classList.toggle('wm-light', t === 'light');
+        root.classList.toggle('wm-dark', t === 'dark');
+
         var meta = document.querySelector('meta[name="theme-color"]');
-        if (meta) meta.setAttribute('content', t === 'light' ? '#ffffff' : '#16141c');
+        if (meta) meta.setAttribute('content', t === 'light' ? '#f8f9fa' : '#1a1c1e');
         var scheme = document.querySelector('meta[name="color-scheme"]');
         if (scheme) scheme.setAttribute('content', t === 'light' ? 'light' : 'dark');
         try { localStorage.setItem(STORAGE_KEY, t); } catch (e) { /* ignore */ }

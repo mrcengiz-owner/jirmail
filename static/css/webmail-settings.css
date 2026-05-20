@@ -1,11 +1,17 @@
-/* Webmail — Ayarlar sayfası (sidebar ile tam kabuk) */
+/* Webmail — Ayarlar (MailFlow tema ile uyumlu) */
 
 .wm-shell.wm-shell--settings {
   display: flex;
   height: 100dvh;
   width: 100%;
   overflow: hidden;
-  background: rgb(2 6 23);
+  background: #f8f9fa;
+  color: #191c1d;
+}
+
+html.dark .wm-shell.wm-shell--settings {
+  background: #2b2b2b;
+  color: #f0f1f2;
 }
 
 .wm-shell--settings .wm-main {
@@ -13,7 +19,27 @@
   display: flex;
   flex-direction: column;
   min-width: 0;
-  background: rgb(2 6 23);
+  background: #f8f9fa;
+}
+
+html.dark .wm-shell--settings .wm-main {
+  background: #2b2b2b;
+}
+
+.wm-shell--settings .wm-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  background: rgba(25, 28, 29, 0.45);
+  backdrop-filter: blur(3px);
+}
+.wm-shell--settings .wm-backdrop.is-open {
+  pointer-events: auto;
+  opacity: 1;
+}
+.wm-shell--settings .wm-backdrop:not(.is-open) {
+  pointer-events: none;
+  opacity: 0;
 }
 
 .wm-settings-main {
@@ -26,6 +52,78 @@
 
 .wm-settings-mobile-head {
   flex-shrink: 0;
+}
+
+.wm-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 999px;
+  border: none;
+  background: transparent;
+  color: #454652;
+  cursor: pointer;
+}
+
+html.dark .wm-icon-btn {
+  color: #cbcfd6;
+}
+
+.wm-icon-btn:hover {
+  background: rgba(0, 0, 0, 0.06);
+}
+
+html.dark .wm-icon-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.wm-flex-1 {
+  flex: 1 1 0%;
+  min-width: 0;
+}
+
+.wm-m-0 {
+  margin: 0;
+}
+
+.wm-truncate {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wm-mobile-header {
+  display: none;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  padding-top: calc(10px + env(safe-area-inset-top, 0px));
+  background: #ffffff;
+  border-bottom: 1px solid #e1e3e4;
+  flex-shrink: 0;
+}
+
+html.dark .wm-mobile-header {
+  background: #2e3132;
+  border-bottom-color: #454652;
+}
+
+@media (max-width: 768px) {
+  .wm-shell--settings .wm-mobile-header {
+    display: flex;
+  }
+
+  .wm-shell--settings .wm-hide-mobile {
+    display: none !important;
+  }
+}
+
+@media (min-width: 769px) {
+  .wm-shell--settings .wm-backdrop {
+    display: none !important;
+  }
 }
 
 .wm-settings-head {

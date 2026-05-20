@@ -4,223 +4,358 @@
 {% block title %}Gelen Kutusu — Jîr-Mail{% endblock %}
 
 {% block wm_body %}
-<div class="wm-proton flex h-dvh w-full overflow-hidden bg-slate-950"
+<div class="wm-mailflow-shell flex h-dvh w-full overflow-hidden bg-background dark:bg-[#2b2b2b] text-on-surface"
      x-data="mailApp()"
      x-init="init()"
      data-user-email="{{ email|default:''|escape }}"
      data-ai-enabled="{{ ai_enabled|yesno:'true,false' }}"
      data-is-admin="{{ is_admin|yesno:'true,false' }}">
 
-  <div class="fixed inset-0 z-40 bg-black/60 lg:hidden"
-       x-show="sidebarOpen" x-cloak @click="sidebarOpen = false"></div>
+  <div class="fixed inset-0 z-40 bg-black/50 backdrop-blur-[2px] lg:hidden"
+       x-show="sidebarOpen" x-cloak @click="sidebarOpen = false" aria-hidden="true"></div>
 
-  <!-- Sol menü -->
-  <aside class="fixed lg:static inset-y-0 left-0 z-50 w-[220px] flex flex-col bg-slate-900 border-r border-slate-800 shrink-0 transition-transform duration-200"
+  <!-- Sol — MailFlow SideNav -->
+  <aside class="wm-sidebar-ds fixed lg:static inset-y-0 left-0 z-50 w-sidebar-width flex flex-col p-stack-md border-r border-outline-variant dark:border-outline bg-surface-container-low dark:bg-inverse-surface shrink-0 transition-transform duration-200"
          :class="sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'">
-    <div class="h-12 px-3 flex items-center gap-2 border-b border-slate-800 shrink-0">
-      <img src="{% static 'brand/logo-icon.svg' %}" alt="" class="w-7 h-7 rounded-lg">
-      <span class="text-sm font-bold text-white">Jîr<span class="text-primary-400">Mail</span></span>
+    <div class="flex items-center gap-3 px-2 mb-6">
+      <div class="w-8 h-8 rounded-lg bg-primary text-on-primary flex items-center justify-center shadow-sm shrink-0">
+        <span class="material-symbols-outlined text-[20px] wm-material-icon-fill">mail</span>
+      </div>
+      <div class="min-w-0">
+        <h1 class="font-headline-md text-headline-md text-primary dark:text-primary-fixed truncate">Jîr-Mail</h1>
+        <p class="font-label-sm text-label-sm text-on-surface-variant truncate">Webmail</p>
+      </div>
     </div>
 
-    <div class="p-2 shrink-0">
-      <button type="button" @click="openCompose()" class="btn btn-primary w-full text-sm py-2 gap-2">
-        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
+    <div class="px-2 mb-4">
+      <button type="button" @click="openCompose(); sidebarOpen = false"
+              class="w-full bg-primary text-on-primary hover:opacity-92 shadow-sm rounded-xl py-3 px-4 font-label-md text-label-md flex items-center justify-center gap-2 transition-all active:scale-[0.98] duration-150">
+        <span class="material-symbols-outlined text-[18px] wm-material-icon-fill">edit</span>
         Yeni mesaj
       </button>
     </div>
 
-    <nav class="flex-1 overflow-y-auto px-2 py-1 space-y-0.5 text-sm" aria-label="Klasörler">
+    <nav class="flex flex-col gap-1 flex-1 overflow-y-auto min-h-0" aria-label="Klasörler">
       <template x-for="f in folderNav" :key="f.id">
         <button type="button" @click="setFolder(f.id)"
-                class="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg font-medium transition-colors border"
+                class="rounded-lg px-4 py-2 font-label-md flex items-center gap-3 text-left transition-colors w-full"
                 :class="currentFolder === f.id
-                  ? 'bg-primary-500/10 text-primary-300 border-primary-500/25'
-                  : 'text-slate-400 hover:bg-slate-800/80 hover:text-white border-transparent'">
-          <span x-html="f.icon" class="w-5 h-5 shrink-0 opacity-80"></span>
-          <span class="truncate" x-text="f.label"></span>
+                  ? 'bg-tertiary-fixed dark:bg-tertiary-container text-primary dark:text-on-primary-container font-bold'
+                  : 'text-on-surface-variant hover:bg-surface-container-high dark:hover:bg-tertiary'">
+          <span class="material-symbols-outlined text-[20px] shrink-0"
+                :class="currentFolder === f.id ? 'wm-material-icon-fill' : 'wm-material-icon'"
+                x-text="f.ms"></span>
+          <span class="flex-1 truncate" x-text="f.label"></span>
           <span x-show="f.id === 'inbox' && unreadCount > 0"
-                class="ml-auto text-[10px] font-bold tabular-nums bg-primary-500/20 text-primary-300 px-1.5 py-0.5 rounded-full"
+                class="bg-primary text-on-primary font-label-sm text-[10px] px-2 py-0.5 rounded-full tabular-nums shrink-0"
                 x-text="unreadCount"></span>
         </button>
       </template>
     </nav>
 
-    <div class="p-3 border-t border-slate-800 shrink-0 space-y-2">
-      <div x-show="quota" class="text-[10px] text-slate-500">
-        <div class="flex justify-between mb-1">
-          <span>Depolama</span>
-          <span x-text="quotaLabel()"></span>
+    <!-- Depolama -->
+    <div class="mt-auto pt-4 border-t border-outline-variant/60 dark:border-outline">
+      <template x-if="quota && !quota.unlimited">
+        <div class="px-2 mb-4">
+          <p class="font-label-sm text-label-sm text-on-surface-variant mb-2 uppercase tracking-wider">Depolama</p>
+          <div class="flex justify-between font-label-sm text-[11px] text-on-surface-variant mb-1">
+            <span>Doluluk</span>
+            <span x-text="quotaLabel()"></span>
+          </div>
+          <div class="wm-quota-bar">
+            <div class="wm-quota-bar__fill" :style="'width:' + Math.min(100, quota.percent || 0) + '%'"></div>
+          </div>
         </div>
-        <div class="wm-quota-bar">
-          <div class="wm-quota-bar__fill" :style="'width:' + Math.min(100, quota.percent || 0) + '%'"></div>
-        </div>
-      </div>
-      <div class="flex items-center gap-2 min-w-0">
-        <div class="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white shrink-0"
+      </template>
+
+      <div class="px-2 pb-2 flex items-center gap-2 min-w-0">
+        <div class="w-9 h-9 rounded-full flex items-center justify-center text-xs font-semibold text-white shrink-0 border border-outline-variant"
              :style="'background:' + avatarColor(userEmail)" x-text="initials(userEmail)"></div>
-        <span class="text-xs text-slate-400 truncate flex-1" x-text="userEmail"></span>
+        <span class="font-label-md text-[11px] text-on-surface-variant truncate flex-1" x-text="userEmail"></span>
       </div>
-      <div class="flex gap-1">
-        <a href="{% url 'webmail:settings' %}" class="btn btn-ghost btn-sm flex-1 text-xs">Ayarlar</a>
+      <div class="flex gap-1 px-2">
+        <a href="{% url 'webmail:settings' %}"
+           class="flex-1 py-2 px-2 rounded-lg text-center font-label-md text-[12px] text-on-surface-variant hover:bg-surface-container-high dark:hover:bg-tertiary transition-colors">Ayarlar</a>
         <form method="post" action="{% url 'webmail:logout' %}" class="flex-1">
           {% csrf_token %}
-          <button type="submit" class="btn btn-ghost btn-sm w-full text-xs text-danger-400">Çıkış</button>
+          <button type="submit"
+                  class="w-full py-2 px-2 rounded-lg font-label-md text-[12px] text-error hover:bg-error-container/30 transition-colors">Çıkış</button>
         </form>
       </div>
     </div>
   </aside>
 
-  <!-- Ana alan -->
-  <div class="flex flex-1 flex-col min-w-0 min-h-0">
-    <!-- Üst arama -->
-    <header class="h-12 flex items-center gap-2 px-3 border-b border-slate-800 bg-slate-900/80 shrink-0">
-      <button type="button" class="lg:hidden p-2 rounded-lg text-slate-400 hover:bg-slate-800" @click="sidebarOpen = true" aria-label="Menü">
-        <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16"/></svg>
-      </button>
-      <div class="relative flex-1 max-w-xl">
-        <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z"/></svg>
-        <input type="search" class="input input-sm w-full pl-9" placeholder="Konu, gönderen veya içerikte ara…"
-               x-model.debounce.350ms="searchQuery" @input="onSearch()">
+  <main class="flex flex-col flex-1 h-full min-w-0 min-h-0 overflow-hidden bg-surface dark:bg-[#2e3132]">
+    <!-- Üst bar -->
+    <header class="wm-topbar-ds flex justify-between items-center px-4 sm:px-container-padding h-16 w-full shrink-0 border-b border-outline-variant dark:border-outline bg-surface dark:bg-inverse-surface">
+      <div class="flex items-center gap-2 flex-1 min-w-0">
+        <button type="button" class="lg:hidden p-2 rounded-full text-on-surface-variant hover:bg-surface-container dark:hover:bg-tertiary" @click="sidebarOpen = true" aria-label="Menü">
+          <span class="material-symbols-outlined text-[22px]">menu</span>
+        </button>
+        <div class="relative flex-1 max-w-2xl group min-w-0">
+          <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant text-[20px] pointer-events-none group-focus-within:text-primary transition-colors">search</span>
+          <input type="search"
+                 class="w-full bg-surface-container-low dark:bg-tertiary border border-outline-variant dark:border-outline rounded-full py-2 pl-10 pr-10 font-body-md text-body-md text-on-surface placeholder:text-on-surface-variant focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30 transition-all shadow-sm"
+                 placeholder="Postada ara… (konu, gönderen, içerik)"
+                 x-model.debounce.350ms="searchQuery" @input="onSearch()">
+          <button type="button" class="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded-full text-on-surface-variant hover:text-primary" title="Senkronize" @click="syncNow()">
+            <span class="material-symbols-outlined text-[20px]" :class="syncing && 'animate-spin'">refresh</span>
+          </button>
+        </div>
       </div>
-      <button type="button" class="p-2 rounded-lg text-slate-400 hover:bg-slate-800" :class="syncing && 'animate-spin'" @click="syncNow()" title="Senkronize">
-        <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99"/></svg>
-      </button>
+      <div class="flex items-center gap-1 sm:gap-2 ml-2 shrink-0">
+        <button type="button" @click="toggleTheme()" class="w-10 h-10 rounded-full flex items-center justify-center text-on-surface-variant hover:bg-surface-container-high dark:hover:bg-tertiary transition-colors" :title="themeSync === 'light' ? 'Karanlık mod' : 'Aydınlık mod'">
+          <span class="material-symbols-outlined text-[22px]" x-show="themeSync !== 'light'">light_mode</span>
+          <span class="material-symbols-outlined text-[22px]" x-show="themeSync === 'light'" x-cloak>dark_mode</span>
+        </button>
+        <a href="{% url 'webmail:settings' %}" class="w-10 h-10 rounded-full flex items-center justify-center text-on-surface-variant hover:bg-surface-container-high dark:hover:bg-tertiary transition-colors" title="Ayarlar">
+          <span class="material-symbols-outlined">settings</span>
+        </a>
+        <div class="hidden sm:flex w-9 h-9 rounded-full items-center justify-center text-on-primary font-label-md ml-1 border border-outline-variant shrink-0 bg-secondary dark:bg-secondary-container"
+             x-text="initials(userEmail)"></div>
+      </div>
     </header>
 
-    <div class="flex flex-1 min-h-0">
-      <!-- Liste -->
-      <section class="wm-col-list w-full lg:w-[300px] xl:w-[320px] flex flex-col border-r border-slate-800 bg-slate-900/40 shrink-0"
+    <div class="flex flex-1 min-h-0 overflow-hidden bg-background dark:bg-[#2b2b2b]">
+      <!-- Liste sütunu -->
+      <section class="wm-col-list wm-list-column w-full lg:w-list-width flex flex-col border-r border-outline-variant dark:border-outline bg-surface dark:bg-inverse-surface h-full shrink-0 min-h-0"
                :class="mobileView !== 'list' && 'is-hidden lg:flex'">
-        <div class="px-2 py-2 border-b border-slate-800 flex flex-wrap items-center gap-1 shrink-0">
-          <h2 class="text-sm font-semibold text-white flex-1 min-w-0 truncate px-1" x-text="folderTitle()"></h2>
-          <label class="flex items-center gap-1.5 text-[11px] text-slate-500 px-1 cursor-pointer">
-            <input type="checkbox" class="rounded border-slate-600" :checked="allSelected" @change="toggleSelectAll($event.target.checked)">
-            Tümü
-          </label>
-          <button type="button" class="text-[11px] px-2 py-1 rounded-md text-slate-400 hover:bg-slate-800" @click="bulkAction('seen')" :disabled="!hasSelection">Okundu</button>
-          <button type="button" class="text-[11px] px-2 py-1 rounded-md text-slate-400 hover:bg-slate-800 hover:text-danger-400" @click="bulkAction('delete')" :disabled="!hasSelection">Sil</button>
+
+        <div class="px-gutter py-3 flex flex-wrap items-center justify-between gap-2 border-b border-surface-variant dark:border-outline shrink-0 bg-surface dark:bg-inverse-surface">
+          <div class="flex items-center gap-2 min-w-0">
+            <h2 class="font-headline-sm text-headline-sm text-on-surface truncate max-w-[10rem]" x-text="folderTitle()"></h2>
+            <span class="hidden sm:inline bg-surface-container-highest dark:bg-tertiary text-on-surface-variant px-2 py-0.5 rounded font-label-sm whitespace-nowrap" x-show="currentFolder !== 'drafts'"
+                  x-text="unreadInFolderBadge() + ' okunmamış'"></span>
+          </div>
+          <div class="flex items-center gap-1">
+            <label class="flex items-center gap-1.5 cursor-pointer text-on-surface-variant font-label-sm">
+              <input type="checkbox" class="rounded border-outline-variant text-primary focus:ring-primary w-4 h-4" :checked="allSelected" @change="toggleSelectAll($event.target.checked)">
+              <span class="hidden sm:inline">Tümü</span>
+            </label>
+            <button type="button" class="text-on-surface-variant hover:bg-surface-container dark:hover:bg-tertiary p-1.5 rounded font-label-sm" @click="bulkAction('seen')" :disabled="!hasSelection" :class="!hasSelection && 'opacity-40'">Okundu</button>
+            <button type="button" class="text-error hover:bg-error-container/20 p-1.5 rounded font-label-sm" @click="bulkAction('delete')" :disabled="!hasSelection" :class="!hasSelection && 'opacity-40'">Sil</button>
+          </div>
         </div>
 
-        <div class="flex-1 overflow-y-auto custom-scrollbar">
-          <p x-show="loadingMails" class="p-4 text-center text-sm text-slate-500">Yükleniyor…</p>
+        <div class="flex-1 overflow-y-auto min-h-0">
+          <p x-show="loadingMails" class="p-6 text-center font-body-md text-on-surface-variant">Yükleniyor…</p>
+
           <template x-for="mail in mails" :key="mail.uid + '-' + currentFolder">
             <article @click="selectMail(mail)"
-                     class="flex gap-2 px-2 py-2.5 border-b border-slate-800/50 cursor-pointer transition-colors relative"
-                     :class="{
-                       'bg-primary-500/10 border-l-2 border-l-primary-500': selectedMail && selectedMail.uid === mail.uid,
-                       'hover:bg-slate-800/50': !(selectedMail && selectedMail.uid === mail.uid)
-                     }">
-              <input type="checkbox" class="mt-1 rounded border-slate-600 shrink-0"
-                     :checked="isSelected(mail.uid)" @click.stop="toggleSelect(mail.uid)">
-              <div class="w-8 h-8 rounded-full flex items-center justify-center text-[10px] font-bold text-white shrink-0"
-                   :style="'background:' + avatarColor(mail.from)" x-text="initials(mail.from)"></div>
-              <div class="flex-1 min-w-0">
-                <div class="flex items-baseline justify-between gap-1">
-                  <span class="text-xs truncate" :class="mail.unread ? 'font-semibold text-white' : 'text-slate-400'" x-text="displayFrom(mail)"></span>
-                  <time class="text-[10px] text-slate-500 shrink-0 tabular-nums" x-text="formatDate(mail.date)"></time>
+                     class="relative group px-gutter py-3 border-b border-surface-variant dark:border-outline cursor-pointer transition-colors"
+                     :class="mail.unread
+                       ? 'bg-surface-container-lowest dark:bg-[#252829] border-l-[3px] border-l-primary'
+                       : 'border-l-[3px] border-l-transparent opacity-90 hover:opacity-100 hover:bg-surface-container-low dark:hover:bg-tertiary/50'">
+              <div class="flex gap-2">
+                <input type="checkbox" class="mt-1 rounded border-outline-variant text-primary w-4 h-4 shrink-0 z-10"
+                       :checked="isSelected(mail.uid)" @click.stop="toggleSelect(mail.uid)">
+                <div class="flex-1 min-w-0 pr-14">
+                  <div class="flex justify-between items-baseline gap-2 mb-1">
+                    <span class="font-label-md truncate pr-1"
+                          :class="mail.unread ? 'font-bold text-on-surface' : 'text-on-surface-variant'"
+                          x-text="displayFrom(mail)"></span>
+                    <span class="font-label-sm shrink-0 tabular-nums"
+                          :class="mail.unread ? 'text-primary font-bold' : 'text-on-surface-variant'"
+                          x-text="formatDate(mail.date)"></span>
+                  </div>
+                  <h3 class="font-headline-sm mb-0.5 truncate pr-8 flex items-center gap-2"
+                      :class="mail.unread ? 'text-on-surface font-bold' : 'text-on-surface font-medium'"
+                      x-text="mail.subject">
+                  </h3>
+                  <p class="font-body-md text-on-surface-variant line-clamp-2 leading-snug" x-text="mail.preview"></p>
+                  <div class="flex items-center gap-2 mt-1.5" x-show="mail.hasAttachments">
+                    <span class="material-symbols-outlined text-[14px] text-secondary">attachment</span>
+                    <span class="font-label-sm text-secondary">Ek</span>
+                  </div>
                 </div>
-                <p class="text-xs truncate mt-0.5" :class="mail.unread ? 'text-slate-200 font-medium' : 'text-slate-500'" x-text="mail.subject"></p>
-                <p class="text-[11px] text-slate-600 truncate" x-text="mail.preview"></p>
               </div>
-              <span x-show="mail.unread" class="w-2 h-2 rounded-full bg-primary-500 shrink-0 self-center"></span>
+              <!-- Hover quick actions -->
+              <div class="absolute right-2 top-1/2 -translate-y-1/2 rounded-md px-1 py-0.5 hidden sm:group-hover:flex items-center gap-0.5 border border-outline-variant/40 bg-surface-container-lowest dark:bg-inverse-surface shadow-sm z-[2]">
+                <button type="button" @click.prevent="archiveMailRow(mail, $event)" title="Arşivle" class="p-1 text-on-surface-variant hover:text-primary rounded">
+                  <span class="material-symbols-outlined text-[18px]">archive</span>
+                </button>
+                <button type="button" @click.prevent="deleteMailRow(mail, $event)" title="Sil" class="p-1 text-on-surface-variant hover:text-error rounded">
+                  <span class="material-symbols-outlined text-[18px]">delete</span>
+                </button>
+              </div>
             </article>
           </template>
-          <div x-show="!loadingMails && mails.length === 0" class="p-8 text-center text-sm text-slate-500" x-text="emptyFolderMessage()"></div>
+
+          <div x-show="!loadingMails && mails.length === 0" class="p-12 text-center font-body-md text-on-surface-variant" x-text="emptyFolderMessage()"></div>
         </div>
       </section>
 
-      <!-- Okuma -->
-      <section class="wm-col-read flex-1 flex flex-col min-w-0 bg-slate-950"
+      <!-- Okuma paneli -->
+      <section class="wm-col-read wm-read-pane flex-1 flex flex-col min-w-0 min-h-0 bg-surface-container-lowest dark:bg-[#252829] shadow-[-4px_0_12px_rgba(0,0,0,0.04)] overflow-hidden relative"
                :class="mobileView === 'list' && 'is-hidden lg:flex'">
+
         <template x-if="selectedMail && !composeOpen">
           <div class="flex flex-col h-full min-h-0">
-            <div class="px-4 py-3 border-b border-slate-800 flex items-start gap-2 shrink-0">
-              <button type="button" class="lg:hidden p-2 -ml-2 rounded-lg text-slate-400" @click="goBack()">
-                <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7"/></svg>
+            <!-- Araç şeridi -->
+            <div class="flex justify-end items-center gap-1 px-4 sm:px-6 py-2 border-b border-outline-variant dark:border-outline shrink-0 bg-surface-container-lowest dark:bg-[#252829]">
+              <button type="button" class="lg:hidden w-10 h-10 rounded-full flex items-center justify-center text-on-surface-variant mr-auto hover:bg-surface-container" @click="goBack()">
+                <span class="material-symbols-outlined">arrow_back</span>
               </button>
-              <div class="flex-1 min-w-0">
-                <h1 class="text-base font-semibold text-white leading-snug break-words" x-text="selectedMail.subject"></h1>
-              </div>
-              <div class="flex gap-0.5 shrink-0">
-                <button type="button" class="p-2 rounded-lg text-slate-400 hover:bg-slate-800" @click="toggleStar(selectedMail)" :class="selectedMail.starred && 'text-amber-400'">
-                  <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z"/></svg>
-                </button>
-                <button type="button" class="p-2 rounded-lg text-slate-400 hover:bg-slate-800 hover:text-danger-400" @click="deleteMail(selectedMail)">
-                  <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0"/></svg>
-                </button>
-                <button type="button" class="p-2 rounded-lg text-slate-400 hover:bg-slate-800" @click="replyTo()">↩</button>
-              </div>
+              <button type="button" class="w-10 h-10 rounded-full flex items-center justify-center text-on-surface-variant hover:bg-surface-container dark:hover:bg-tertiary" title="Yanıtla" @click="replyTo()">
+                <span class="material-symbols-outlined text-[20px]">reply</span>
+              </button>
+              <button type="button" class="w-10 h-10 rounded-full flex items-center justify-center text-on-surface-variant hover:bg-surface-container dark:hover:bg-tertiary" title="İlet" @click="forwardMail()">
+                <span class="material-symbols-outlined text-[20px]">forward</span>
+              </button>
+              <button type="button" class="w-10 h-10 rounded-full flex items-center justify-center text-on-surface-variant hover:bg-surface-container dark:hover:bg-tertiary" @click="toggleStar(selectedMail)" title="Yıldız">
+                <span class="material-symbols-outlined text-[20px]"
+                      :class="selectedMail.starred && 'text-amber-500 wm-material-icon-fill'">star</span>
+              </button>
+              <button type="button" class="w-10 h-10 rounded-full flex items-center justify-center text-on-surface-variant hover:bg-surface-container dark:hover:bg-tertiary" title="Arşivle" @click="archiveMail(selectedMail)">
+                <span class="material-symbols-outlined text-[20px]">archive</span>
+              </button>
+              <div class="w-px h-6 bg-outline-variant mx-1"></div>
+              <button type="button" class="w-10 h-10 rounded-full flex items-center justify-center text-on-surface-variant hover:bg-error-container/25 hover:text-error" title="Sil" @click="deleteMail(selectedMail)">
+                <span class="material-symbols-outlined text-[20px]">delete</span>
+              </button>
             </div>
-            <div class="px-4 py-2 flex items-center gap-3 border-b border-slate-800/80 shrink-0">
-              <div class="w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold text-white"
-                   :style="'background:' + avatarColor(selectedMail.from)" x-text="initials(selectedMail.from)"></div>
-              <div class="min-w-0 flex-1">
-                <div class="text-sm font-medium text-white truncate" x-text="displayFrom(selectedMail)"></div>
-                <div class="text-xs text-slate-500" x-text="formatDate(selectedMail.date)"></div>
-              </div>
+
+            <div class="flex-1 overflow-y-auto min-h-0">
+              <article class="max-w-4xl mx-auto px-4 sm:px-10 pt-8 pb-16">
+                <h1 class="font-display-sm text-display-sm text-on-surface mb-6 tracking-tight break-words" x-text="selectedMail.subject"></h1>
+
+                <div class="flex flex-wrap items-start justify-between gap-4 mb-10 pb-6 border-b border-outline-variant dark:border-outline">
+                  <div class="flex items-start gap-4">
+                    <div class="w-12 h-12 rounded-full flex items-center justify-center text-base font-semibold text-white shrink-0 border border-outline-variant"
+                         :style="'background:' + avatarColor(selectedMail.from)" x-text="initials(selectedMail.from)"></div>
+                    <div>
+                      <div class="font-headline-sm text-headline-sm text-on-surface" x-text="displayFrom(selectedMail)"></div>
+                      <p class="font-body-md text-on-surface-variant mt-1" x-text="formatDetailDate(selectedMail.date)"></p>
+                    </div>
+                  </div>
+                </div>
+
+                <template x-if="selectedMail.attachments && selectedMail.attachments.length">
+                  <div class="mb-10 pt-2 border-t border-outline-variant dark:border-transparent">
+                    <h3 class="font-headline-sm text-on-surface mb-3 flex items-center gap-2">
+                      <span class="material-symbols-outlined text-[20px]">attachment</span>
+                      <span x-text="selectedMail.attachments.length + ' ek'"></span>
+                    </h3>
+                    <div class="flex flex-wrap gap-2">
+                      <template x-for="(att, ai) in (selectedMail.attachments || [])" :key="ai">
+                        <div class="w-52 border border-outline-variant dark:border-outline rounded-xl overflow-hidden bg-surface hover:shadow-md transition-shadow">
+                          <div class="h-16 bg-surface-container flex items-center justify-center border-b border-outline-variant">
+                            <span class="material-symbols-outlined text-[32px] text-primary">description</span>
+                          </div>
+                          <div class="p-2.5">
+                            <p class="font-headline-sm text-on-surface truncate text-sm" x-text="att.filename"></p>
+                            <p class="font-label-md text-on-surface-variant mt-0.5" x-text="formatSize(att.size)"></p>
+                          </div>
+                        </div>
+                      </template>
+                    </div>
+                  </div>
+                </template>
+
+                <div class="wm-mail-body font-body-lg text-body-lg text-on-surface leading-relaxed max-w-none"
+                     x-html="sanitizeHtml(selectedMail.body || '&lt;p class=&quot;text-on-surface-variant&quot;&gt;İçerik yükleniyor…&lt;/p&gt;')"></div>
+              </article>
             </div>
-            <div x-show="selectedMail.attachments && selectedMail.attachments.length" class="px-4 py-2 flex flex-wrap gap-2 border-b border-slate-800 shrink-0">
-              <template x-for="(att, i) in (selectedMail.attachments || [])" :key="i">
-                <span class="text-[11px] px-2 py-1 rounded-md bg-slate-800 text-slate-300 border border-slate-700"
-                      x-text="att.filename + ' (' + formatSize(att.size) + ')'"></span>
-              </template>
-            </div>
-            <div class="flex-1 overflow-y-auto custom-scrollbar p-4 wm-mail-body prose prose-invert max-w-none"
-                 x-html="sanitizeHtml(selectedMail.body || '<p class=\'text-slate-500\'>İçerik yükleniyor…</p>')"></div>
           </div>
         </template>
 
-        <div x-show="!selectedMail && !composeOpen" class="flex-1 flex flex-col items-center justify-center p-8 text-center text-slate-500">
-          <div class="w-16 h-16 rounded-full bg-slate-900 border border-slate-800 flex items-center justify-center mb-4">
-            <svg class="w-8 h-8 text-slate-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75"/></svg>
+        <!-- Boş durum -->
+        <div x-show="!selectedMail && !composeOpen"
+             class="flex-1 flex flex-col items-center justify-center text-center p-10 bg-gradient-to-b from-surface-container-lowest to-surface-bright dark:from-[#252829] dark:to-[#2b2b2b] min-h-[50vh]">
+          <div class="w-24 h-24 bg-surface-container-low dark:bg-inverse-surface rounded-full flex items-center justify-center mb-6 shadow-sm border border-surface-variant">
+            <span class="material-symbols-outlined text-[48px] text-outline" style="font-variation-settings: 'wght' 200;">forward_to_inbox</span>
           </div>
-          <p class="text-sm font-medium">Mesaj seçin veya yeni mail yazın</p>
-          <button type="button" @click="openCompose()" class="btn btn-primary btn-sm mt-4">Yeni mesaj</button>
+          <h3 class="font-headline-md text-headline-md text-on-surface mb-2">Henüz bir konu seçilmedi</h3>
+          <p class="font-body-md text-on-surface-variant max-w-sm mx-auto mb-8">Listedeki bir iletiye tıklayın — sade bir okuma düzeni kullanılacaktır.</p>
+          <button type="button" @click="openCompose()" class="bg-primary text-on-primary font-label-md py-3 px-6 rounded-xl shadow-sm hover:opacity-92 transition-opacity">
+            Yeni mesaj yaz
+          </button>
         </div>
       </section>
     </div>
-  </div>
+  </main>
 
-  <!-- Compose modal (sağ alt) -->
-  <div x-show="composeOpen" x-cloak
-       class="wm-compose-modal fixed z-[60] bottom-0 right-0 lg:right-6 w-full max-w-lg bg-slate-900 border border-slate-700 rounded-t-xl lg:rounded-xl overflow-hidden flex flex-col"
-       :class="composeMinimized ? 'h-12' : 'h-[min(520px,85vh)]'"
-       @keydown.escape.window="closeCompose()">
-    <header class="h-11 px-3 flex items-center gap-2 bg-slate-800/90 border-b border-slate-700 shrink-0 cursor-pointer" @click="composeMinimized = !composeMinimized">
-      <span class="text-sm font-semibold text-white flex-1 truncate" x-text="composeSubject || 'Yeni mesaj'"></span>
-      <span x-show="draftSaving" class="text-[10px] text-slate-500">Taslak…</span>
-      <span x-show="draftSavedAt" class="text-[10px] text-emerald-500/80" x-text="'Kaydedildi ' + draftSavedAt"></span>
-      <button type="button" class="p-1.5 rounded text-slate-400 hover:bg-slate-700" @click.stop="composeMinimized = !composeMinimized" aria-label="Küçült">—</button>
-      <button type="button" class="p-1.5 rounded text-slate-400 hover:bg-slate-700" @click.stop="closeCompose()" aria-label="Kapat">✕</button>
-    </header>
-    <div x-show="!composeMinimized" class="flex flex-col flex-1 min-h-0 overflow-hidden">
-      <div class="px-3 py-2 space-y-2 border-b border-slate-800 shrink-0 text-sm">
-        <div class="flex items-center gap-2">
-          <label class="text-slate-500 w-10 shrink-0 text-xs">Kime</label>
-          <input type="email" class="input input-sm flex-1" x-model="composeTo" placeholder="ornek@domain.com">
+  <!-- Compose overlay — MailFlow modal -->
+  <div x-show="composeOpen && !composeMinimized" x-cloak
+       class="fixed inset-0 z-[70] flex items-end sm:items-center justify-center p-2 sm:p-6 backdrop-blur-md bg-on-background/20 dark:bg-black/50">
+    <div class="wm-compose-shell bg-surface-container-lowest dark:bg-inverse-surface w-full rounded-t-xl sm:rounded-xl border border-outline-variant dark:border-outline modal-shadow flex flex-col overflow-hidden border-t sm:border shadow-2xl"
+         :class="composeExpanded ? 'max-w-[min(960px,98vw)] h-[min(92vh,dvh)]' : 'max-w-3xl h-[min(600px,min(92vh,dvh))]'">
+      <header class="bg-surface-container-low dark:bg-inverse-surface px-4 py-3 flex justify-between items-center border-b border-outline-variant dark:border-outline shrink-0 cursor-pointer select-none">
+        <div class="flex items-center gap-2 min-w-0 flex-1" @click="composeMinimized = true">
+          <span class="font-label-md uppercase tracking-wider text-on-surface font-bold truncate">Yeni ileti</span>
+          <span x-show="draftSaving" class="text-[11px] text-on-surface-variant shrink-0">Taslak…</span>
+          <span x-show="draftSavedAt" class="text-[11px] text-secondary shrink-0" x-text="draftSavedAt"></span>
         </div>
-        <div class="flex items-center gap-2">
-          <label class="text-slate-500 w-10 shrink-0 text-xs">Cc</label>
-          <input type="email" class="input input-sm flex-1" x-model="composeCc" placeholder="isteğe bağlı">
+        <div class="flex items-center gap-0.5 shrink-0">
+          <button type="button" class="p-1.5 rounded text-on-surface-variant hover:bg-surface-container dark:hover:bg-tertiary" @click.stop="composeMinimized = true" title="Simge durumuna">
+            <span class="material-symbols-outlined text-[20px]">minimize</span>
+          </button>
+          <button type="button" class="hidden sm:block p-1.5 rounded text-on-surface-variant hover:bg-surface-container dark:hover:bg-tertiary" @click.stop="toggleComposeExpand()" title="Genişlet">
+            <span class="material-symbols-outlined text-[20px]" x-show="!composeExpanded">open_in_full</span>
+            <span class="material-symbols-outlined text-[20px]" x-show="composeExpanded">close_fullscreen</span>
+          </button>
+          <button type="button" class="p-1.5 rounded text-on-surface-variant hover:bg-error-container/30 hover:text-error" @click.stop="closeCompose()" title="Kapat">
+            <span class="material-symbols-outlined text-[20px]">close</span>
+          </button>
         </div>
-        <div class="flex items-center gap-2">
-          <label class="text-slate-500 w-10 shrink-0 text-xs">Konu</label>
-          <input type="text" class="input input-sm flex-1" x-model="composeSubject">
+      </header>
+
+      <div class="flex-1 overflow-y-auto min-h-0 flex flex-col">
+        <div class="border-b border-surface-variant dark:border-outline px-6 py-2 grid gap-2">
+          <div class="flex items-center gap-3">
+            <label class="font-label-md text-on-surface-variant w-14 shrink-0">Kime</label>
+            <input type="email" x-model="composeTo"
+                   class="flex-1 bg-transparent border-none focus:ring-0 font-body-md py-2 text-on-surface placeholder:text-on-surface-variant"
+                   placeholder="ornek@domain.com">
+          </div>
+          <div class="flex items-center gap-3">
+            <label class="font-label-md text-on-surface-variant w-14 shrink-0">Cc</label>
+            <input type="email" x-model="composeCc"
+                   class="flex-1 bg-transparent border-none focus:ring-0 font-body-md py-2 text-on-surface placeholder:text-on-surface-variant"
+                   placeholder="İsteğe bağlı">
+          </div>
+          <div class="flex items-center gap-3 border-t border-outline-variant/50 dark:border-outline pt-2">
+            <label class="font-label-md text-on-surface-variant w-14 shrink-0">Konu</label>
+            <input type="text" x-model="composeSubject"
+                   class="flex-1 bg-transparent border-none focus:ring-0 font-body-md py-2 font-medium text-on-surface">
+          </div>
+        </div>
+        <div class="flex-1 min-h-[160px] px-4 pt-4 wm-compose-editor flex flex-col">
+          <div id="wm-quill-editor" class="flex-1 min-h-[200px]"></div>
         </div>
       </div>
-      <div class="flex-1 min-h-0 px-3 py-2 wm-compose-editor overflow-hidden flex flex-col">
-        <div id="wm-quill-editor" class="flex-1 min-h-0"></div>
-      </div>
-      <footer class="px-3 py-2 border-t border-slate-800 flex flex-wrap items-center gap-2 shrink-0">
-        <input type="file" multiple class="text-xs text-slate-500 max-w-[140px]" @change="onFiles($event)">
-        <span class="flex-1"></span>
-        <button type="button" class="btn btn-ghost btn-sm" @click="saveDraft(true)">Taslağa kaydet</button>
-        <button type="button" class="btn btn-secondary btn-sm" @click="closeCompose()">İptal</button>
-        <button type="button" class="btn btn-primary btn-sm" @click="sendMail()" :disabled="sendingMail">
-          <span x-text="sendingMail ? 'Gönderiliyor…' : 'Gönder'"></span>
-        </button>
+
+      <footer class="border-t border-outline-variant dark:border-outline bg-surface-container-low dark:bg-inverse-surface px-4 py-3 flex flex-col sm:flex-row justify-between gap-3 shrink-0">
+        <div class="flex items-center gap-2 flex-wrap">
+          <label class="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-outline-variant hover:bg-surface-container cursor-pointer font-label-sm text-on-surface-variant">
+            <span class="material-symbols-outlined text-[18px]">attach_file</span>
+            <span>Dosya ekle</span>
+            <input type="file" multiple class="hidden" @change="onFiles($event)">
+          </label>
+          <template x-if="composeFiles.length">
+            <span class="font-label-sm text-on-surface-variant" x-text="composeFiles.length + ' dosya'"></span>
+          </template>
+        </div>
+        <div class="flex gap-2 justify-end">
+          <button type="button" class="px-4 py-2 rounded-lg font-label-md text-on-surface-variant hover:bg-surface-container" @click="saveDraft(true)">Taslak kaydet</button>
+          <button type="button" class="px-4 py-2 rounded-lg font-label-md border border-outline-variant" @click="closeCompose()">İptal</button>
+          <button type="button" class="bg-primary text-on-primary font-label-md py-2.5 px-6 rounded-lg shadow-sm hover:opacity-92 inline-flex items-center gap-2" @click="sendMail()" :disabled="sendingMail">
+            <span x-text="sendingMail ? 'Gönderiliyor…' : 'Gönder'"></span>
+            <span class="material-symbols-outlined text-[18px]">send</span>
+          </button>
+        </div>
       </footer>
     </div>
   </div>
+
+  <!-- Minimize stripe -->
+  <div x-show="composeOpen && composeMinimized" x-cloak
+       class="fixed bottom-0 right-4 sm:right-8 z-[70] bg-surface-container-lowest dark:bg-inverse-surface border border-outline-variant rounded-t-xl shadow-lg px-4 py-2 flex items-center gap-4 max-w-md w-[min(100%-2rem,400px)] cursor-pointer"
+       @click="composeMinimized = false">
+    <span class="material-symbols-outlined text-on-surface-variant">edit</span>
+    <span class="font-label-md truncate text-on-surface flex-1" x-text="composeSubject || 'Taslak'"></span>
+    <button type="button" class="p-1 text-on-surface-variant hover:text-error" @click.stop="closeCompose()"><span class="material-symbols-outlined">close</span></button>
+  </div>
+
 </div>
 {% endblock %}

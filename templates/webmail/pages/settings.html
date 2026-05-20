@@ -3,11 +3,11 @@
 {% block title %}Ayarlar — Jîr-Mail{% endblock %}
 
 {% block extra_head %}
-<link rel="stylesheet" href="{% url 'webmail:asset' asset_path='css/webmail-settings.css' %}?v=20260521">
+<link rel="stylesheet" href="{% url 'webmail:asset' asset_path='css/webmail-settings.css' %}?v=20260521c">
 {% endblock %}
 
 {% block body %}
-<div class="wm-shell wm-shell--settings flex h-dvh w-full overflow-hidden bg-slate-950"
+<div class="wm-shell wm-shell--settings flex h-dvh w-full overflow-hidden"
      x-data="settingsApp()"
      x-init="init()"
      data-user-email="{{ email|default:''|escape }}">
