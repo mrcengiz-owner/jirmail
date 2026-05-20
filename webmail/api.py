@@ -504,6 +504,62 @@ class ScheduleMailSchema(Schema):
     bcc: str = ''
 
 
+AI_PROVIDERS = [
+    {'id': 'openrouter', 'label': 'OpenRouter', 'default_model': 'openai/gpt-4o-mini'},
+    {'id': 'openai', 'label': 'OpenAI', 'default_model': 'gpt-4o-mini'},
+]
+
+
+class WebmailSettingsPatchSchema(Schema):
+    ai_enabled: Optional[bool] = None
+    ai_provider: Optional[str] = None
+    ai_model: Optional[str] = None
+    ai_api_key: Optional[str] = None
+    ai_system_prompt: Optional[str] = None
+
+
+@router.get('/settings', summary='Webmail ayarları')
+def get_settings(request: HttpRequest):
+    account, _ = _get_account_and_password(request)
+    if not account:
+        return {'success': False, 'message': 'Oturum yok'}
+    account = MailAccount.objects.select_related('domain').filter(pk=account.pk).first()
+    key = (account.ai_api_key or '').strip()
+    return {
+        'success': True,
+        'email': account.email,
+        'ai_enabled': bool(account.ai_enabled),
+        'ai_provider': account.ai_provider or account.domain.ai_provider or 'openrouter',
+        'ai_model': account.ai_model or account.domain.ai_default_model or 'openai/gpt-4o-mini',
+        'ai_system_prompt': account.ai_system_prompt or account.domain.ai_system_prompt_default or '',
+        'has_api_key': bool(key),
+        'api_key_hint': ('••••' + key[-4:]) if len(key) >= 4 else '',
+        'ai_available': bool(account.ai_available),
+        'domain_ai_enabled': bool(account.domain.ai_enabled),
+        'providers': AI_PROVIDERS,
+    }
+
+
+@router.patch('/settings', summary='Webmail ayarlarını güncelle')
+def patch_settings(request: HttpRequest, data: WebmailSettingsPatchSchema):
+    account, _ = _get_account_and_password(request)
+    if not account:
+        return {'success': False, 'message': 'Oturum yok'}
+    fields = []
+    payload = data.dict(exclude_unset=True)
+    if 'ai_api_key' in payload:
+        key = (payload.pop('ai_api_key') or '').strip()
+        account.ai_api_key = key
+        fields.append('ai_api_key')
+    for attr, val in payload.items():
+        if val is not None:
+            setattr(account, attr, val)
+            fields.append(attr)
+    if fields:
+        account.save(update_fields=fields)
+    return get_settings(request)
+
+
 @router.get('/ai/status', summary='AI kullanılabilirlik')
 def ai_status(request: HttpRequest):
     account, _ = _get_account_and_password(request)
@@ -549,8 +605,6 @@ def ai_settings_patch(request: HttpRequest, data: AiSettingsSchema):
     account, _ = _get_account_and_password(request)
     if not account:
         return {'success': False, 'message': 'Oturum yok'}
-    if not account.domain.ai_enabled:
-        return {'success': False, 'message': 'AI bu domain için sunucu tarafından kapalı.'}
     fields = []
     for attr, val in data.dict(exclude_unset=True).items():
         if val is not None:

@@ -50,10 +50,15 @@ document.addEventListener('alpine:init', function() {
             aiInput: '',
             aiLoading: false,
             eventSource: null,
+            theme: 'dark',
 
             init: function() {
                 var self = this;
                 var root = this.$el;
+                self.theme = window.WmTheme ? window.WmTheme.get() : 'dark';
+                window.addEventListener('wm-theme-change', function(e) {
+                    self.theme = (e.detail && e.detail.theme) || self.theme;
+                });
                 self.userEmail = root.dataset.userEmail || '';
                 if (root.dataset.aiEnabled === 'true') {
                     self.aiEnabled = true;
@@ -66,6 +71,10 @@ document.addEventListener('alpine:init', function() {
                     self.fetchMails();
                 });
                 self.openStream();
+            },
+
+            toggleTheme: function() {
+                if (window.WmTheme) this.theme = window.WmTheme.toggle();
             },
 
             loadAiStatus: function() {

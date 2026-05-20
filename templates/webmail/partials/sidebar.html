@@ -46,6 +46,7 @@
       <span class="wm-user__email" x-text="userEmail"></span>
     </div>
     <div class="wm-sidebar-actions">
+      <a href="{% url 'webmail:settings' %}" class="wm-btn-ghost wm-btn-ghost--link">Ayarlar</a>
       <button type="button" class="wm-btn-ghost" x-show="aiEnabled" @click="openAi()">AI</button>
       <form method="post" action="{% url 'webmail:logout' %}" class="wm-flex-1">
         {% csrf_token %}

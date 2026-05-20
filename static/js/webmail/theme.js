@@ -1,0 +1,45 @@
+/**
+ * Webmail tema — karanlık / aydınlık (localStorage: wm-theme)
+ */
+(function() {
+    'use strict';
+
+    var STORAGE_KEY = 'wm-theme';
+
+    function getStored() {
+        try {
+            var t = localStorage.getItem(STORAGE_KEY);
+            if (t === 'light' || t === 'dark') return t;
+        } catch (e) { /* ignore */ }
+        return 'dark';
+    }
+
+    function apply(theme) {
+        var t = theme === 'light' ? 'light' : 'dark';
+        document.documentElement.setAttribute('data-wm-theme', t);
+        document.documentElement.classList.toggle('wm-light', t === 'light');
+        document.documentElement.classList.toggle('wm-dark', t === 'dark');
+        var meta = document.querySelector('meta[name="theme-color"]');
+        if (meta) meta.setAttribute('content', t === 'light' ? '#ffffff' : '#16141c');
+        var scheme = document.querySelector('meta[name="color-scheme"]');
+        if (scheme) scheme.setAttribute('content', t === 'light' ? 'light' : 'dark');
+        try { localStorage.setItem(STORAGE_KEY, t); } catch (e) { /* ignore */ }
+        return t;
+    }
+
+    function toggle() {
+        var next = getStored() === 'light' ? 'dark' : 'light';
+        apply(next);
+        window.dispatchEvent(new CustomEvent('wm-theme-change', { detail: { theme: next } }));
+        return next;
+    }
+
+    window.WmTheme = {
+        get: getStored,
+        apply: apply,
+        toggle: toggle,
+        init: function() { apply(getStored()); }
+    };
+
+    window.WmTheme.init();
+})();

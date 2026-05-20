@@ -73,6 +73,15 @@ def logout_view(request):
 
 
 @require_http_methods(['GET'])
+@ensure_csrf_cookie
+@_require_webmail_session
+def settings_view(request):
+    return render(request, 'webmail/pages/settings.html', {
+        'email': request.session.get('email', ''),
+    })
+
+
+@require_http_methods(['GET'])
 def mail_panel_redirect(request):
     """Eski URL uyumluluğu."""
     return HttpResponseRedirect('/webmail/')

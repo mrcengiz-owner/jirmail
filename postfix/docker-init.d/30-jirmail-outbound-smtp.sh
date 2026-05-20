@@ -6,6 +6,8 @@ set -e
 postconf -e 'default_transport=smtp'
 postconf -e 'relay_transport=smtp'
 postconf -e 'relayhost='
+postconf -e 'smtp_dns_support_level=dnssec'
+postconf -e 'smtp_host_lookup=dns'
 
 # Yerel teslimat: virtual_mailbox_domains + virtual_transport (10-jirmail-inbound.sh)
 # $myhostname posta kutusu olarak kullanılmasın (CC@mail.jircode.com hatası önlenir)

@@ -1,0 +1,70 @@
+{% extends "webmail/base.html" %}
+
+{% block title %}Ayarlar — Jîr-Mail{% endblock %}
+
+{% block extra_head %}{% endblock %}
+
+{% block body %}
+<div class="wm-settings-page" x-data="settingsApp()" x-init="init()">
+  <header class="wm-settings-page__head">
+    <a href="{% url 'webmail:inbox' %}" class="wm-icon-btn" aria-label="Geri">
+      <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5"/></svg>
+    </a>
+    <h1>Ayarlar</h1>
+    <button type="button" class="wm-icon-btn" @click="toggleTheme()" aria-label="Tema">
+      <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75"><path stroke-linecap="round" stroke-linejoin="round" d="M12 3v2.25m6.364.386l-1.591 1.591M21 12h-2.25m-.386 6.364l-1.591-1.591M12 18.75V21m-4.773-4.227l-1.591 1.591M5.25 12H3m4.227-4.773L5.636 5.636M15.75 12a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0z"/></svg>
+    </button>
+  </header>
+
+  <div class="wm-settings-page__body" x-show="!loading">
+    <p class="wm-settings-account" x-text="email"></p>
+
+    <section class="wm-settings-card">
+      <h2>Yapay zeka asistanı</h2>
+      <p class="wm-settings-hint">OpenRouter veya OpenAI API anahtarınızı girin. Webmail içinde sohbet ve yazım yardımı için kullanılır.</p>
+
+      <label class="wm-settings-check">
+        <input type="checkbox" x-model="ai_enabled">
+        <span>AI asistanını etkinleştir</span>
+      </label>
+
+      <div class="wm-field">
+        <label>Sağlayıcı</label>
+        <select class="wm-input" x-model="ai_provider" @change="onProviderChange()">
+          <template x-for="p in providers" :key="p.id">
+            <option :value="p.id" x-text="p.label"></option>
+          </template>
+        </select>
+      </div>
+
+      <div class="wm-field">
+        <label>Model</label>
+        <input type="text" class="wm-input" x-model="ai_model" placeholder="openai/gpt-4o-mini">
+      </div>
+
+      <div class="wm-field">
+        <label>API anahtarı</label>
+        <input type="password" class="wm-input" x-model="ai_api_key" :placeholder="has_api_key ? ('Mevcut: ' + api_key_hint) : 'sk-...'">
+        <button type="button" class="wm-btn-link" x-show="has_api_key" @click="clearApiKey()">Anahtarı kaldır</button>
+      </div>
+
+      <div class="wm-field">
+        <label>Sistem talimatı (isteğe bağlı)</label>
+        <textarea class="wm-input wm-textarea" rows="4" x-model="ai_system_prompt" placeholder="Sen yardımcı bir e-posta asistanısın…"></textarea>
+      </div>
+    </section>
+
+    <p class="wm-settings-msg" :class="messageOk ? 'is-ok' : 'is-err'" x-show="message" x-text="message"></p>
+
+    <button type="button" class="wm-btn wm-btn-primary wm-btn-block" @click="save()" :disabled="saving">
+      <span x-text="saving ? 'Kaydediliyor…' : 'Kaydet'"></span>
+    </button>
+  </div>
+
+  <div class="wm-settings-loading" x-show="loading">Yükleniyor…</div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="{% url 'webmail:asset' asset_path='js/webmail/settings-app.js' %}?v=20260520a"></script>
+{% endblock %}

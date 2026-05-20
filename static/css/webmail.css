@@ -22,12 +22,15 @@
   --wm-radius: 10px;
   --wm-radius-lg: 14px;
   --wm-radius-pill: 999px;
-  --wm-sidebar-w: 220px;
-  --wm-list-w: min(300px, 38vw);
-  --wm-ai-w: 280px;
-  --wm-fs-base: 12px;
-  --wm-fs-sm: 11px;
-  --wm-fs-xs: 10px;
+  --wm-sidebar-w: 260px;
+  --wm-list-w: min(340px, 42vw);
+  --wm-ai-w: 300px;
+  --wm-fs-base: 14px;
+  --wm-fs-sm: 13px;
+  --wm-fs-xs: 11px;
+  --wm-sidebar-bg: #1c1934;
+  --wm-sidebar-text: #e8e4f5;
+  --wm-content-bg: #16141c;
   --wm-shadow: 0 8px 32px rgba(0, 0, 0, 0.45);
   --wm-transition: 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   --wm-safe-b: env(safe-area-inset-bottom, 0px);
@@ -80,8 +83,9 @@
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
-  background: var(--wm-bg-elevated);
+  background: var(--wm-sidebar-bg);
   border-right: 1px solid var(--wm-border);
+  color: var(--wm-sidebar-text);
   z-index: 50;
   transition: transform var(--wm-transition);
 }

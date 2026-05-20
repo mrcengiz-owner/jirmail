@@ -158,11 +158,9 @@ class MailAccount(models.Model):
 
     @property
     def ai_available(self) -> bool:
-        return (
-            self.is_active
-            and self.ai_enabled
-            and self.domain.ai_available
-        )
+        if not self.is_active or not self.ai_enabled:
+            return False
+        return bool((self.ai_api_key or '').strip())
 
     @property
     def quota_mb(self):
