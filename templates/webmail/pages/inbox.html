@@ -219,6 +219,19 @@
               <article class="max-w-4xl mx-auto px-4 sm:px-10 pt-8 pb-16">
                 <h1 class="font-display-sm text-display-sm text-on-surface mb-6 tracking-tight break-words" x-text="selectedMail.subject"></h1>
 
+                <div x-show="isBounceMail(selectedMail)"
+                     class="wm-bounce-banner mb-6 rounded-xl border border-error/30 bg-error-container/25 dark:bg-error-container/15 px-4 py-3 text-left">
+                  <p class="font-headline-sm text-error dark:text-[#ffb4ab] mb-1 flex items-center gap-2">
+                    <span class="material-symbols-outlined text-[20px]">error</span>
+                    Teslim edilemedi (bounce)
+                  </p>
+                  <p class="font-body-md text-on-surface-variant leading-relaxed"
+                     x-text="selectedMail.bounceSummary || parseBounceSummary(selectedMail)"></p>
+                  <p class="font-label-sm text-on-surface-variant mt-2 opacity-90">
+                    Gönderim sunucuya ulaştı; alıcı posta kutusuna iletilemedi. Dış adres (Gmail vb.) için sunucuda çıkış portu 25 kapalı olabilir — yöneticinize <code class="text-xs">SMTP_RELAYHOST</code> relay ayarını sorun.
+                  </p>
+                </div>
+
                 <div class="flex flex-wrap items-start justify-between gap-4 mb-10 pb-6 border-b border-outline-variant dark:border-outline">
                   <div class="flex items-start gap-4">
                     <div class="w-12 h-12 rounded-full flex items-center justify-center text-base font-semibold text-white shrink-0 border border-outline-variant"

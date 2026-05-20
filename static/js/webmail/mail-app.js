@@ -275,6 +275,7 @@ document.addEventListener('alpine:init', function() {
                             if (r.data.success) {
                                 mail.body = r.data.html || '<pre>' + self.escapeHtml(r.data.plain || '') + '</pre>';
                                 mail.attachments = r.data.attachments || [];
+                                mail.bounceSummary = r.data.bounce_summary || self.parseBounceSummary(mail);
                                 mail.bodyLoaded = true;
                             }
                         });
@@ -557,14 +558,21 @@ document.addEventListener('alpine:init', function() {
                 self.sendingMail = true;
                 var bodyText = self.getEditorText();
                 var bodyHtml = self.getEditorHtml();
-                var done = function(ok, msg) {
+                var done = function(ok, msg, warnings) {
                     self.sendingMail = false;
-                    showToast(msg, ok ? 'success' : 'error');
                     if (ok) {
+                        showToast(msg || 'Mesaj sunucuya iletildi', 'success');
+                        if (warnings && warnings.length) {
+                            setTimeout(function() {
+                                showToast(warnings[0], 'warning');
+                            }, 400);
+                        }
                         self.stopDraftAutosave();
                         self.closeCompose();
                         self.currentFolder = 'sent';
                         self.fetchMails();
+                    } else {
+                        showToast(msg || 'Gönderilemedi', 'error');
                     }
                 };
                 if (self.composeFiles.length) {
@@ -576,7 +584,9 @@ document.addEventListener('alpine:init', function() {
                     self.composeFiles.forEach(function(f) { fd.append('attachments', f); });
                     WmApi.fetch('/api/mail/send-attachments', { method: 'POST', body: fd })
                         .then(function(r) { return r.json(); })
-                        .then(function(d) { done(d.success, d.message || (d.success ? 'Gönderildi' : 'Hata')); })
+                        .then(function(d) {
+                            done(d.success, d.message || (d.success ? 'Mesaj sunucuya iletildi' : 'Hata'), d.warnings);
+                        })
                         .catch(function(e) { done(false, e.message || 'Bağlantı hatası'); });
                 } else {
                     WmApi.fetch('/api/mail/send', {
@@ -591,9 +601,52 @@ document.addEventListener('alpine:init', function() {
                         })
                     })
                         .then(function(r) { return r.json(); })
-                        .then(function(d) { done(d.success, d.message || ''); })
+                        .then(function(d) {
+                            done(d.success, d.message || (d.success ? 'Mesaj sunucuya iletildi' : 'Gönderilemedi'), d.warnings);
+                        })
                         .catch(function(e) { done(false, e.message || 'Bağlantı hatası'); });
                 }
+            },
+
+            isBounceMail: function(mail) {
+                if (!mail) return false;
+                var subj = (mail.subject || '').toLowerCase();
+                var from = (mail.from || mail.from_display || '').toLowerCase();
+                return subj.indexOf('undelivered') >= 0 ||
+                    subj.indexOf('returned to sender') >= 0 ||
+                    from.indexOf('mailer-daemon') >= 0 ||
+                    from.indexOf('mail delivery') >= 0;
+            },
+
+            parseBounceSummary: function(mail) {
+                if (!mail || !this.isBounceMail(mail)) return '';
+                var text = '';
+                if (mail.body) {
+                    var tmp = document.createElement('div');
+                    tmp.innerHTML = mail.body;
+                    text = tmp.innerText || tmp.textContent || '';
+                }
+                var patterns = [
+                    /Diagnostic-Code:\s*([^\n]+)/i,
+                    /Status:\s*([^\n]+)/i,
+                    /\bsaid:\s*([^\n]+)/i
+                ];
+                var i;
+                for (i = 0; i < patterns.length; i++) {
+                    var m = text.match(patterns[i]);
+                    if (m && m[1] && m[1].trim().length > 6) {
+                        return m[1].trim().slice(0, 500);
+                    }
+                }
+                var lines = text.split('\n');
+                for (i = 0; i < lines.length; i++) {
+                    var low = lines[i].toLowerCase();
+                    if (low.indexOf('550') >= 0 || low.indexOf('553') >= 0 || low.indexOf('user unknown') >= 0 ||
+                        low.indexOf('relay') >= 0 || low.indexOf('refused') >= 0) {
+                        return lines[i].trim().slice(0, 500);
+                    }
+                }
+                return 'Alıcıya teslim edilemedi. Aşağıdaki tam metinde teknik ayrıntı vardır.';
             },
 
             initials: function(name) {

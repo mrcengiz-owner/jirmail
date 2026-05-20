@@ -393,6 +393,7 @@ SMTP_TLS_REQUIRED = os.getenv('SMTP_TLS_REQUIRED', 'true' if _MAIL_E2E else 'fal
 MAIL_TLS_CA_FILE = os.getenv('MAIL_TLS_CA_FILE', '/etc/jir-mail/tls/ca.crt')
 SMTP_HOST = _resolve_mail_service_host('postfix', 'jir_postfix')
 SMTP_PORT = int(os.getenv('SMTP_PORT', '587'))
+SMTP_RELAYHOST = os.getenv('SMTP_RELAYHOST', '').strip()
 # Yerel compose: docker-compose.yml içinde DOCKER_HOST=tcp://docker-proxy:2375 verilir.
 # Coolify / tek konteyner: soket mount edildiğinde unix soketi kullanılır (docker-proxy yok).
 DOCKER_HOST = os.getenv('DOCKER_HOST', 'unix:///var/run/docker.sock')

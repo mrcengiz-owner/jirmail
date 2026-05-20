@@ -5,7 +5,13 @@ set -e
 # boky/postfix varsayılanları bazen tüm postayı LMTP'ye yönlendirir — düzelt.
 postconf -e 'default_transport=smtp'
 postconf -e 'relay_transport=smtp'
-postconf -e 'relayhost='
+RELAYHOST="${SMTP_RELAYHOST:-}"
+if [ -n "$RELAYHOST" ]; then
+  postconf -e "relayhost=${RELAYHOST}"
+  echo "[jirmail-postfix] relayhost=${RELAYHOST}"
+else
+  postconf -e 'relayhost='
+fi
 postconf -e 'smtp_dns_support_level=dnssec'
 postconf -e 'smtp_host_lookup=dns'
 

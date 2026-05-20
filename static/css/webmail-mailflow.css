@@ -80,6 +80,17 @@ html.dark .wm-toast {
   color: #e8eaed;
 }
 
+.wm-bounce-banner code {
+  font-family: ui-monospace, monospace;
+  background: rgba(0, 0, 0, 0.06);
+  padding: 0.1em 0.35em;
+  border-radius: 4px;
+}
+
+html.dark .wm-bounce-banner code {
+  background: rgba(255, 255, 255, 0.08);
+}
+
 .wm-toast--success { border-color: rgba(16, 43, 138, 0.35); color: #102b8a; }
 html.dark .wm-toast--success { color: #b9c3ff; border-color: rgba(185, 195, 255, 0.4); }
 

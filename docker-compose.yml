@@ -148,6 +148,7 @@ services:
       ALLOWED_SENDER_DOMAINS: ""
       HOSTNAME: ${MAIL_HOSTNAME:-mail.jircode.com}
       MAIL_DOMAIN: ${MAIL_DOMAIN:-jircode.com}
+      SMTP_RELAYHOST: ${SMTP_RELAYHOST:-}
       POSTFIX_myhostname: ${MAIL_HOSTNAME:-mail.jircode.com}
       POSTFIX_mynetworks: "127.0.0.0/8,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16"
       POSTFIX_smtpd_sender_restrictions: permit

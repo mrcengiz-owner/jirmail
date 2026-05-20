@@ -270,7 +270,16 @@ def message_body(request: HttpRequest, uid: int, folder: str = 'INBOX'):
                     from_addr=sender.get('from_email', '')[:500],
                     from_name=(sender.get('from_name') or '')[:255],
                 )
-        return {'success': True, 'folder': folder, 'uid': uid, **result}
+        out = {'success': True, 'folder': folder, 'uid': uid, **result}
+        try:
+            from webmail.send_validation import extract_bounce_summary
+
+            bounce = extract_bounce_summary(result.get('html') or '', result.get('plain') or '')
+            if bounce:
+                out['bounce_summary'] = bounce
+        except Exception:
+            pass
+        return out
     except Exception as exc:
         return {'success': False, 'message': str(exc)}
 
@@ -314,13 +323,13 @@ def send(request: HttpRequest, data: SendMailSchema):
                 ),
             }
 
-        to_list = parse_recipient_list(data.to)
-        if not to_list:
-            return {
-                'success': False,
-                'message': 'Geçerli en az bir alıcı gerekli (ör. isim@domain.com).',
-            }
+        from webmail.send_validation import validate_outbound_recipients
 
+        check = validate_outbound_recipients(account, data.to, data.cc, data.bcc)
+        if not check['ok']:
+            return {'success': False, 'message': check['message'], 'invalid': check.get('invalid', [])}
+
+        to_list = parse_recipient_list(data.to)
         cc_list = parse_recipient_list(data.cc) or None
         bcc_list = parse_recipient_list(data.bcc) or None
 
@@ -360,6 +369,10 @@ def send(request: HttpRequest, data: SendMailSchema):
                 result['message'] = (
                     'Mesaj gönderildi. Gönderilen klasörüne kopyalanamadı — klasörü yenileyin.'
                 )
+            for w in check.get('warnings') or []:
+                result.setdefault('warnings', []).append(w)
+            if check.get('warnings') and not result.get('message'):
+                result['message'] = 'Mesaj sunucuya iletildi.'
         else:
             if log_row:
                 log_row.status = MailOutboundLog.STATUS_FAILED
@@ -803,14 +816,20 @@ def send_with_attachments(request: HttpRequest):
         if not password:
             return {'success': False, 'message': 'Oturumda parola yok — yeniden giriş yapın.'}
 
+        from webmail.send_validation import validate_outbound_recipients
+
         to_raw = request.POST.get('to', '')
         subject = request.POST.get('subject', '')
         body_text = request.POST.get('body_text', '')
         body_html = request.POST.get('body_html', '')
-        to_list = parse_recipient_list(to_raw)
-        if not to_list:
-            return {'success': False, 'message': 'Geçerli alıcı gerekli (ör. isim@domain.com).'}
+        cc_raw = request.POST.get('cc', '')
+        bcc_raw = request.POST.get('bcc', '')
 
+        check = validate_outbound_recipients(account, to_raw, cc_raw, bcc_raw)
+        if not check['ok']:
+            return {'success': False, 'message': check['message']}
+
+        to_list = parse_recipient_list(to_raw)
         attachments = []
         for f in request.FILES.getlist('attachments'):
             attachments.append({
@@ -827,6 +846,9 @@ def send_with_attachments(request: HttpRequest):
             body_html=body_html,
             attachments=attachments or None,
         )
+        if result.get('success'):
+            for w in check.get('warnings') or []:
+                result.setdefault('warnings', []).append(w)
         return _sanitize_send_result(result)
     except Exception as exc:
         log.exception('POST /api/mail/send-attachments')
