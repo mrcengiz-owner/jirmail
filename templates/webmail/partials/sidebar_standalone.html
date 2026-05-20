@@ -1,28 +1,51 @@
-{# Ayarlar sayfası — statik sidebar (Tailwind) #}
-<aside class="fixed lg:static inset-y-0 left-0 z-50 w-[220px] flex flex-col bg-slate-900 border-r border-slate-800 shrink-0 transition-transform duration-200"
-       :class="sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'">
-  <div class="h-12 px-3 flex items-center gap-2 border-b border-slate-800 shrink-0">
-    <a href="{% url 'webmail:inbox' %}" class="flex items-center gap-2 min-w-0">
-      <img src="{% url 'webmail:asset' asset_path='brand/logo-icon.svg' %}" alt="" class="w-7 h-7 rounded-lg">
-      <span class="text-sm font-bold text-white">Jîr<span class="text-primary-400">Mail</span></span>
+{# Ayarlar — MailFlow yan menü #}
+<aside class="wm-settings-sidebar"
+       :class="sidebarOpen ? 'is-open' : ''"
+       aria-label="Ana menü">
+  <a href="{% url 'webmail:inbox' %}" class="wm-settings-sidebar__brand">
+    <div class="wm-settings-sidebar__logo" aria-hidden="true">
+      <span class="material-symbols-outlined text-[20px]" style="font-variation-settings: 'FILL' 1;">mail</span>
+    </div>
+    <div class="min-w-0">
+      <p class="wm-settings-sidebar__title">Jîr-Mail</p>
+      <p class="wm-settings-sidebar__sub">Webmail</p>
+    </div>
+  </a>
+
+  <a href="{% url 'webmail:inbox' %}" class="wm-settings-sidebar__compose">
+    <span class="material-symbols-outlined text-[18px]" style="font-variation-settings: 'FILL' 1;">edit</span>
+    Yeni mesaj
+  </a>
+
+  <nav class="wm-settings-sidebar__nav">
+    <a href="{% url 'webmail:inbox' %}" class="wm-settings-sidebar__link">
+      <span class="material-symbols-outlined text-[20px]">inbox</span>
+      Gelen kutusu
     </a>
-  </div>
-  <a href="{% url 'webmail:inbox' %}" class="m-2 btn btn-primary w-[calc(100%-1rem)] text-sm py-2">Yeni mesaj</a>
-  <nav class="flex-1 px-2 py-1 space-y-0.5 text-sm overflow-y-auto">
-    <a href="{% url 'webmail:inbox' %}" class="block px-2.5 py-2 rounded-lg text-slate-400 hover:bg-slate-800 hover:text-white">Gelen kutusu</a>
-    <a href="{% url 'webmail:inbox' %}" class="block px-2.5 py-2 rounded-lg text-slate-400 hover:bg-slate-800 hover:text-white">Gönderilen</a>
-    <a href="{% url 'webmail:inbox' %}" class="block px-2.5 py-2 rounded-lg text-slate-400 hover:bg-slate-800 hover:text-white">Taslaklar</a>
-    <a href="{% url 'webmail:settings' %}" class="block px-2.5 py-2 rounded-lg bg-primary-500/10 text-primary-300 border border-primary-500/25 font-medium">Ayarlar</a>
+    <a href="{% url 'webmail:inbox' %}?folder=sent" class="wm-settings-sidebar__link">
+      <span class="material-symbols-outlined text-[20px]">send</span>
+      Gönderilen
+    </a>
+    <a href="{% url 'webmail:inbox' %}?folder=drafts" class="wm-settings-sidebar__link">
+      <span class="material-symbols-outlined text-[20px]">draft</span>
+      Taslaklar
+    </a>
+    <a href="{% url 'webmail:settings' %}" class="wm-settings-sidebar__link is-active">
+      <span class="material-symbols-outlined text-[20px]" style="font-variation-settings: 'FILL' 1;">settings</span>
+      Ayarlar
+    </a>
   </nav>
-  <div class="p-3 border-t border-slate-800 shrink-0">
-    <div class="flex items-center gap-2 mb-2" x-show="userEmail">
-      <div class="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white"
-           :style="'background:' + avatarColor(userEmail)" x-text="initials(userEmail)"></div>
-      <span class="text-xs text-slate-400 truncate" x-text="userEmail"></span>
+
+  <div class="wm-settings-sidebar__footer">
+    <div class="wm-settings-sidebar__user" x-show="userEmail">
+      <div class="wm-settings-sidebar__avatar"
+           :style="'background:' + avatarColor(userEmail)"
+           x-text="initials(userEmail)"></div>
+      <span class="wm-settings-sidebar__email" x-text="userEmail"></span>
     </div>
     <form method="post" action="{% url 'webmail:logout' %}">
       {% csrf_token %}
-      <button type="submit" class="btn btn-ghost btn-sm w-full text-danger-400">Çıkış</button>
+      <button type="submit" class="wm-settings-sidebar__logout">Çıkış</button>
     </form>
   </div>
 </aside>

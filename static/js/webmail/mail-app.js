@@ -63,6 +63,10 @@ document.addEventListener('alpine:init', function() {
             draftSavedAt: '',
             composeExpanded: false,
             themeSync: '',
+            _fetchSeq: 0,
+            _syncInFlight: false,
+            _streamDebounce: null,
+            _folderSyncAttempted: '',
 
             get hasSelection() {
                 return this.selectedIds.length > 0;
@@ -72,12 +76,19 @@ document.addEventListener('alpine:init', function() {
                 var self = this;
                 var root = this.$el;
                 self.userEmail = root.dataset.userEmail || '';
+                var params = new URLSearchParams(window.location.search);
+                var folderParam = params.get('folder');
+                if (folderParam && FOLDER_MAP[folderParam]) {
+                    self.currentFolder = folderParam;
+                }
                 self.loadQuota();
-                self.syncAllFolders().then(function() { self.fetchMails(); });
+                self.fetchMails();
+                self.syncAllFoldersBackground();
                 self.$watch('currentFolder', function() {
                     self.page = 1;
                     self.selectedMail = null;
                     self.clearSelection();
+                    self._folderSyncAttempted = '';
                     self.fetchMails();
                 });
                 window.addEventListener('wm-theme-change', function(e) {
@@ -85,6 +96,32 @@ document.addEventListener('alpine:init', function() {
                 });
                 self.themeSync = window.WmTheme ? window.WmTheme.get() : 'light';
                 self.openStream();
+            },
+
+            syncAllFoldersBackground: function() {
+                var self = this;
+                if (self._syncInFlight) return;
+                self._syncInFlight = true;
+                WmApi.json('/api/mail/sync-all', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: '{}'
+                }).then(function(r) {
+                    if (r.data && r.data.success) {
+                        self.fetchMails();
+                    } else if (r.data && r.data.message) {
+                        showToast(r.data.message, 'warning');
+                    }
+                }).catch(function() { /* arka plan */ })
+                    .finally(function() { self._syncInFlight = false; });
+            },
+
+            syncCurrentFolder: function() {
+                return WmApi.json('/api/mail/sync', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ folder: this.imapFolder(), limit: 200 })
+                });
             },
 
             imapFolder: function() {
@@ -121,15 +158,29 @@ document.addEventListener('alpine:init', function() {
             },
 
             setFolder: function(id) {
+                if (this.currentFolder === id) {
+                    this.sidebarOpen = false;
+                    return;
+                }
                 this.currentFolder = id;
                 this.mobileView = 'list';
                 this.sidebarOpen = false;
                 this.selectedMail = null;
                 this.closeCompose();
+                try {
+                    var u = new URL(window.location.href);
+                    if (id === 'inbox') {
+                        u.searchParams.delete('folder');
+                    } else {
+                        u.searchParams.set('folder', id);
+                    }
+                    history.replaceState(null, '', u.pathname + u.search);
+                } catch (e) { /* ignore */ }
             },
 
             fetchMails: function() {
                 var self = this;
+                var seq = ++self._fetchSeq;
                 self.loadingMails = true;
                 var url = '/api/mail/messages?folder=' + encodeURIComponent(self.imapFolder()) +
                     '&page=' + self.page + '&page_size=' + self.pageSize;
@@ -137,8 +188,10 @@ document.addEventListener('alpine:init', function() {
                     url += '&q=' + encodeURIComponent(self.searchQuery);
                 }
                 WmApi.json(url).then(function(r) {
-                    if (!r.data.success) {
+                    if (seq !== self._fetchSeq) return;
+                    if (!r.ok || !r.data || !r.data.success) {
                         self.mails = [];
+                        showToast((r.data && r.data.message) || 'Mesajlar yüklenemedi', 'error');
                         return;
                     }
                     var list = (r.data.messages || []).map(function(m) {
@@ -167,16 +220,38 @@ document.addEventListener('alpine:init', function() {
                         self.unreadCount = list.filter(function(m) { return m.unread; }).length;
                     }
                     self.clearSelection();
+                    var folderKey = self.currentFolder + ':' + self.imapFolder();
+                    if (list.length === 0 && !self.searchQuery && self.page === 1 &&
+                        self._folderSyncAttempted !== folderKey) {
+                        self._folderSyncAttempted = folderKey;
+                        self.syncCurrentFolder().then(function(sr) {
+                            if (seq !== self._fetchSeq) return;
+                            if (sr.data && sr.data.success) {
+                                self.fetchMails();
+                            }
+                        });
+                    }
+                }).catch(function() {
+                    if (seq !== self._fetchSeq) return;
+                    self.mails = [];
+                    showToast('Bağlantı hatası', 'error');
                 }).finally(function() {
-                    self.loadingMails = false;
+                    if (seq === self._fetchSeq) {
+                        self.loadingMails = false;
+                    }
                 });
             },
 
             syncNow: function() {
                 var self = this;
                 self.syncing = true;
-                self.syncAllFolders()
-                    .then(function() { return self.fetchMails(); })
+                self.syncCurrentFolder()
+                    .then(function(r) {
+                        if (r.data && r.data.success) {
+                            return self.fetchMails();
+                        }
+                        showToast((r.data && r.data.message) || 'Senkron başarısız', 'error');
+                    })
                     .finally(function() { self.syncing = false; });
             },
 
@@ -655,8 +730,17 @@ document.addEventListener('alpine:init', function() {
             openStream: function() {
                 var self = this;
                 try {
+                    if (self.eventSource) {
+                        self.eventSource.close();
+                    }
                     self.eventSource = new EventSource('/api/mail/stream');
-                    self.eventSource.onmessage = function() { self.fetchMails(); };
+                    self.eventSource.onmessage = function(ev) {
+                        if (!ev.data || ev.data.indexOf('new_mail') === -1) return;
+                        if (self._streamDebounce) clearTimeout(self._streamDebounce);
+                        self._streamDebounce = setTimeout(function() {
+                            self.fetchMails();
+                        }, 2000);
+                    };
                 } catch (e) { /* ignore */ }
             }
         };

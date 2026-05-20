@@ -3,7 +3,8 @@
 {% block title %}Ayarlar — Jîr-Mail{% endblock %}
 
 {% block extra_head %}
-<link rel="stylesheet" href="{% url 'webmail:asset' asset_path='css/webmail-settings.css' %}?v=20260521c">
+<link rel="stylesheet" href="{% url 'webmail:asset' asset_path='css/webmail-mailflow.css' %}?v=20260521d">
+<link rel="stylesheet" href="{% url 'webmail:asset' asset_path='css/webmail-settings.css' %}?v=20260521d">
 {% endblock %}
 
 {% block body %}
@@ -126,5 +127,5 @@
 {% endblock %}
 
 {% block extra_scripts %}
-<script src="{% url 'webmail:asset' asset_path='js/webmail/settings-app.js' %}?v=20260521"></script>
+<script src="{% url 'webmail:asset' asset_path='js/webmail/settings-app.js' %}?v=20260521d"></script>
 {% endblock %}
