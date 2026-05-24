@@ -1,4 +1,4 @@
-{# Ayarlar — MailFlow yan menü #}
+{# Cihaz kurulum — yan menü #}
 <aside class="wm-settings-sidebar"
        :class="sidebarOpen ? 'is-open' : ''"
        aria-label="Ana menü">
@@ -30,12 +30,12 @@
       <span class="material-symbols-outlined text-[20px]">draft</span>
       Taslaklar
     </a>
-    <a href="{% url 'webmail:client_setup' %}" class="wm-settings-sidebar__link">
-      <span class="material-symbols-outlined text-[20px]">phonelink_setup</span>
+    <a href="{% url 'webmail:client_setup' %}" class="wm-settings-sidebar__link is-active">
+      <span class="material-symbols-outlined text-[20px]" style="font-variation-settings: 'FILL' 1;">phonelink_setup</span>
       Cihazda kurulum
     </a>
-    <a href="{% url 'webmail:settings' %}" class="wm-settings-sidebar__link is-active">
-      <span class="material-symbols-outlined text-[20px]" style="font-variation-settings: 'FILL' 1;">settings</span>
+    <a href="{% url 'webmail:settings' %}" class="wm-settings-sidebar__link">
+      <span class="material-symbols-outlined text-[20px]">settings</span>
       Ayarlar
     </a>
   </nav>

@@ -1,0 +1,81 @@
+<div class="wm-client-setup-panel">
+  <header class="wm-client-setup-head">
+    <div>
+      <h1>Cihazda kurulum</h1>
+      <p class="wm-client-setup-head__sub">
+        iPhone, Android, Thunderbird, Outlook veya Windows Posta uygulamasında
+        webmail yerine doğrudan posta kutunuzu kullanın.
+      </p>
+    </div>
+    <a href="{% url 'webmail:settings' %}" class="wm-btn wm-btn-secondary wm-hide-mobile">Ayarlar</a>
+  </header>
+
+  <div class="wm-client-setup-loading" x-show="loading">
+    <div class="wm-settings-loading__spinner" aria-hidden="true"></div>
+    <p>Kurulum bilgileri yükleniyor…</p>
+  </div>
+
+  <p class="wm-settings-msg is-err" x-show="error && !loading" x-text="error" x-cloak></p>
+
+  <div x-show="clientSetup && !loading" x-cloak>
+    <section class="wm-settings-card wm-client-setup-card">
+      <h2>Sunucu bilgileri</h2>
+      <p class="wm-settings-hint">Aşağıdaki değerleri posta uygulamanıza girin. Kullanıcı adı her zaman tam e-posta adresinizdir.</p>
+      <dl class="wm-client-kv">
+        <div class="wm-client-kv__row">
+          <dt>E-posta / kullanıcı adı</dt>
+          <dd>
+            <code x-text="clientSetup.email"></code>
+            <button type="button" class="wm-copy-btn" @click="copyValue(clientSetup.email)">Kopyala</button>
+          </dd>
+        </div>
+        <div class="wm-client-kv__row">
+          <dt>IMAP (gelen)</dt>
+          <dd>
+            <code x-text="clientSetup.imap.host + ':' + clientSetup.imap.port + ' · ' + clientSetup.imap.security"></code>
+            <button type="button" class="wm-copy-btn" @click="copyValue(clientSetup.imap.host)">Kopyala</button>
+          </dd>
+        </div>
+        <div class="wm-client-kv__row">
+          <dt>SMTP (giden)</dt>
+          <dd>
+            <code x-text="clientSetup.smtp.host + ':' + clientSetup.smtp.port + ' · ' + clientSetup.smtp.security"></code>
+            <button type="button" class="wm-copy-btn" @click="copyValue(clientSetup.smtp.host)">Kopyala</button>
+          </dd>
+        </div>
+        <div class="wm-client-kv__row">
+          <dt>Parola</dt>
+          <dd class="wm-client-kv__hint" x-text="clientSetup.password_hint"></dd>
+        </div>
+      </dl>
+    </section>
+
+    <section class="wm-settings-card">
+      <h2>Platform rehberi</h2>
+      <p class="wm-settings-hint">Kullandığınız uygulamayı seçin; adım adım yönlendirme görünür.</p>
+
+      <div class="wm-client-tabs" role="tablist" aria-label="Platform rehberleri">
+        <template x-for="c in (clientSetup.clients || [])" :key="c.id">
+          <button type="button"
+                  class="wm-client-tab"
+                  :class="clientTab === c.id && 'is-active'"
+                  role="tab"
+                  :aria-selected="clientTab === c.id"
+                  @click="clientTab = c.id"
+                  x-text="c.name"></button>
+        </template>
+      </div>
+
+      <div class="wm-client-guide" x-show="activeClientGuide()">
+        <h3 x-text="activeClientGuide() ? activeClientGuide().name : ''"></h3>
+        <ol class="wm-client-steps">
+          <template x-for="(step, idx) in (activeClientGuide() ? activeClientGuide().steps : [])" :key="idx">
+            <li x-text="step"></li>
+          </template>
+        </ol>
+      </div>
+    </section>
+
+    <p class="wm-client-toast" x-show="copyToast" x-text="copyToast" x-cloak></p>
+  </div>
+</div>

@@ -272,6 +272,17 @@ def _compose_mail_stack_heal(*, domain: str = '', mail_hostname: str = '') -> di
     }
 
 
+class MailAutoSetupSchema(Schema):
+    domain: str = ''
+    mail_hostname: str = ''
+    install_profile: str = 'docker_stack'
+    skip_busy_ports: bool = True
+    postgres_password: str = ''
+    postgres_db: str = 'jir_mail_prod'
+    postgres_user: str = 'postgres'
+    stack_service_policy: str = 'smart'
+
+
 @router.post('/heal-mail-stack', summary='Compose stack — Postfix onarım (sihirbaz)')
 @csrf_exempt
 def heal_mail_stack_api(request: HttpRequest, data: MailAutoSetupSchema):
@@ -307,17 +318,6 @@ def mail_stack_provision(request: HttpRequest, data: MailStackProvisionSchema):
     if (data.docker_network or '').strip():
         os.environ['MAIL_STACK_DOCKER_NETWORK'] = data.docker_network.strip()
     return bootstrap_single_server(cfg)
-
-
-class MailAutoSetupSchema(Schema):
-    domain: str = ''
-    mail_hostname: str = ''
-    install_profile: str = 'docker_stack'
-    skip_busy_ports: bool = True
-    postgres_password: str = ''
-    postgres_db: str = 'jir_mail_prod'
-    postgres_user: str = 'postgres'
-    stack_service_policy: str = 'smart'
 
 
 @router.post('/mail-auto-setup', summary='Mail stack + panel ağı (sihirbaz, otomatik)')

@@ -75,6 +75,16 @@ def logout_view(request):
 @require_http_methods(['GET'])
 @ensure_csrf_cookie
 @_require_webmail_session
+def client_setup_view(request):
+    return render(request, 'webmail/pages/client_setup.html', {
+        'email': request.session.get('email', ''),
+        'is_admin': bool(request.session.get('can_access_panel')),
+    })
+
+
+@require_http_methods(['GET'])
+@ensure_csrf_cookie
+@_require_webmail_session
 def settings_view(request):
     from core.models import MailAccount
 

@@ -73,14 +73,18 @@
              :style="'background:' + avatarColor(userEmail)" x-text="initials(userEmail)"></div>
         <span class="font-label-md text-[11px] text-on-surface-variant truncate flex-1" x-text="userEmail"></span>
       </div>
-      <div class="flex gap-1 px-2">
-        <a href="{% url 'webmail:settings' %}"
-           class="flex-1 py-2 px-2 rounded-lg text-center font-label-md text-[12px] text-on-surface-variant hover:bg-surface-container-high dark:hover:bg-tertiary transition-colors">Ayarlar</a>
-        <form method="post" action="{% url 'webmail:logout' %}" class="flex-1">
-          {% csrf_token %}
-          <button type="submit"
-                  class="w-full py-2 px-2 rounded-lg font-label-md text-[12px] text-error hover:bg-error-container/30 transition-colors">Çıkış</button>
-        </form>
+      <div class="flex flex-col gap-1 px-2">
+        <a href="{% url 'webmail:client_setup' %}"
+           class="w-full py-2 px-2 rounded-lg text-center font-label-md text-[12px] text-primary dark:text-primary-fixed font-semibold hover:bg-primary-fixed/40 dark:hover:bg-tertiary transition-colors">Cihazda kurulum</a>
+        <div class="flex gap-1">
+          <a href="{% url 'webmail:settings' %}"
+             class="flex-1 py-2 px-2 rounded-lg text-center font-label-md text-[12px] text-on-surface-variant hover:bg-surface-container-high dark:hover:bg-tertiary transition-colors">Ayarlar</a>
+          <form method="post" action="{% url 'webmail:logout' %}" class="flex-1">
+            {% csrf_token %}
+            <button type="submit"
+                    class="w-full py-2 px-2 rounded-lg font-label-md text-[12px] text-error hover:bg-error-container/30 transition-colors">Çıkış</button>
+          </form>
+        </div>
       </div>
     </div>
   </aside>

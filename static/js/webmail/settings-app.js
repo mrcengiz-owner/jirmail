@@ -25,17 +25,6 @@ document.addEventListener('alpine:init', function() {
             message: '',
             messageOk: false,
             theme: 'dark',
-            clientSetup: null,
-            clientModalOpen: false,
-            clientTab: 'ios',
-            copyToast: '',
-
-            get activeClientGuide() {
-                if (!this.clientSetup || !this.clientSetup.clients) return null;
-                var tab = this.clientTab;
-                var found = this.clientSetup.clients.find(function(c) { return c.id === tab; });
-                return found || this.clientSetup.clients[0] || null;
-            },
 
             init: function() {
                 var root = this.$el;
@@ -98,10 +87,6 @@ document.addEventListener('alpine:init', function() {
                     self.has_api_key = !!d.has_api_key;
                     self.api_key_hint = d.api_key_hint || '';
                     self.providers = d.providers || [];
-                    self.clientSetup = d.client_setup || null;
-                    if (self.clientSetup && self.clientSetup.clients && self.clientSetup.clients.length) {
-                        self.clientTab = self.clientSetup.clients[0].id;
-                    }
                     self.ai_api_key = '';
                     if (!self.ai_model && self.providers.length) {
                         var p = self.providers.find(function(x) { return x.id === self.ai_provider; });
@@ -175,45 +160,6 @@ document.addEventListener('alpine:init', function() {
                         self.messageOk = true;
                     }
                 });
-            },
-
-            openClientSetup: function() {
-                if (!this.clientSetup) return;
-                this.clientModalOpen = true;
-                document.body.style.overflow = 'hidden';
-            },
-
-            closeClientSetup: function() {
-                this.clientModalOpen = false;
-                this.copyToast = '';
-                document.body.style.overflow = '';
-            },
-
-            copyValue: function(text) {
-                var self = this;
-                var value = (text || '').toString();
-                if (!value) return;
-                var done = function(ok) {
-                    self.copyToast = ok ? 'Panoya kopyalandı' : 'Kopyalanamadı — elle seçin';
-                    window.setTimeout(function() { self.copyToast = ''; }, 2200);
-                };
-                if (navigator.clipboard && navigator.clipboard.writeText) {
-                    navigator.clipboard.writeText(value).then(function() { done(true); }).catch(function() { done(false); });
-                    return;
-                }
-                try {
-                    var ta = document.createElement('textarea');
-                    ta.value = value;
-                    ta.setAttribute('readonly', '');
-                    ta.style.position = 'absolute';
-                    ta.style.left = '-9999px';
-                    document.body.appendChild(ta);
-                    ta.select();
-                    done(document.execCommand('copy'));
-                    document.body.removeChild(ta);
-                } catch (e) {
-                    done(false);
-                }
             }
         };
     });

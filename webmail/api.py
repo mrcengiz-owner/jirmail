@@ -718,6 +718,20 @@ def diagnostics_outbound(request: HttpRequest):
     return _outbound_delivery_report()
 
 
+@router.get('/client-setup', summary='İstemci kurulum rehberi (IMAP/SMTP)')
+def get_client_setup(request: HttpRequest):
+    account, _ = _get_account_and_password(request)
+    if not account:
+        return {'success': False, 'message': 'Oturum yok'}
+    from webmail.client_setup import build_client_setup
+
+    return {
+        'success': True,
+        'email': account.email,
+        'client_setup': build_client_setup(account_email=account.email),
+    }
+
+
 @router.get('/settings', summary='Webmail ayarları')
 def get_settings(request: HttpRequest):
     account, _ = _get_account_and_password(request)
