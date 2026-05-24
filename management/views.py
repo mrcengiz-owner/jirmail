@@ -149,6 +149,7 @@ def dashboard(request):
     })
 
 
+@ensure_csrf_cookie
 def setup(request):
     if is_installed():
         return redirect('dashboard')

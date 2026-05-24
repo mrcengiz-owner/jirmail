@@ -32,8 +32,10 @@ class JirInstallMiddleware:
 
         path = request.path
 
-        # Webmail API: oturum çerezi ile CSRF — Ninja JSON istekleri 403/500 önleme
+        # JSON API: oturum çerezi ile CSRF — Ninja POST istekleri 403/HTML önleme
         if path.startswith('/api/mail/') and request.method in ('POST', 'PUT', 'PATCH', 'DELETE'):
+            request._dont_enforce_csrf_checks = True
+        if path.startswith('/api/installer/') and request.method in ('POST', 'PUT', 'PATCH', 'DELETE'):
             request._dont_enforce_csrf_checks = True
 
         if not is_logged_in:

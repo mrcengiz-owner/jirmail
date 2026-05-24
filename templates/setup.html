@@ -640,6 +640,32 @@ function setupWizard() {
         mailProvisionMessages: '',
         mailProvisionAttempted: false,
 
+        apiHeaders(extra) {
+            const h = { 'Content-Type': 'application/json', Accept: 'application/json' };
+            const tok = window.getCsrfToken ? window.getCsrfToken() : '';
+            if (tok) h['X-CSRFToken'] = tok;
+            return Object.assign(h, extra || {});
+        },
+
+        async parseJsonResponse(res, label) {
+            const raw = await res.text();
+            if (!raw || !raw.trim()) {
+                if (!res.ok) {
+                    throw new Error((label || 'API') + ' boş yanıt (HTTP ' + res.status + ')');
+                }
+                return {};
+            }
+            try {
+                return JSON.parse(raw);
+            } catch (e) {
+                const html = raw.trimStart().startsWith('<!DOCTYPE') || raw.trimStart().startsWith('<html');
+                const hint = html
+                    ? 'Sunucu HTML döndü — genelde CSRF, oturum veya proxy hatası (HTTP ' + res.status + ').'
+                    : 'Geçersiz JSON (HTTP ' + res.status + ').';
+                throw new Error(hint);
+            }
+        },
+
         profileLabel() {
             const m = this.installModesList().find((x) => x.id === this.installProfile);
             if (m) return m.title;
@@ -763,16 +789,14 @@ function setupWizard() {
         async pollBootstrapUntilDone(maxWaitMs) {
             const deadline = Date.now() + (maxWaitMs || 600000);
             while (Date.now() < deadline) {
-                const st = await fetch('/api/installer/bootstrap-stack/status');
-                const raw = await st.text();
+                const st = await fetch('/api/installer/bootstrap-stack/status', { credentials: 'same-origin' });
                 let data;
                 try {
-                    data = JSON.parse(raw);
+                    data = await this.parseJsonResponse(st, 'Bootstrap durumu');
                 } catch (e) {
                     return {
                         status: 'error',
-                        error: 'Sunucu JSON yerine HTML döndü (HTTP ' + st.status + '). Oturum veya proxy kontrol edin.',
-                        detail: raw.slice(0, 200)
+                        error: e.message || 'Bootstrap durumu alınamadı',
                     };
                 }
                 if (data.status === 'running') {
@@ -794,7 +818,8 @@ function setupWizard() {
             try {
                 const res = await fetch('/api/installer/bootstrap-stack', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: this.apiHeaders(),
+                    credentials: 'same-origin',
                     body: JSON.stringify({
                         domain: dom,
                         mail_hostname: dom ? ('mail.' + dom) : '',
@@ -806,7 +831,7 @@ function setupWizard() {
                         stack_skip_busy_host_ports: true
                     })
                 });
-                const started = await res.json();
+                const started = await this.parseJsonResponse(res, 'Bootstrap');
                 if (started.status === 'running') {
                     this.stackBootstrapMessages = 'Bootstrap arka planda çalışıyor (imaj çekme / Dovecot derleme birkaç dakika sürebilir)…\n';
                     const data = await this.pollBootstrapUntilDone(600000);
@@ -837,8 +862,8 @@ function setupWizard() {
 
         async loadBootstrap() {
             try {
-                const res = await fetch('/api/installer/bootstrap');
-                const d = await res.json();
+                const res = await fetch('/api/installer/bootstrap', { credentials: 'same-origin' });
+                const d = await this.parseJsonResponse(res, 'Bootstrap');
                 this.bootstrap = d;
                 this.syncInstallProfileFromBootstrap();
             } catch (e) { /* varsayılan docker_stack */ }
@@ -920,8 +945,8 @@ function setupWizard() {
                     domain: this.domain || '',
                     install_profile: this.installProfile || 'docker_stack'
                 });
-                const res = await fetch('/api/installer/mail-stack-status?' + q.toString());
-                this.mailStatus = await res.json();
+                const res = await fetch('/api/installer/mail-stack-status?' + q.toString(), { credentials: 'same-origin' });
+                this.mailStatus = await this.parseJsonResponse(res, 'Mail durumu');
             } catch (e) {
                 this.mailStatus = null;
                 this.errorMessage = 'Mail durumu alınamadı: ' + (e.message || String(e));
@@ -939,7 +964,8 @@ function setupWizard() {
             try {
                 const res = await fetch('/api/installer/mail-auto-setup', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: this.apiHeaders(),
+                    credentials: 'same-origin',
                     body: JSON.stringify({
                         domain: this.domain,
                         mail_hostname: 'mail.' + this.domain,
@@ -951,7 +977,7 @@ function setupWizard() {
                         stack_service_policy: this.stackServicePolicy || 'smart'
                     })
                 });
-                const started = await res.json();
+                const started = await this.parseJsonResponse(res, 'Bootstrap');
                 let data = started;
                 if (started.status === 'running') {
                     this.mailProvisionMessages = 'Mail bootstrap arka planda…\n';
@@ -995,7 +1021,8 @@ function setupWizard() {
             try {
                 const res = await fetch('/api/installer/test-db', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: this.apiHeaders(),
+                    credentials: 'same-origin',
                     body: JSON.stringify({
                         host: this.dbManual.host,
                         port: this.dbManual.port || 5432,
@@ -1004,7 +1031,7 @@ function setupWizard() {
                         password: this.dbManual.password || ''
                     })
                 });
-                const data = await res.json();
+                const data = await this.parseJsonResponse(res, 'Veritabanı testi');
                 this.dbTestOk = !!data.success;
                 this.dbTestMessage = data.message || (data.success ? 'OK' : 'Hata');
             } catch (e) {
@@ -1046,15 +1073,11 @@ function setupWizard() {
             try {
                 const res = await fetch('/api/installer/start', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: this.apiHeaders(),
+                    credentials: 'same-origin',
                     body: JSON.stringify(payload)
                 });
-                const text = await res.text();
-                let data;
-                try { data = JSON.parse(text); } catch (parseErr) {
-                    this.errorMessage = 'Sunucu hatası (HTTP ' + res.status + '). ' + text.replace(/<[^>]*>/g, '').trim().slice(0, 300);
-                    return;
-                }
+                const data = await this.parseJsonResponse(res, 'Kurulum başlat');
                 if (data.status === 'success') {
                     this.runId = data.run_id;
                     this.step = 8;
@@ -1119,8 +1142,8 @@ function setupWizard() {
             if (this.pollInterval) return;
             this.pollInterval = setInterval(async () => {
                 try {
-                    const res = await fetch('/api/installer/status?run_id=' + this.runId);
-                    const data = await res.json();
+                    const res = await fetch('/api/installer/status?run_id=' + this.runId, { credentials: 'same-origin' });
+                    const data = await this.parseJsonResponse(res, 'Kurulum durumu');
                     if (data.steps) this.steps = data.steps;
                     if (data.run) {
                         this.overallStatus = data.run.status;
