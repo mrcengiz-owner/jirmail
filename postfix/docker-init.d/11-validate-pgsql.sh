@@ -58,9 +58,10 @@ for _f in $PGSQL_FILES; do
 done
 
 if command -v psql >/dev/null 2>&1 && [ -n "$DB_PASS" ]; then
-  PGPASSWORD="$DB_PASS" psql -h "${DB_HOST:-postgres}" -p "${DB_PORT:-5432}" \
-    -U "${DB_USER:-postgres}" -d "$DB_NAME" -c 'SELECT 1' >/dev/null 2>&1 \
-    || _fail "Postgres bağlantısı başarısız (dbname=${DB_NAME})"
+  if ! PGPASSWORD="$DB_PASS" psql -h "${DB_HOST:-postgres}" -p "${DB_PORT:-5432}" \
+    -U "${DB_USER:-postgres}" -d "$DB_NAME" -c 'SELECT 1' >/dev/null 2>&1; then
+    echo "[jirmail-postfix] UYARI: Postgres bağlantısı başarısız (dbname=${DB_NAME}) — init devam ediyor" >&2
+  fi
 fi
 
 if ! postconf -h daemon_directory >/dev/null 2>&1; then

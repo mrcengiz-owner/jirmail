@@ -220,6 +220,67 @@ def mail_stack_status(request: HttpRequest, domain: str = '', install_profile: s
     )
 
 
+def _compose_mail_stack_heal(*, domain: str = '', mail_hostname: str = '') -> dict[str, Any]:
+    """Compose modunda Postfix/Dovecot zaten stack'te — TLS + Postfix onarım."""
+    import os
+
+    from django.core.management import call_command
+
+    from installer.compose_mode import is_compose_stack
+    from management.mail_stack_health import ensure_postfix_running, verify_mail_stack
+
+    if not is_compose_stack():
+        return {'success': False, 'status': 'error', 'error': 'Yalnızca compose stack modunda kullanılır.'}
+
+    dom = (domain or os.getenv('MAIL_DOMAIN') or 'mail.local').strip()
+    mh = (mail_hostname or os.getenv('MAIL_HOSTNAME') or f'mail.{dom}').strip()
+    messages: list[str] = []
+
+    try:
+        call_command('init_mail_tls', domain=dom, hostname=mh, verbosity=0)
+        messages.append('Dahili mail TLS (jir_mail_tls) kontrol edildi.')
+    except Exception as exc:
+        messages.append(f'TLS uyarı: {exc}')
+
+    pf = ensure_postfix_running()
+    if pf.get('ok'):
+        messages.append(f"Postfix ({pf.get('container', 'jir_postfix')}) çalışıyor.")
+    else:
+        messages.append(f"Postfix onarımı tamamlanamadı: {pf.get('error', 'postfix start başarısız')}")
+
+    report = verify_mail_stack(fix=True, healthcheck=True)
+    smtp_ok = any(c.get('id') == 'smtp' and c.get('ok') for c in report.get('checks', []))
+    imap_ok = any(c.get('id') == 'imap' and c.get('ok') for c in report.get('checks', []))
+
+    return {
+        'success': bool(smtp_ok and imap_ok),
+        'status': 'done',
+        'messages': messages,
+        'postfix': pf,
+        'smtp_ok': smtp_ok,
+        'imap_ok': imap_ok,
+        'mail_ready': bool(smtp_ok and imap_ok),
+        'report': {
+            'ok': report.get('ok'),
+            'checks': [
+                {k: c[k] for k in ('id', 'ok', 'message') if k in c}
+                for c in (report.get('checks') or [])
+            ],
+            'healed': report.get('healed') or [],
+        },
+        'error': None if (smtp_ok and imap_ok) else 'SMTP veya IMAP hâlâ erişilemiyor.',
+    }
+
+
+@router.post('/heal-mail-stack', summary='Compose stack — Postfix onarım (sihirbaz)')
+@csrf_exempt
+def heal_mail_stack_api(request: HttpRequest, data: MailAutoSetupSchema):
+    """Postfix çalışmıyorsa init script + start/restart dener."""
+    dom = (data.domain or '').strip()
+    mh = (data.mail_hostname or '').strip() or (f'mail.{dom}' if dom else '')
+    return _compose_mail_stack_heal(domain=dom, mail_hostname=mh)
+
+
 class MailStackProvisionSchema(Schema):
     domain: str = ''
     mail_hostname: str = ''
@@ -263,8 +324,15 @@ class MailAutoSetupSchema(Schema):
 @csrf_exempt
 def mail_auto_setup(request: HttpRequest, data: MailAutoSetupSchema):
     """Postfix/Dovecot kur, paneli jir_network'e bağla, TCP doğrula."""
+    from installer.compose_mode import is_compose_stack
+
     dom = (data.domain or '').strip()
     mh = (data.mail_hostname or '').strip() or (f'mail.{dom}' if dom else '')
+    prof = (data.install_profile or '').strip().lower()
+
+    if is_compose_stack() or prof in ('compose_stack', 'compose'):
+        return _compose_mail_stack_heal(domain=dom, mail_hostname=mh)
+
     cfg = {
         'domain': dom,
         'mail_hostname': mh,

@@ -26,8 +26,18 @@ HOSTED_DOMAIN_SQL = (
 HOSTED_DOMAIN_TRANSPORT_SQL = (
     "SELECT 'lmtp:inet:dovecot:24' FROM core_maildomain d "
     'INNER JOIN core_mailaccount a ON a.domain_id = d.id AND a.is_active = true '
-    "WHERE d.is_active = true AND d.name='%d' LIMIT 1"
+    "WHERE d.is_active = true AND d.name='%d' "
+    "AND d.name NOT IN ({reserved}) LIMIT 1"
 )
+
+
+def reserved_domains_sql_in_list() -> str:
+    """Postfix pgsql sorguları için 'a.com', 'b.com' listesi."""
+    return ', '.join(f"'{d}'" for d in sorted(RESERVED_PUBLIC_DOMAINS))
+
+
+def reserved_domains_sql_and(alias: str = 'd.name') -> str:
+    return f"AND {alias} NOT IN ({reserved_domains_sql_in_list()})"
 
 HOSTED_DOMAIN_NAMES_SQL = (
     'SELECT DISTINCT d.name FROM core_maildomain d '

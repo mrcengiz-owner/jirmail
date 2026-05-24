@@ -13,7 +13,7 @@ export DB_HOST DB_PORT DB_NAME DB_USER DB_PASS
 _strip_legacy_pgsql_port_lines
 
 _write_pgsql_cf /etc/postfix/pgsql-transport-maps.cf \
-  "SELECT 'lmtp:inet:dovecot:24' FROM core_maildomain d INNER JOIN core_mailaccount a ON a.domain_id = d.id AND a.is_active = true WHERE d.is_active = true AND d.name='%d' LIMIT 1"
+  "SELECT 'lmtp:inet:dovecot:24' FROM core_maildomain d INNER JOIN core_mailaccount a ON a.domain_id = d.id AND a.is_active = true WHERE d.is_active = true $(_jir_sql_exclude_reserved_domains) AND d.name='%d' LIMIT 1"
 
 postconf -e 'transport_maps=pgsql:/etc/postfix/pgsql-transport-maps.cf'
 postconf -e 'relay_domains='

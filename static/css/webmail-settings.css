@@ -689,3 +689,209 @@ html.dark .wm-btn-primary {
 [x-cloak] {
   display: none !important;
 }
+
+/* —— Cihaz / istemci kurulumu —— */
+
+.wm-settings-card__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px 16px;
+}
+
+.wm-settings-card__row .wm-settings-card__body {
+  flex: 1;
+  min-width: 200px;
+}
+
+.wm-client-setup-btn {
+  flex-shrink: 0;
+  align-self: center;
+}
+
+.wm-client-setup-preview {
+  margin-top: 10px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+}
+
+.wm-client-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: rgba(25, 28, 29, 0.55);
+  backdrop-filter: blur(4px);
+}
+
+.wm-client-modal {
+  width: min(640px, 100%);
+  max-height: min(90dvh, 820px);
+  overflow: auto;
+  background: var(--st-surface);
+  border: 1px solid var(--st-border);
+  border-radius: var(--st-radius-lg);
+  padding: 20px 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.wm-client-modal__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.wm-client-modal__head h2 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.wm-client-modal__sub {
+  margin: 4px 0 0;
+  font-size: 13px;
+  color: var(--st-text-3);
+}
+
+.wm-client-modal__close {
+  flex-shrink: 0;
+}
+
+.wm-client-params h3,
+.wm-client-guide h3 {
+  margin: 0 0 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--st-text-2);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.wm-client-kv {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.wm-client-kv__row {
+  display: grid;
+  grid-template-columns: minmax(120px, 34%) 1fr;
+  gap: 8px 12px;
+  align-items: start;
+}
+
+.wm-client-kv__row dt {
+  margin: 0;
+  font-size: 12px;
+  color: var(--st-text-3);
+}
+
+.wm-client-kv__row dd {
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.wm-client-kv__row code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  background: var(--st-surface-2);
+  padding: 3px 6px;
+  border-radius: 6px;
+  word-break: break-all;
+}
+
+.wm-client-kv__hint {
+  color: var(--st-text-2);
+  line-height: 1.45;
+}
+
+.wm-copy-btn {
+  border: 1px solid var(--st-border);
+  background: var(--st-surface-2);
+  color: var(--st-text-2);
+  font-size: 11px;
+  font-weight: 600;
+  padding: 4px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.wm-copy-btn:hover {
+  background: var(--st-surface-3);
+}
+
+.wm-client-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.wm-client-tab {
+  border: 1px solid var(--st-border);
+  background: var(--st-surface-2);
+  color: var(--st-text-2);
+  font-size: 12px;
+  font-weight: 600;
+  padding: 7px 11px;
+  border-radius: var(--st-radius-pill);
+  cursor: pointer;
+  font-family: inherit;
+  transition: background var(--st-transition), border-color var(--st-transition);
+}
+
+.wm-client-tab.is-active {
+  background: var(--st-primary-soft);
+  border-color: var(--st-primary);
+  color: var(--st-primary);
+}
+
+html.dark .wm-client-tab.is-active {
+  color: var(--st-primary-hover);
+}
+
+.wm-client-steps {
+  margin: 0;
+  padding-left: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  color: var(--st-text-2);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.wm-client-toast {
+  margin: 0;
+  font-size: 12px;
+  color: var(--st-success);
+  text-align: center;
+}
+
+.wm-client-modal__foot {
+  display: flex;
+  justify-content: flex-end;
+  padding-top: 4px;
+}
+
+@media (max-width: 520px) {
+  .wm-client-kv__row {
+    grid-template-columns: 1fr;
+  }
+
+  .wm-client-setup-btn {
+    width: 100%;
+  }
+}

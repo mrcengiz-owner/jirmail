@@ -310,7 +310,7 @@
                         <svg class="w-5 h-5 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
                         </svg>
-                        <p>Compose stack: Postfix ve Dovecot zaten çalışıyor. Bu adımda yalnızca SMTP/IMAP ve dahili TLS doğrulanır; Docker API gerekmez.</p>
+                        <p>Compose stack: Dovecot çalışıyorsa Postfix de aynı stack'te olmalı. SMTP kapalıysa <strong>Postfix onar</strong> veya <strong>Tekrar dene</strong> kullanın; Docker API satırı bu modda bilerek kapalı gösterilir.</p>
                     </div>
 
                     <div x-show="installProfile === 'docker_stack'"
@@ -372,7 +372,9 @@
 
                     <div class="flex flex-wrap items-center gap-2">
                         <button type="button" class="btn btn-secondary btn-sm"
-                                @click="runMailAutoSetup()" :disabled="mailLoading || mailProvisionLoading || !domain">Tekrar dene</button>
+                                @click="runMailAutoSetup()" :disabled="mailLoading || mailProvisionLoading || !domain">
+                            <span x-text="installProfile === 'compose_stack' ? 'Postfix onar / tekrar dene' : 'Tekrar dene'"></span>
+                        </button>
                         <button type="button" class="btn btn-secondary btn-sm"
                                 @click="refreshMailStatus()" :disabled="mailLoading || mailProvisionLoading">Durumu yenile</button>
                         <span x-show="mailStatus.mail_ready" class="text-xs text-success-400 font-medium">Mail uçları hazır görünüyor.</span>
@@ -977,11 +979,13 @@ function setupWizard() {
                         stack_service_policy: this.stackServicePolicy || 'smart'
                     })
                 });
-                const started = await this.parseJsonResponse(res, 'Bootstrap');
+                const started = await this.parseJsonResponse(res, 'Mail kurulum');
                 let data = started;
                 if (started.status === 'running') {
                     this.mailProvisionMessages = 'Mail bootstrap arka planda…\n';
                     data = await this.pollBootstrapUntilDone(600000);
+                } else if (started.status === 'done' || typeof started.success === 'boolean') {
+                    data = started;
                 }
                 const msgs = data.messages || [];
                 if (msgs.length) this.mailProvisionMessages = msgs.join('\n');

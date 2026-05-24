@@ -36,3 +36,8 @@ _strip_legacy_pgsql_port_lines() {
     fi
   done
 }
+
+# core/mail_domains.py RESERVED_PUBLIC_DOMAINS ile senkron
+_jir_sql_exclude_reserved_domains() {
+  printf '%s' "AND d.name NOT IN ('aol.com', 'gmail.com', 'googlemail.com', 'gmx.com', 'gmx.net', 'hotmail.com', 'icloud.com', 'live.com', 'mac.com', 'mail.ru', 'me.com', 'msn.com', 'outlook.com', 'pm.me', 'proton.me', 'protonmail.com', 'tuta.io', 'tutanota.com', 'yahoo.com', 'yahoo.com.tr', 'yandex.com', 'yandex.com.tr', 'zoho.com')"
+}

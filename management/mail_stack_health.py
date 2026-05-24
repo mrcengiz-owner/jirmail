@@ -71,12 +71,21 @@ def _docker_client():
 
 
 def heal_postfix_container(*, container: str | None = None) -> dict[str, Any]:
-    """Postfix içinde init script + pgsql doğrulama."""
+    """Postfix içinde init script + pgsql doğrulama + gerekirse postfix start."""
     name = container or _postfix_container_name()
     out: dict[str, Any] = {"container": name, "ok": False, "actions": []}
     try:
         client = _docker_client()
         c = client.containers.get(name)
+        c.reload()
+        if c.status != "running":
+            out["actions"].append({"action": "container_start", "from": c.status})
+            c.start()
+            import time
+
+            time.sleep(6)
+            c.reload()
+
         for script in (
             "/docker-init.d/10-jirmail-inbound.sh",
             "/docker-init.d/31-jirmail-transport-maps.sh",
@@ -86,7 +95,12 @@ def heal_postfix_container(*, container: str | None = None) -> dict[str, Any]:
         ):
             code, logs = c.exec_run(["sh", script], demux=True)
             out["actions"].append(
-                {"script": script, "exit_code": code, "stderr": (logs[1] or b"").decode()[:500]}
+                {
+                    "script": script,
+                    "exit_code": code,
+                    "stderr": (logs[1] or b"").decode()[:500],
+                    "stdout": (logs[0] or b"").decode()[:300],
+                }
             )
         code, logs = c.exec_run(
             [
@@ -99,12 +113,41 @@ def heal_postfix_container(*, container: str | None = None) -> dict[str, Any]:
             demux=True,
         )
         stdout = (logs[0] or b"").decode()
-        out["ok"] = code == 0 and "pgsql_cf_ok" in stdout
+        pgsql_ok = code == 0 and "pgsql_cf_ok" in stdout
+        out["actions"].append({"action": "pgsql_probe", "ok": pgsql_ok})
+
+        start_code, start_logs = c.exec_run(
+            ["sh", "-c", "postfix start 2>&1; sleep 2; postfix status 2>&1"],
+            demux=True,
+        )
+        start_out = ((start_logs[0] or b"") + (start_logs[1] or b"")).decode()
+        running = "is running" in start_out.lower() or "running" in start_out.lower()
+        out["actions"].append(
+            {"action": "postfix_start", "exit_code": start_code, "output": start_out[:500]}
+        )
+
+        if not running:
+            out["actions"].append({"action": "container_restart"})
+            c.restart(timeout=30)
+            import time
+
+            time.sleep(12)
+            _, status_logs = c.exec_run(["postfix", "status"], demux=True)
+            start_out = ((status_logs[0] or b"") + (status_logs[1] or b"")).decode()
+            running = "is running" in start_out.lower() or "running" in start_out.lower()
+            out["actions"].append({"action": "postfix_status_after_restart", "output": start_out[:400]})
+
+        out["ok"] = running and pgsql_ok
         client.close()
     except Exception as exc:
         out["error"] = str(exc)
         logger.warning("heal_postfix_container: %s", exc)
     return out
+
+
+def ensure_postfix_running(*, container: str | None = None) -> dict[str, Any]:
+    """Compose/single-server: Postfix konteynerini ayağa kaldır ve init script'lerini çalıştır."""
+    return heal_postfix_container(container=container)
 
 
 def heal_dovecot_container(*, container: str | None = None) -> dict[str, Any]:
@@ -180,6 +223,22 @@ def verify_mail_stack(*, fix: bool = False, healthcheck: bool = False) -> dict[s
     imap_ok = verify_imap_tls(imap_host, imap_port, timeout=6.0, log_failure=False)
     add("smtp", smtp_ok, f"SMTP {smtp_host}:{smtp_port} {'OK' if smtp_ok else 'erişilemiyor'}")
     add("imap", imap_ok, f"IMAP {imap_host}:{imap_port} {'OK' if imap_ok else 'erişilemiyor'}")
+
+    if fix and not smtp_ok:
+        try:
+            healed_pf = ensure_postfix_running()
+            report["healed"].append({"service": "postfix_ensure", **healed_pf})
+            if healed_pf.get("ok"):
+                smtp_ok = verify_smtp_starttls(smtp_host, smtp_port, timeout=4.0)
+                for chk in report["checks"]:
+                    if chk.get("id") == "smtp":
+                        chk["ok"] = smtp_ok
+                        chk["message"] = f"SMTP {smtp_host}:{smtp_port} {'OK' if smtp_ok else 'erişilemiyor'}"
+                        break
+                if smtp_ok:
+                    report["ok"] = all(c.get("ok") for c in report["checks"] if not c.get("optional"))
+        except Exception as exc:
+            report["healed"].append({"service": "postfix_ensure", "ok": False, "error": str(exc)})
 
     # Dış posta çıkışı (port 25 veya relayhost) — otomatik yapılandır
     try:

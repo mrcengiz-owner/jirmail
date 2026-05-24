@@ -3,8 +3,8 @@
 {% block title %}Ayarlar — Jîr-Mail{% endblock %}
 
 {% block extra_head %}
-<link rel="stylesheet" href="{% url 'webmail:asset' asset_path='css/webmail-mailflow.css' %}?v=20260521d">
-<link rel="stylesheet" href="{% url 'webmail:asset' asset_path='css/webmail-settings.css' %}?v=20260521d">
+<link rel="stylesheet" href="{% url 'webmail:asset' asset_path='css/webmail-mailflow.css' %}?v=20260521e">
+<link rel="stylesheet" href="{% url 'webmail:asset' asset_path='css/webmail-settings.css' %}?v=20260521e">
 {% endblock %}
 
 {% block body %}
@@ -98,6 +98,27 @@
           </p>
         </section>
 
+        <section class="wm-settings-card wm-settings-card--client">
+          <div class="wm-settings-card__row">
+            <div class="wm-settings-card__body">
+              <h2>Cihazda veya uygulamada kur</h2>
+              <p class="wm-settings-hint">
+                Webmail tarayıcı içindir. iPhone Mail, Android, Thunderbird, Outlook veya Windows Posta
+                uygulamasında hesabınızı kurmak için sunucu bilgilerine ve adım adım rehbere ihtiyacınız olur.
+              </p>
+            </div>
+            <button type="button"
+                    class="wm-btn wm-btn-secondary wm-client-setup-btn"
+                    @click="openClientSetup()"
+                    :disabled="!clientSetup">
+              Kurulum rehberi
+            </button>
+          </div>
+          <p class="wm-settings-hint wm-client-setup-preview" x-show="clientSetup" x-cloak>
+            <span x-text="clientSetup ? ('IMAP ' + clientSetup.imap.host + ':' + clientSetup.imap.port + ' · SMTP ' + clientSetup.smtp.host + ':' + clientSetup.smtp.port) : ''"></span>
+          </p>
+        </section>
+
         <section class="wm-settings-card wm-settings-card--appearance">
           <h2>Görünüm</h2>
           <p class="wm-settings-hint">Aydınlık veya karanlık tema.</p>
@@ -123,9 +144,89 @@
       </div>
     </div>
   </div>
+
+  <div class="wm-client-modal-backdrop"
+       x-show="clientModalOpen"
+       x-cloak
+       @click.self="closeClientSetup()"
+       @keydown.escape.window="clientModalOpen && closeClientSetup()">
+    <div class="wm-client-modal modal-shadow"
+         role="dialog"
+         aria-modal="true"
+         aria-labelledby="wm-client-modal-title"
+         x-show="clientSetup">
+      <header class="wm-client-modal__head">
+        <div>
+          <h2 id="wm-client-modal-title">Posta hesabı kurulumu</h2>
+          <p class="wm-client-modal__sub">Webmail dışında telefon veya masaüstü uygulamasında kullanın</p>
+        </div>
+        <button type="button" class="wm-icon-btn wm-client-modal__close" @click="closeClientSetup()" aria-label="Kapat">
+          <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+        </button>
+      </header>
+
+      <div class="wm-client-params">
+        <h3>Sunucu bilgileri</h3>
+        <dl class="wm-client-kv">
+          <div class="wm-client-kv__row">
+            <dt>E-posta / kullanıcı adı</dt>
+            <dd>
+              <code x-text="clientSetup.email"></code>
+              <button type="button" class="wm-copy-btn" @click="copyValue(clientSetup.email)">Kopyala</button>
+            </dd>
+          </div>
+          <div class="wm-client-kv__row">
+            <dt>IMAP sunucusu</dt>
+            <dd>
+              <code x-text="clientSetup.imap.host + ':' + clientSetup.imap.port + ' (' + clientSetup.imap.security + ')'"></code>
+              <button type="button" class="wm-copy-btn" @click="copyValue(clientSetup.imap.host)">Kopyala</button>
+            </dd>
+          </div>
+          <div class="wm-client-kv__row">
+            <dt>SMTP sunucusu</dt>
+            <dd>
+              <code x-text="clientSetup.smtp.host + ':' + clientSetup.smtp.port + ' (' + clientSetup.smtp.security + ')'"></code>
+              <button type="button" class="wm-copy-btn" @click="copyValue(clientSetup.smtp.host)">Kopyala</button>
+            </dd>
+          </div>
+          <div class="wm-client-kv__row">
+            <dt>Parola</dt>
+            <dd class="wm-client-kv__hint" x-text="clientSetup.password_hint"></dd>
+          </div>
+        </dl>
+      </div>
+
+      <div class="wm-client-tabs" role="tablist" aria-label="Platform rehberleri">
+        <template x-for="c in (clientSetup.clients || [])" :key="c.id">
+          <button type="button"
+                  class="wm-client-tab"
+                  :class="clientTab === c.id && 'is-active'"
+                  role="tab"
+                  :aria-selected="clientTab === c.id"
+                  @click="clientTab = c.id"
+                  x-text="c.name"></button>
+        </template>
+      </div>
+
+      <div class="wm-client-guide" x-show="activeClientGuide">
+        <h3 x-text="activeClientGuide ? activeClientGuide.name : ''"></h3>
+        <ol class="wm-client-steps">
+          <template x-for="(step, idx) in (activeClientGuide ? activeClientGuide.steps : [])" :key="idx">
+            <li x-text="step"></li>
+          </template>
+        </ol>
+      </div>
+
+      <p class="wm-client-toast" x-show="copyToast" x-text="copyToast" x-cloak></p>
+
+      <footer class="wm-client-modal__foot">
+        <button type="button" class="wm-btn wm-btn-secondary" @click="closeClientSetup()">Kapat</button>
+      </footer>
+    </div>
+  </div>
 </div>
 {% endblock %}
 
 {% block extra_scripts %}
-<script src="{% url 'webmail:asset' asset_path='js/webmail/settings-app.js' %}?v=20260521d"></script>
+<script src="{% url 'webmail:asset' asset_path='js/webmail/settings-app.js' %}?v=20260521e"></script>
 {% endblock %}

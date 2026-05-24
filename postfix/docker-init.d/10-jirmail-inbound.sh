@@ -28,7 +28,7 @@ _write_pgsql_cf /etc/postfix/pgsql-virtual-mailboxes.cf \
   "SELECT CONCAT(a.email, ' ', d.name, '/', a.username, '/') AS mailbox FROM core_mailaccount a INNER JOIN core_maildomain d ON d.id = a.domain_id WHERE a.is_active = true AND d.is_active = true"
 
 _write_pgsql_cf /etc/postfix/pgsql-virtual-domains.cf \
-  "SELECT DISTINCT d.name FROM core_maildomain d INNER JOIN core_mailaccount a ON a.domain_id = d.id AND a.is_active = true WHERE d.is_active = true"
+  "SELECT DISTINCT d.name FROM core_maildomain d INNER JOIN core_mailaccount a ON a.domain_id = d.id AND a.is_active = true WHERE d.is_active = true $(_jir_sql_exclude_reserved_domains)"
 
 postconf -e "virtual_mailbox_domains=pgsql:/etc/postfix/pgsql-virtual-domains.cf"
 postconf -e 'virtual_mailbox_maps=pgsql:/etc/postfix/pgsql-virtual-mailboxes.cf'

@@ -117,6 +117,8 @@ def _fix_reserved_domains() -> list[str]:
             fixed.append(name)
         if fixed:
             reload_virtual_mailboxes()
+            applied = apply_postfix_outbound_scripts()
+            logger.info('reserved domain fix: postfix init %s', applied.get('ok'))
         return fixed
     except Exception as exc:
         logger.warning('reserved domain fix: %s', exc)

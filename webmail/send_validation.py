@@ -139,6 +139,8 @@ def validate_outbound_recipients(account, raw_to: str, raw_cc: str = '', raw_bcc
 
 
 _BOUNCE_HINTS = (
+    ('lmtp:inet:dovecot', 'Postfix dış alıcıyı yerel Dovecot\'a yönlendirdi — panelde gmail.com/proton.me gibi sağlayıcı domaini kayıtlı olabilir. Panel → Domainler veya: python manage.py fix_reserved_mail_domains'),
+    ('lmtp:', 'Yerel LMTP teslimatı — alıcı domaini panelde yanlış kayıtlı olabilir (fix_reserved_mail_domains).'),
     ('network is unreachable', 'Sunucudan internete TCP çıkışı engelli. Sistem otomatik relay yapılandırmaya çalışır; .env içinde SMTP_RELAYHOST tanımlayın.'),
     ('connection timed out', 'Alıcı MX sunucusuna bağlanılamadı (port 25 engelli olabilir). SMTP relay otomatik uygulanır; yoksa .env ile tanımlayın.'),
     ('connection refused', 'Alıcı MX bağlantıyı reddetti — IP itibarı/PTR sorunu olabilir. SMTP relay önerilir.'),

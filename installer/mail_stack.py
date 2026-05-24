@@ -533,6 +533,11 @@ def collect_installer_mail_stack_status(
             'konteynerler çalışmıyorsa veya farklı isimdeyse “erişilemiyor” normaldir.'
         )
     if compose_mode and not mail_ready:
+        if not postfix_running and dovecot_running:
+            hints.append(
+                'Postfix (587) kapalı — jir_postfix loglarına bakın. Sihirbazda Postfix onar init script '
+                'çalıştırır. Host: docker logs jir_postfix --tail 80'
+            )
         hints.append(
             'Compose modu: servisler docker-compose.yml ile çalışıyor. IMAP kapalıysa: '
             'docker logs jir_dovecot — auth (pgsql) ve 993 dinleyici kontrol edin; ardından “Durumu yenile”.'

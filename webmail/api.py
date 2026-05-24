@@ -332,6 +332,13 @@ def send(request: HttpRequest, data: SendMailSchema):
         if not check['ok']:
             return {'success': False, 'message': check['message'], 'invalid': check.get('invalid', [])}
 
+        try:
+            from management.outbound_autoconfig import ensure_outbound_delivery
+
+            ensure_outbound_delivery(fix=True, full_heal=False)
+        except Exception as exc:
+            log.debug('ensure_outbound_delivery: %s', exc)
+
         to_list = parse_recipient_list(data.to)
         cc_list = parse_recipient_list(data.cc) or None
         bcc_list = parse_recipient_list(data.bcc) or None
@@ -718,6 +725,8 @@ def get_settings(request: HttpRequest):
         return {'success': False, 'message': 'Oturum yok'}
     account = MailAccount.objects.select_related('domain').filter(pk=account.pk).first()
     key = (account.ai_api_key or '').strip()
+    from webmail.client_setup import build_client_setup
+
     return {
         'success': True,
         'email': account.email,
@@ -730,6 +739,7 @@ def get_settings(request: HttpRequest):
         'ai_available': bool(account.ai_available),
         'domain_ai_enabled': bool(account.domain.ai_enabled),
         'providers': AI_PROVIDERS,
+        'client_setup': build_client_setup(account_email=account.email),
     }
 
 
@@ -884,6 +894,13 @@ def send_with_attachments(request: HttpRequest):
         check = validate_outbound_recipients(account, to_raw, cc_raw, bcc_raw)
         if not check['ok']:
             return {'success': False, 'message': check['message']}
+
+        try:
+            from management.outbound_autoconfig import ensure_outbound_delivery
+
+            ensure_outbound_delivery(fix=True, full_heal=False)
+        except Exception as exc:
+            log.debug('ensure_outbound_delivery: %s', exc)
 
         to_list = parse_recipient_list(to_raw)
         attachments = []
