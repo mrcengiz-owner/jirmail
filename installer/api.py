@@ -248,18 +248,38 @@ def _compose_mail_stack_heal(*, domain: str = '', mail_hostname: str = '') -> di
     else:
         messages.append(f"Postfix onarımı tamamlanamadı: {pf.get('error', 'postfix start başarısız')}")
 
+    routing_fix: dict[str, Any] = {}
+    try:
+        from management.postfix_maps import force_fix_postfix_routing
+
+        routing_fix = force_fix_postfix_routing()
+        if routing_fix.get('fixed_domains'):
+            messages.append(
+                f"Pasifleştirilen sağlayıcı domainleri: {', '.join(routing_fix['fixed_domains'])}"
+            )
+        if routing_fix.get('ok'):
+            messages.append('Gmail routing düzeltildi (pgsql map doğrudan yazıldı).')
+        elif routing_fix.get('routing', {}).get('message'):
+            messages.append(routing_fix['routing']['message'])
+    except Exception as exc:
+        messages.append(f'Routing onarım uyarısı: {exc}')
+
     report = verify_mail_stack(fix=True, healthcheck=True)
     smtp_ok = any(c.get('id') == 'smtp' and c.get('ok') for c in report.get('checks', []))
     imap_ok = any(c.get('id') == 'imap' and c.get('ok') for c in report.get('checks', []))
 
+    routing_ok = bool(routing_fix.get('ok')) if routing_fix else True
+
     return {
-        'success': bool(smtp_ok and imap_ok),
+        'success': bool(smtp_ok and imap_ok and routing_ok),
         'status': 'done',
         'messages': messages,
         'postfix': pf,
         'smtp_ok': smtp_ok,
         'imap_ok': imap_ok,
         'mail_ready': bool(smtp_ok and imap_ok),
+        'routing_ok': routing_ok,
+        'routing_fix': routing_fix,
         'report': {
             'ok': report.get('ok'),
             'checks': [
@@ -281,6 +301,15 @@ class MailAutoSetupSchema(Schema):
     postgres_db: str = 'jir_mail_prod'
     postgres_user: str = 'postgres'
     stack_service_policy: str = 'smart'
+
+
+@router.post('/fix-postfix-routing', summary='Gmail routing onarımı (pgsql map doğrudan yaz)')
+@csrf_exempt
+def fix_postfix_routing_api(request: HttpRequest):
+    """Dış alıcılar Dovecot'a düşüyorsa pgsql map dosyalarını doğrudan yazar."""
+    from management.postfix_maps import force_fix_postfix_routing
+
+    return force_fix_postfix_routing()
 
 
 @router.post('/heal-mail-stack', summary='Compose stack — Postfix onarım (sihirbaz)')

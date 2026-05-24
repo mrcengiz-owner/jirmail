@@ -40,6 +40,11 @@ HOSTED_DOMAIN_TRANSPORT_SQL = (
     f"WHERE d.is_active = true AND d.name='%d' {reserved_domains_sql_and('d.name')} LIMIT 1"
 )
 
+HOSTED_MAILBOX_SQL = (
+    'SELECT CONCAT(a.email, \' \', d.name, \'/\', a.username, \'/\') AS mailbox '
+    'FROM core_mailaccount a INNER JOIN core_maildomain d ON d.id = a.domain_id '
+    'WHERE a.is_active = true AND d.is_active = true'
+)
 
 HOSTED_DOMAIN_NAMES_SQL = (
     'SELECT DISTINCT d.name FROM core_maildomain d '

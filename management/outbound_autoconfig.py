@@ -271,6 +271,16 @@ def ensure_outbound_delivery(
         report['fixed_domains'] = _fix_reserved_domains()
         map_applied = apply_postfix_map_scripts()
         report['actions'].append({'postfix_maps': map_applied})
+        routing = probe_postfix_recipient_routing(domain='gmail.com')
+        report['routing'] = routing
+        if not routing.get('ok'):
+            from management.postfix_maps import rewrite_postfix_pgsql_maps
+
+            rewrite = rewrite_postfix_pgsql_maps()
+            report['actions'].append({'pgsql_rewrite': rewrite})
+            routing = probe_postfix_recipient_routing(domain='gmail.com')
+            report['routing'] = routing
+            report['ok'] = bool(rewrite.get('ok')) and bool(routing.get('ok'))
         if full_heal:
             applied = apply_postfix_outbound_scripts()
             report['actions'].append({'postfix_init': applied})

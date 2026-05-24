@@ -61,6 +61,24 @@ if [ "$regen_transport" = 1 ]; then
   sh /docker-init.d/31-jirmail-transport-maps.sh
 fi
 
+# Fonksiyonel test: gmail.com yerel sayılmamalı
+_gmail_routing_bad() {
+  _vd=$(postmap -q gmail.com pgsql:/etc/postfix/pgsql-virtual-domains.cf 2>/dev/null || true)
+  _tr=$(postmap -q gmail.com pgsql:/etc/postfix/pgsql-transport-maps.cf 2>/dev/null || true)
+  if [ -n "$_vd" ]; then
+    return 0
+  fi
+  echo "$_tr" | grep -qi lmtp && return 0
+  return 1
+}
+if _gmail_routing_bad; then
+  echo "[jirmail-postfix] UYARI: gmail.com hâlâ yerel domain — map zorla yenileniyor"
+  sh /docker-init.d/10-jirmail-inbound.sh
+  sh /docker-init.d/31-jirmail-transport-maps.sh
+  sh /docker-init.d/30-jirmail-outbound-smtp.sh
+  _gmail_routing_bad && _fail "gmail.com routing düzeltilemedi — pgsql sorgusunu kontrol edin"
+fi
+
 for _f in $PGSQL_FILES; do
   _check_file "$_f" || _fail "$_f geçersiz (dbname yok veya port= satırı var)"
 done
