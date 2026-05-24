@@ -17,14 +17,7 @@ fi
 
 export DB_HOST DB_PORT DB_NAME DB_USER DB_PASS
 
-if [ -f /docker-init.d/10-jirmail-inbound.sh ]; then
-  sh /docker-init.d/10-jirmail-inbound.sh
-  sh /docker-init.d/31-jirmail-transport-maps.sh
-  echo "OK: jirmail init script'leri çalıştırıldı (dbname=$DB_NAME)"
-  postmap -q gmail.com pgsql:/etc/postfix/pgsql-transport-maps.cf 2>/dev/null || true
-  postmap -q gmail.com pgsql:/etc/postfix/pgsql-virtual-domains.cf 2>/dev/null || true
-  exit 0
-fi
+_excl="AND d.name NOT IN ('aol.com', 'gmail.com', 'googlemail.com', 'gmx.com', 'gmx.net', 'hotmail.com', 'icloud.com', 'live.com', 'mac.com', 'mail.ru', 'me.com', 'msn.com', 'outlook.com', 'pm.me', 'proton.me', 'protonmail.com', 'tuta.io', 'tutanota.com', 'yahoo.com', 'yahoo.com.tr', 'yandex.com', 'yandex.com.tr', 'zoho.com')"
 
 _write() {
   dest="$1"
@@ -44,18 +37,51 @@ _write() {
   chmod 600 "$dest"
 }
 
-_excl="AND d.name NOT IN ('aol.com', 'gmail.com', 'googlemail.com', 'gmx.com', 'gmx.net', 'hotmail.com', 'icloud.com', 'live.com', 'mac.com', 'mail.ru', 'me.com', 'msn.com', 'outlook.com', 'pm.me', 'proton.me', 'protonmail.com', 'tuta.io', 'tutanota.com', 'yahoo.com', 'yahoo.com.tr', 'yandex.com', 'yandex.com.tr', 'zoho.com')"
+_gmail_routing_bad() {
+  _vd=$(postmap -q gmail.com pgsql:/etc/postfix/pgsql-virtual-domains.cf 2>/dev/null || true)
+  _tr=$(postmap -q gmail.com pgsql:/etc/postfix/pgsql-transport-maps.cf 2>/dev/null || true)
+  if [ -n "$_vd" ]; then
+    return 0
+  fi
+  echo "$_tr" | grep -qi lmtp && return 0
+  return 1
+}
 
-_write /etc/postfix/pgsql-virtual-mailboxes.cf \
-  "SELECT CONCAT(a.email, ' ', d.name, '/', a.username, '/') AS mailbox FROM core_mailaccount a INNER JOIN core_maildomain d ON d.id = a.domain_id WHERE a.is_active = true AND d.is_active = true"
+_force_write_maps() {
+  _write /etc/postfix/pgsql-virtual-mailboxes.cf \
+    "SELECT CONCAT(a.email, ' ', d.name, '/', a.username, '/') AS mailbox FROM core_mailaccount a INNER JOIN core_maildomain d ON d.id = a.domain_id WHERE a.is_active = true AND d.is_active = true"
+  _write /etc/postfix/pgsql-virtual-domains.cf \
+    "SELECT 1 FROM core_maildomain d INNER JOIN core_mailaccount a ON a.domain_id = d.id AND a.is_active = true WHERE d.is_active = true $_excl AND d.name='%s' LIMIT 1"
+  _write /etc/postfix/pgsql-transport-maps.cf \
+    "SELECT 'lmtp:inet:dovecot:24' FROM core_maildomain d INNER JOIN core_mailaccount a ON a.domain_id = d.id AND a.is_active = true WHERE d.is_active = true $_excl AND d.name='%d' LIMIT 1"
+  postconf -e 'virtual_mailbox_domains=pgsql:/etc/postfix/pgsql-virtual-domains.cf'
+  postconf -e 'virtual_mailbox_maps=pgsql:/etc/postfix/pgsql-virtual-mailboxes.cf'
+  postconf -e 'transport_maps=pgsql:/etc/postfix/pgsql-transport-maps.cf'
+  postconf -e 'virtual_transport=lmtp:inet:dovecot:24'
+  postconf -e 'default_transport=smtp'
+  postconf -e 'relay_transport=smtp'
+  postconf -e 'relay_domains='
+  postfix reload
+}
 
-_write /etc/postfix/pgsql-virtual-domains.cf \
-  "SELECT 1 FROM core_maildomain d INNER JOIN core_mailaccount a ON a.domain_id = d.id AND a.is_active = true WHERE d.is_active = true $_excl AND d.name='%s' LIMIT 1"
+if [ -f /docker-init.d/10-jirmail-inbound.sh ] && [ -f /docker-init.d/31-jirmail-transport-maps.sh ]; then
+  sh /docker-init.d/10-jirmail-inbound.sh
+  sh /docker-init.d/31-jirmail-transport-maps.sh
+  [ -f /docker-init.d/30-jirmail-outbound-smtp.sh ] && sh /docker-init.d/30-jirmail-outbound-smtp.sh || true
+fi
 
-_write /etc/postfix/pgsql-transport-maps.cf \
-  "SELECT 'lmtp:inet:dovecot:24' FROM core_maildomain d INNER JOIN core_mailaccount a ON a.domain_id = d.id AND a.is_active = true WHERE d.is_active = true $_excl AND d.name='%d' LIMIT 1"
+if _gmail_routing_bad; then
+  echo "[fix-postfix-pgsql] gmail.com hâlâ yerel — doğru SQL ile zorla yazılıyor"
+  _force_write_maps
+fi
 
-postfix reload
+if _gmail_routing_bad; then
+  echo "HATA: gmail.com routing düzelmedi" >&2
+  postmap -q gmail.com pgsql:/etc/postfix/pgsql-virtual-domains.cf 2>&1 || true
+  postmap -q gmail.com pgsql:/etc/postfix/pgsql-transport-maps.cf 2>&1 || true
+  exit 1
+fi
+
 echo "OK: pgsql maps yenilendi (dbname=$DB_NAME)"
-postmap -q gmail.com pgsql:/etc/postfix/pgsql-transport-maps.cf 2>/dev/null || true
 postmap -q gmail.com pgsql:/etc/postfix/pgsql-virtual-domains.cf 2>/dev/null || true
+postmap -q gmail.com pgsql:/etc/postfix/pgsql-transport-maps.cf 2>/dev/null || true

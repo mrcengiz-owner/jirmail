@@ -2,10 +2,11 @@
 # Yalnızca jir_postfix — sistem/dokploy/traefik/firewall'a dokunmaz.
 set -euo pipefail
 
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 PF="${JIR_CONTAINER_POSTFIX:-jir_postfix}"
 DJ="${JIR_CONTAINER_DJANGO:-jir_django}"
 
-echo "=== Jir-Mail Postfix kurtarma (minimal) ==="
+echo "=== Jir-Mail Postfix kurtarma (Gmail routing dahil) ==="
 
 if ! docker ps --format '{{.Names}}' | grep -qx "$PF"; then
   echo "HATA: $PF konteyneri çalışmıyor."
@@ -13,36 +14,19 @@ if ! docker ps --format '{{.Names}}' | grep -qx "$PF"; then
   exit 1
 fi
 
-echo "--- pgsql map temizliği ---"
-docker exec "$PF" sh -c "sed -i '/^port = /d' /etc/postfix/pgsql-*.cf 2>/dev/null; true"
+echo "--- pgsql map onarımı (fix-postfix-pgsql.sh) ---"
+docker exec -i "$PF" sh -s < "$ROOT/scripts/fix-postfix-pgsql.sh"
 
-for s in 10-jirmail-inbound.sh 31-jirmail-transport-maps.sh 11-validate-pgsql.sh; do
-  echo ">> $s"
-  docker exec "$PF" sh "/docker-init.d/$s" || true
-done
-
-echo "--- postconf ---"
-docker exec "$PF" postconf -h daemon_directory 2>&1 || true
-
-echo "--- postfix start ---"
-docker exec "$PF" postfix start 2>&1 || true
-sleep 3
-
-if docker exec "$PF" postfix status 2>&1 | grep -qi running; then
-  echo "OK: Postfix çalışıyor."
-  docker exec "$PF" postfix status
-else
-  echo "postfix start yetersiz — konteyner restart..."
-  docker restart "$PF"
-  sleep 25
-  docker exec "$PF" postfix status 2>&1 || true
-fi
+echo "--- postmap gmail.com (boş olmalı) ---"
+docker exec "$PF" postmap -q gmail.com pgsql:/etc/postfix/pgsql-virtual-domains.cf 2>&1 || true
+docker exec "$PF" postmap -q gmail.com pgsql:/etc/postfix/pgsql-transport-maps.cf 2>&1 || true
 
 if docker ps --format '{{.Names}}' | grep -qx "$DJ"; then
-  echo "--- API durumu ---"
-  docker exec "$DJ" curl -s http://127.0.0.1:8000/api/installer/mail-stack-status 2>/dev/null \
-    | python3 -c "import sys,json; d=json.load(sys.stdin); print('smtp_ok:', d.get('smtp_ok'), 'postfix_running:', d.get('postfix_running'), 'mail_ready:', d.get('mail_ready'))" 2>/dev/null \
-    || echo "(API kontrol atlandı)"
+  echo "--- Django routing onarımı (deploy sonrası) ---"
+  docker exec "$DJ" curl -sS -m 120 -X POST http://127.0.0.1:8000/api/installer/fix-postfix-routing \
+    -H 'Content-Type: application/json' -d '{}' 2>/dev/null \
+    | python3 -m json.tool 2>/dev/null \
+    || echo "(fix-postfix-routing API henüz deploy edilmemiş — pgsql map adımı yeterli olabilir)"
 fi
 
-echo "=== Bitti ==="
+echo "=== Bitti — Gmail'e test maili gönderin ==="
