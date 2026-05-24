@@ -2,14 +2,8 @@
 # boky/postfix: her konteyner start'ta Jîr-Mail init + doğrulama, sonra orijinal süreç
 set -e
 
-echo "[jirmail-postfix] entrypoint: init scripts"
-for s in /docker-init.d/*.sh; do
-  [ -f "$s" ] || continue
-  echo "[jirmail-postfix] running $(basename "$s")"
-  sh "$s"
-done
-
-# boky varsayılan: tini altında supervisord veya startup script
+# boky/postfix: /docker-init.d/*.sh zaten startup sırasında çalışır — tekrar etme (çift reload).
+# Özel init: docker-init.d/ içindeki script'ler.
 if [ -x /scripts/run.sh ]; then
   exec /scripts/run.sh "$@"
 fi

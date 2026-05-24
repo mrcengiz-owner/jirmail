@@ -153,10 +153,16 @@ def port25_reachable_from_postfix(*, container: str | None = None) -> bool:
     return ok
 
 
-def ensure_outbound_delivery(*, fix: bool = True, force: bool = False) -> dict[str, Any]:
+def ensure_outbound_delivery(
+    *,
+    fix: bool = True,
+    force: bool = False,
+    full_heal: bool = False,
+) -> dict[str, Any]:
     """Port 25 / relay / transport maps otomatik yapılandır.
 
-    Deploy, celery beat, gönderim öncesi ve healthcheck tarafından çağrılır.
+    full_heal=True: Postfix init script'leri (deploy/cron — yavaş).
+    full_heal=False: yalnızca DB/domain düzeltmesi + hızlı probe (gönderim yolu).
     """
     global _last_run_at, _last_report
 
@@ -176,8 +182,9 @@ def ensure_outbound_delivery(*, fix: bool = True, force: bool = False) -> dict[s
 
     if fix:
         report['fixed_domains'] = _fix_reserved_domains()
-        applied = apply_postfix_outbound_scripts()
-        report['actions'].append({'postfix_init': applied})
+        if full_heal:
+            applied = apply_postfix_outbound_scripts()
+            report['actions'].append({'postfix_init': applied})
 
     relay_cfg = resolve_relay_config()
     env_relay = relay_cfg.get('relayhost') or ''
@@ -190,7 +197,7 @@ def ensure_outbound_delivery(*, fix: bool = True, force: bool = False) -> dict[s
         report['mode'] = 'relay'
         report['relayhost'] = env_relay
         report['message'] = f'Relay yapılandırıldı: {env_relay}'
-        if fix and current_relay != env_relay:
+        if fix and current_relay != env_relay and full_heal:
             apply_postfix_outbound_scripts()
     elif port25_ok:
         report['mode'] = 'direct'

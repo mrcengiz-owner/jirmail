@@ -38,6 +38,13 @@
             if (!opts.headers['X-CSRFToken']) {
                 opts.headers['X-CSRFToken'] = window.getCsrfToken();
             }
+            var timeoutMs = opts.timeoutMs;
+            delete opts.timeoutMs;
+            if (timeoutMs && typeof AbortController !== 'undefined') {
+                var ctrl = new AbortController();
+                opts.signal = ctrl.signal;
+                setTimeout(function() { ctrl.abort(); }, timeoutMs);
+            }
             return fetch(url, opts);
         },
         json: function(url, opts) {

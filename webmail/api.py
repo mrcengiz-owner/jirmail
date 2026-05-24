@@ -328,12 +328,6 @@ def send(request: HttpRequest, data: SendMailSchema):
 
         from webmail.send_validation import validate_outbound_recipients
 
-        try:
-            from management.outbound_autoconfig import ensure_outbound_delivery
-            ensure_outbound_delivery(fix=True)
-        except Exception as heal_exc:
-            log.debug('outbound auto-config atlandı: %s', heal_exc)
-
         check = validate_outbound_recipients(account, data.to, data.cc, data.bcc)
         if not check['ok']:
             return {'success': False, 'message': check['message'], 'invalid': check.get('invalid', [])}
@@ -548,7 +542,7 @@ def _outbound_delivery_report() -> dict:
         from management.outbound_autoconfig import ensure_outbound_delivery
         from management.outbound_connectivity import check_outbound_smtp
 
-        ensure_outbound_delivery(fix=True)
+        ensure_outbound_delivery(fix=True, full_heal=True)
         report = check_outbound_smtp(include_django_probe=False)
     except Exception as exc:
         return {

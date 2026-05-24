@@ -15,11 +15,17 @@ class Command(BaseCommand):
         parser.add_argument('--json', action='store_true')
         parser.add_argument('--no-fix', action='store_true', help='Yalnızca kontrol et')
         parser.add_argument('--force', action='store_true', help='Önbelleği atla')
+        parser.add_argument(
+            '--full-heal',
+            action='store_true',
+            help='Postfix init script\'lerini çalıştır (yavaş)',
+        )
 
     def handle(self, *args, **options):
         report = ensure_outbound_delivery(
             fix=not options['no_fix'],
             force=options['force'],
+            full_heal=options['full_heal'],
         )
         if options['json']:
             self.stdout.write(json.dumps(report, ensure_ascii=False, indent=2, default=str))

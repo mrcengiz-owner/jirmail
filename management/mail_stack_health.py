@@ -28,10 +28,12 @@ def build_postfix_pgsql_cf(
     db_name: str,
     query: str,
 ) -> str:
-    """Postfix pgsql map — çok satırlı (tek satır hosts= şifreyi bozar)."""
+    """Postfix pgsql map — çok satırlı; port hosts satırında (ayrı port= uyarı verir)."""
+    host = (db_host or 'localhost').strip()
+    port = int(db_port or 5432)
+    hosts = host if port == 5432 else f'{host}:{port}'
     return (
-        f"hosts = {db_host}\n"
-        f"port = {db_port}\n"
+        f"hosts = {hosts}\n"
         f"user = {db_user}\n"
         f"password = {db_pass}\n"
         f"dbname = {db_name}\n"
@@ -186,7 +188,7 @@ def verify_mail_stack(*, fix: bool = False, healthcheck: bool = False) -> dict[s
         from webmail.send_validation import admin_stale_domain_warnings
 
         if fix:
-            auto = ensure_outbound_delivery(fix=True)
+            auto = ensure_outbound_delivery(fix=True, full_heal=True)
             if auto.get('fixed_domains'):
                 report["healed"].append(
                     {"service": "domains", "fixed": auto.get('fixed_domains')}

@@ -588,15 +588,21 @@ document.addEventListener('alpine:init', function() {
                     fd.append('body_text', bodyText);
                     fd.append('body_html', bodyHtml);
                     self.composeFiles.forEach(function(f) { fd.append('attachments', f); });
-                    WmApi.fetch('/api/mail/send-attachments', { method: 'POST', body: fd })
+                    WmApi.fetch('/api/mail/send-attachments', { method: 'POST', body: fd, timeoutMs: 90000 })
                         .then(function(r) { return r.json(); })
                         .then(function(d) {
                             done(d.success, d.message || (d.success ? 'Mesaj sunucuya iletildi' : 'Hata'), d.warnings);
                         })
-                        .catch(function(e) { done(false, e.message || 'Bağlantı hatası'); });
+                        .catch(function(e) {
+                            var msg = e.name === 'AbortError'
+                                ? 'Gönderim zaman aşımı (90 sn). Postfix/Dovecot loglarına bakın.'
+                                : (e.message || 'Bağlantı hatası');
+                            done(false, msg);
+                        });
                 } else {
                     WmApi.fetch('/api/mail/send', {
                         method: 'POST',
+                        timeoutMs: 90000,
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
                             to: self.composeTo,
@@ -610,7 +616,12 @@ document.addEventListener('alpine:init', function() {
                         .then(function(d) {
                             done(d.success, d.message || (d.success ? 'Mesaj sunucuya iletildi' : 'Gönderilemedi'), d.warnings);
                         })
-                        .catch(function(e) { done(false, e.message || 'Bağlantı hatası'); });
+                        .catch(function(e) {
+                            var msg = e.name === 'AbortError'
+                                ? 'Gönderim zaman aşımı (90 sn). Postfix/Dovecot loglarına bakın.'
+                                : (e.message || 'Bağlantı hatası');
+                            done(false, msg);
+                        });
                 }
             },
 

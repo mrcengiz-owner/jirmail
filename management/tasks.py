@@ -8,5 +8,5 @@ def auto_heal_mail_stack():
     from management.mail_stack_health import verify_mail_stack
     from management.outbound_autoconfig import ensure_outbound_delivery
 
-    ensure_outbound_delivery(fix=True)
+    ensure_outbound_delivery(fix=True, full_heal=True)
     return verify_mail_stack(fix=True)

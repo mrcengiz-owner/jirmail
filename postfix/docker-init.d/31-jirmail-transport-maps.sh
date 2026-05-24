@@ -11,9 +11,12 @@ export DB_HOST DB_PORT DB_NAME DB_USER DB_PASS
 _write_pgsql_cf() {
   _dest="$1"
   _query="$2"
+  _hosts="$DB_HOST"
+  if [ -n "$DB_PORT" ] && [ "$DB_PORT" != "5432" ]; then
+    _hosts="${DB_HOST}:${DB_PORT}"
+  fi
   {
-    printf 'hosts = %s\n' "$DB_HOST"
-    printf 'port = %s\n' "$DB_PORT"
+    printf 'hosts = %s\n' "$_hosts"
     printf 'user = %s\n' "$DB_USER"
     printf 'password = %s\n' "$DB_PASS"
     printf 'dbname = %s\n' "$DB_NAME"

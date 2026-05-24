@@ -38,7 +38,7 @@ if [ "${JIR_COMPOSE_STACK}" = "1" ]; then
     python manage.py verify_and_heal_mail_stack --fix --quiet || true
     python manage.py verify_and_heal_mail_stack --self-test-only --quiet || true
     echo "=== Dış posta otomatik yapılandırma (port 25 / relay) ==="
-    python manage.py shell -c "from management.outbound_autoconfig import ensure_outbound_delivery; print(ensure_outbound_delivery(fix=True).get('message',''))" 2>/dev/null || true
+    python manage.py shell -c "from management.outbound_autoconfig import ensure_outbound_delivery; print(ensure_outbound_delivery(fix=True, full_heal=True).get('message',''))" 2>/dev/null || true
 fi
 
 echo "=== Collecting static files ==="
