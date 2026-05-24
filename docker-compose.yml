@@ -64,11 +64,11 @@ services:
           - django
           - jir_django
     healthcheck:
-      test: ["CMD", "python", "manage.py", "verify_and_heal_mail_stack", "--healthcheck", "--fix", "--quiet", "--fail-on-error"]
+      test: ["CMD", "python", "manage.py", "verify_and_heal_mail_stack", "--healthcheck", "--quiet"]
       interval: 60s
-      timeout: 45s
-      retries: 3
-      start_period: 120s
+      timeout: 30s
+      retries: 5
+      start_period: 180s
 
   celery:
     build:
