@@ -33,7 +33,7 @@ def _smtp_submit(
     *,
     account,
     password: str,
-    msg: EmailMessage,
+    raw_bytes: bytes,
     recipients: list[str],
 ) -> None:
     """587 submission: zorunlu STARTTLS (e2e); AUTH yalnızca sunucu destekliyorsa."""
@@ -50,7 +50,7 @@ def _smtp_submit(
         if not password:
             raise ValueError('SMTP sunucusu kimlik doğrulama istiyor ancak parola verilmedi.')
         smtp.login(account.email, password)
-    smtp.send_message(msg, from_addr=account.email, to_addrs=recipients)
+    smtp.sendmail(account.email, recipients, raw_bytes)
 
 
 def _message_id_domain(account) -> str:
@@ -119,6 +119,8 @@ def send_mail(account, password: str, *, to: list[str] | str, subject: str, body
             return {'success': False, 'message': 'En az bir alıcı gerekli.'}
 
         raw_bytes = msg.as_bytes()
+        from webmail.dkim_sign import sign_message_bytes
+        raw_bytes = sign_message_bytes(raw_bytes, account)
     except Exception as exc:
         logger.exception('send_mail prepare')
         return {'success': False, 'message': f'Mesaj hazırlanamadı: {exc}'}
@@ -129,7 +131,7 @@ def send_mail(account, password: str, *, to: list[str] | str, subject: str, body
                 smtp,
                 account=account,
                 password=password,
-                msg=msg,
+                raw_bytes=raw_bytes,
                 recipients=recipients,
             )
         # raw_bytes yalnızca IMAP Sent append için; API JSON yanıtına eklenmez (bytes → 500).

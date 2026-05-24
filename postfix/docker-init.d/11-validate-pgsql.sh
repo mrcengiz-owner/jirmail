@@ -2,7 +2,11 @@
 # Her başlangıçta pgsql map doğrula; bozuksa yeniden yaz
 set -e
 
+. /docker-init.d/_jirmail-common.sh
+
 DB_NAME="${DB_NAME:-${POSTGRES_DB:-jir_mail_prod}}"
+
+_strip_legacy_pgsql_port_lines
 
 _fail() {
   echo "[jirmail-postfix] HATA: $1" >&2

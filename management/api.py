@@ -45,6 +45,14 @@ class SystemSettingsUpdateSchema(Schema):
     backup_dir: str | None = None
 
 
+class FactoryResetSchema(Schema):
+    """Fabrika sıfırlama — confirm alanı tam olarak SIFIRDAN KUR olmalı."""
+
+    confirm: str
+    remove_volumes: bool = True
+    remove_containers: bool = True
+
+
 class LoginSchema(Schema):
     email: str
     password: str
@@ -1002,6 +1010,56 @@ def update_system_settings(request, data: SystemSettingsUpdateSchema):
     fields.append('updated_at')
     config.save(update_fields=fields)
     return {"status": "ok", "message": "Ayarlar kaydedildi."}
+
+
+@router.post("/factory-reset", summary="Sıfırdan kurulum (tehlikeli)")
+@csrf_exempt
+def factory_reset_api(request, data: FactoryResetSchema):
+    """Veritabanını sıfırla, kurulum bayraklarını temizle, stack konteynerlerini kaldır."""
+    if not request.session.get('is_logged_in'):
+        return {"status": "error", "message": "Oturum gerekli."}
+    from jir_core.dashboard_auth import session_has_panel_access
+    if not session_has_panel_access(request):
+        return {"status": "error", "message": "Yetkiniz yok. Süper yönetici yetkisi gerekir.", "code": "forbidden"}
+
+    from management.factory_reset import CONFIRM_PHRASE, run_factory_reset
+
+    confirm = (data.confirm or '').strip().upper()
+    if confirm != CONFIRM_PHRASE:
+        return {
+            "status": "error",
+            "message": f'Onay metni hatalı. Tam olarak "{CONFIRM_PHRASE}" yazın.',
+        }
+
+    if os.environ.get('JIR_DISABLE_FACTORY_RESET', '').strip().lower() in ('1', 'true', 'yes'):
+        return {"status": "error", "message": "Fabrika sıfırlama bu ortamda devre dışı (JIR_DISABLE_FACTORY_RESET)."}
+
+    report = run_factory_reset(
+        remove_volumes=bool(data.remove_volumes),
+        remove_containers=bool(data.remove_containers),
+    )
+
+    try:
+        request.session.flush()
+    except Exception:
+        pass
+
+    if not report.get('ok'):
+        return {
+            "status": "error",
+            "message": report.get('database', {}).get('message', 'Sıfırlama başarısız'),
+            "report": report,
+        }
+
+    return {
+        "status": "ok",
+        "message": (
+            "Sistem sıfırlandı. Dokploy/Coolify üzerinden stack\'i yeniden deploy edin, '
+            'sonra kurulum sihirbazına gidin.'
+        ),
+        "redirect": report.get('redirect') or '/setup/',
+        "report": report,
+    }
 
 
 @router.get("/system-specs", response={200: SystemSpecsSchema}, summary="Sistem Özelliklerini Getir")

@@ -43,6 +43,53 @@
             },
             deployReport: null,
             deployLoading: false,
+            factoryResetOpen: false,
+            factoryResetConfirm: '',
+            factoryResetBusy: false,
+            factoryResetError: '',
+            factoryResetPhrase: 'SIFIRDAN KUR',
+            async runFactoryReset() {
+                if (this.factoryResetConfirm.trim().toUpperCase() !== this.factoryResetPhrase) {
+                    this.factoryResetError = 'Onay metni hatalı. Tam olarak SIFIRDAN KUR yazın.';
+                    return;
+                }
+                if (!window.confirm('Tüm veriler, posta kutuları ve konteynerler silinecek. Emin misiniz?')) {
+                    return;
+                }
+                this.factoryResetBusy = true;
+                this.factoryResetError = '';
+                this.error = '';
+                this.message = '';
+                try {
+                    const res = await fetch('/api/management/factory-reset', {
+                        method: 'POST',
+                        credentials: 'same-origin',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-CSRFToken': window.getCsrfToken(),
+                        },
+                        body: JSON.stringify({
+                            confirm: this.factoryResetConfirm.trim().toUpperCase(),
+                            remove_volumes: true,
+                            remove_containers: true,
+                        }),
+                    });
+                    const data = await res.json();
+                    if (data.status !== 'ok') {
+                        this.factoryResetError = data.message || 'Sıfırlama başarısız';
+                        return;
+                    }
+                    this.message = data.message || 'Sıfırlandı — yönlendiriliyorsunuz…';
+                    this.factoryResetOpen = false;
+                    setTimeout(function() {
+                        window.location.href = data.redirect || '/setup/';
+                    }, 2500);
+                } catch (e) {
+                    this.factoryResetError = e.message || 'Ağ hatası';
+                } finally {
+                    this.factoryResetBusy = false;
+                }
+            },
             async loadDeploy() {
                 this.deployLoading = true;
                 try {
@@ -277,6 +324,53 @@
                 <div>
                     <label class="label text-xs">Yedek dizini</label>
                     <input type="text" class="input font-mono text-sm" x-model="paths.backup_dir">
+                </div>
+            </div>
+        </section>
+
+        <!-- Sıfırdan kurulum -->
+        <section class="bento-card p-4 sm:p-5 border border-danger-500/40 bg-danger-500/5">
+            <h2 class="text-sm font-semibold text-danger-300 mb-1">Sıfırdan kurulum</h2>
+            <p class="text-xs text-slate-400 mb-3">
+                Tüm veritabanı kayıtları, posta kutuları, Docker konteynerleri ve volume'lar silinir.
+                Kurulum sihirbazına dönersiniz. <strong class="text-danger-200">Geri alınamaz.</strong>
+            </p>
+            <ul class="text-xs text-slate-500 list-disc pl-4 mb-4 space-y-1">
+                <li>PostgreSQL verisi ve tüm hesaplar silinir</li>
+                <li>Postfix / Dovecot / Redis konteynerleri kaldırılır</li>
+                <li>Mail dosyaları (volume) silinir</li>
+                <li>Sonrasında Dokploy/Coolify'dan <strong>Redeploy</strong> gerekir</li>
+            </ul>
+            <button type="button" class="btn btn-sm border border-danger-500/50 text-danger-200 hover:bg-danger-500/10"
+                    @click="factoryResetOpen = true; factoryResetConfirm = ''; factoryResetError = ''"
+                    :disabled="factoryResetBusy">
+                Sıfırdan kurulum yap
+            </button>
+
+            <div x-show="factoryResetOpen" x-cloak
+                 class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70"
+                 @keydown.escape.window="factoryResetOpen = false">
+                <div class="w-full max-w-md rounded-xl border border-danger-500/40 bg-slate-900 p-5 shadow-xl"
+                     @click.outside="factoryResetOpen = false">
+                    <h3 class="text-base font-semibold text-white mb-2">Fabrika sıfırlama</h3>
+                    <p class="text-xs text-slate-400 mb-4">
+                        Devam etmek için kutuya tam olarak
+                        <code class="text-danger-300 font-mono" x-text="factoryResetPhrase"></code>
+                        yazın.
+                    </p>
+                    <input type="text" class="input font-mono text-sm mb-2 w-full" x-model="factoryResetConfirm"
+                           placeholder="SIFIRDAN KUR" autocomplete="off" spellcheck="false">
+                    <p x-show="factoryResetError" class="text-xs text-danger-400 mb-3" x-text="factoryResetError"></p>
+                    <div class="flex flex-wrap gap-2 justify-end">
+                        <button type="button" class="btn btn-secondary btn-sm" @click="factoryResetOpen = false"
+                                :disabled="factoryResetBusy">İptal</button>
+                        <button type="button" class="btn btn-sm bg-danger-600 hover:bg-danger-500 text-white border-0"
+                                @click="runFactoryReset()"
+                                :disabled="factoryResetBusy || factoryResetConfirm.trim().toUpperCase() !== factoryResetPhrase">
+                            <span x-show="!factoryResetBusy">Sıfırla ve kuruluma git</span>
+                            <span x-show="factoryResetBusy">Sıfırlanıyor…</span>
+                        </button>
+                    </div>
                 </div>
             </div>
         </section>
