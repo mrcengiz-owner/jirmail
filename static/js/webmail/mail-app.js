@@ -647,7 +647,8 @@ document.addEventListener('alpine:init', function() {
                         fix_steps: data.fix_steps || [],
                         ok: data.ok,
                         mode: data.mode,
-                        relayhost: data.relayhost
+                        relayhost: data.relayhost,
+                        routing: data.routing || null
                     };
                 }
 

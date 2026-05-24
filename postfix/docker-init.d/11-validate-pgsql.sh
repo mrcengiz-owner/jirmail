@@ -40,7 +40,15 @@ for _f in /etc/postfix/pgsql-virtual-mailboxes.cf /etc/postfix/pgsql-virtual-dom
     break
   fi
 done
+if _jir_pgsql_map_needs_upgrade /etc/postfix/pgsql-virtual-domains.cf virtual-domains; then
+  echo "[jirmail-postfix] pgsql virtual-domains eski sürüm — yeniden yazılacak"
+  regen_inbound=1
+fi
 if [ ! -f /etc/postfix/pgsql-transport-maps.cf ] || ! _check_file /etc/postfix/pgsql-transport-maps.cf; then
+  regen_transport=1
+fi
+if _jir_pgsql_map_needs_upgrade /etc/postfix/pgsql-transport-maps.cf transport-maps; then
+  echo "[jirmail-postfix] pgsql transport-maps eski sürüm — yeniden yazılacak"
   regen_transport=1
 fi
 

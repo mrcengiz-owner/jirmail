@@ -34,6 +34,7 @@ _write() {
     _hosts="${DB_HOST}:${DB_PORT}"
   fi
   {
+    printf '# JIR_POSTFIX_MAPS_VERSION=3\n'
     printf 'hosts = %s\n' "$_hosts"
     printf 'user = %s\n' "$DB_USER"
     printf 'password = %s\n' "$DB_PASS"

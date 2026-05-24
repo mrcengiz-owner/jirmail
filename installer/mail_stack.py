@@ -193,7 +193,9 @@ networks:
 
 services:
   postfix:
-    image: boky/postfix:latest
+    image: {os.getenv('JIR_POSTFIX_IMAGE', 'jir-postfix:latest')}
+    build:
+      context: ./postfix
     container_name: {p.postfix_container}
     restart: unless-stopped
     hostname: {p.mail_hostname}

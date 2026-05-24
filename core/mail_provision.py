@@ -80,6 +80,7 @@ def reload_postfix() -> None:
             code, _out = c.exec_run(['postfix', 'reload'])
             if code != 0:
                 c.exec_run(['sh', '/docker-init.d/10-jirmail-inbound.sh'])
+                c.exec_run(['sh', '/docker-init.d/31-jirmail-transport-maps.sh'])
         finally:
             client.close()
     except Exception as exc:

@@ -16,7 +16,19 @@ MAILBOX_QUERY = (
     "FROM core_mailaccount a INNER JOIN core_maildomain d ON d.id = a.domain_id "
     "WHERE a.is_active = true AND d.is_active = true"
 )
-DOMAIN_QUERY = "SELECT name FROM core_maildomain WHERE is_active = true"
+DOMAIN_QUERY = (
+    "SELECT 1 FROM core_maildomain d "
+    "INNER JOIN core_mailaccount a ON a.domain_id = d.id AND a.is_active = true "
+    "WHERE d.is_active = true AND d.name NOT IN ('gmail.com', 'googlemail.com', "
+    "'outlook.com', 'hotmail.com', 'proton.me', 'protonmail.com') "
+    "AND d.name='%s' LIMIT 1"
+)
+TRANSPORT_QUERY = (
+    "SELECT 'lmtp:inet:dovecot:24' FROM core_maildomain d "
+    "INNER JOIN core_mailaccount a ON a.domain_id = d.id AND a.is_active = true "
+    "WHERE d.is_active = true AND d.name NOT IN ('gmail.com', 'googlemail.com') "
+    "AND d.name='%d' LIMIT 1"
+)
 
 
 def build_postfix_pgsql_cf(
@@ -47,11 +59,24 @@ def validate_postfix_pgsql_cf(content: str) -> tuple[bool, str]:
     if re.search(r"hosts\s*=\s*host=.*password=", content, re.I):
         return False, "tek satır hosts= formatı (dbname kaybolmuş olabilir)"
     if not re.search(r"^dbname\s*=\s*\S+", content, re.M):
-        return False, "dbname satırı yok veya boş"
+        return False, "dosya boş veya dbname satırı yok"
     if not re.search(r"^password\s*=", content, re.M):
         return False, "password satırı yok"
     if not re.search(r"^query\s*=", content, re.M):
         return False, "query satırı yok"
+    return True, "ok"
+
+
+def validate_postfix_routing_query(content: str, *, kind: str) -> tuple[bool, str]:
+    """Eski volume / boky-only kurulumdan kalan tehlikeli sorgular."""
+    if 'gmail.com' not in content:
+        return False, "gmail.com reserved listesi yok (dış alıcılar Dovecot'a gidebilir)"
+    if kind == 'virtual-domains' and "%s" not in content:
+        return False, "virtual-domains %s placeholder yok"
+    if kind == 'transport-maps' and "%d" not in content:
+        return False, "transport-maps %d placeholder yok"
+    if 'JIR_POSTFIX_MAPS_VERSION=' not in content:
+        return False, "map sürüm işareti yok (eski volume)"
     return True, "ok"
 
 
@@ -295,18 +320,22 @@ def verify_mail_stack(*, fix: bool = False, healthcheck: bool = False) -> dict[s
     try:
         client = _docker_client()
         c = client.containers.get(_postfix_container_name())
-        _code, logs = c.exec_run(["cat", "/etc/postfix/pgsql-virtual-mailboxes.cf"], demux=True)
-        content = (logs[0] or b"").decode()
-        valid, reason = validate_postfix_pgsql_cf(content)
-        postfix_cf_ok = valid
+        _code, logs = c.exec_run(["cat", "/etc/postfix/pgsql-virtual-domains.cf"], demux=True)
+        vdom = (logs[0] or b"").decode()
+        valid, reason = validate_postfix_pgsql_cf(vdom)
+        route_ok, route_reason = validate_postfix_routing_query(vdom, kind="virtual-domains")
+        postfix_cf_ok = valid and route_ok
         if not valid:
             add("postfix_pgsql_cf", False, f"pgsql map bozuk: {reason}")
-            if fix:
-                healed = heal_postfix_container()
-                report["healed"].append({"service": "postfix", **healed})
-                postfix_cf_ok = healed.get("ok", False)
+        elif not route_ok:
+            add("postfix_pgsql_routing", False, f"virtual-domains: {route_reason}")
         else:
             add("postfix_pgsql_cf", True, "pgsql map dosya formatı OK")
+            add("postfix_pgsql_routing", True, "virtual-domains routing OK")
+        if fix and (not valid or not route_ok):
+            healed = heal_postfix_container()
+            report["healed"].append({"service": "postfix", **healed})
+            postfix_cf_ok = healed.get("ok", False)
         client.close()
     except Exception as exc:
         if healthcheck:

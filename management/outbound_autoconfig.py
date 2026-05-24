@@ -164,6 +164,76 @@ def _run_postfix_scripts(scripts: tuple[str, ...], *, container: str | None = No
     return out
 
 
+def probe_postfix_recipient_routing(*, domain: str = 'gmail.com') -> dict[str, Any]:
+    """Dış alıcı domaini (gmail.com) yerel sayılıyor mu — postmap ile kontrol."""
+    dom = (domain or 'gmail.com').strip().lower()
+    out: dict[str, Any] = {
+        'ok': True,
+        'domain': dom,
+        'checks': [],
+        'fix_steps': [],
+        'message': '',
+    }
+    name = _postfix_container_name()
+    specs = (
+        ('virtual_domains', f'/etc/postfix/pgsql-virtual-domains.cf', 'Yerel domain listesi'),
+        ('transport_maps', f'/etc/postfix/pgsql-transport-maps.cf', 'Transport haritası'),
+    )
+    try:
+        client = _docker_client()
+        c = client.containers.get(name)
+        for cid, cf_path, title in specs:
+            code, logs = c.exec_run(['postmap', '-q', dom, f'pgsql:{cf_path}'], demux=True)
+            stdout = ((logs[0] or b'') + (logs[1] or b'')).decode().strip()
+            bad = bool(stdout)
+            if 'lmtp' in stdout.lower() or stdout == '1':
+                bad = True
+            out['checks'].append({
+                'id': cid,
+                'title': title,
+                'lookup': dom,
+                'result': stdout or '(boş — doğru)',
+                'ok': not bad,
+            })
+            if bad:
+                out['ok'] = False
+
+        for cid, cf_path, _ in specs:
+            code, logs = c.exec_run(['grep', '^query = ', cf_path], demux=True)
+            q = ((logs[0] or b'') + (logs[1] or b'')).decode().strip()
+            out['checks'].append({
+                'id': f'{cid}_query',
+                'title': f'SQL ({cf_path.split("/")[-1]})',
+                'lookup': '',
+                'result': q[:240] or '(sorgu okunamadı)',
+                'ok': '%s' in q or '%d' in q,
+            })
+            if '%s' not in q and '%d' not in q and 'virtual_domains' in cid:
+                out['ok'] = False
+
+        client.close()
+    except Exception as exc:
+        out['ok'] = False
+        out['error'] = str(exc)
+        out['message'] = f'Postfix routing kontrolü yapılamadı: {exc}'
+        return out
+
+    if not out['ok']:
+        out['message'] = (
+            f'{dom} hâlâ yerel posta domaini gibi yapılandırılmış — dış gönderim Dovecot\'a düşer.'
+        )
+        out['fix_steps'] = [
+            'docker exec jir_django python manage.py fix_reserved_mail_domains',
+            'docker exec jir_postfix sh /docker-init.d/10-jirmail-inbound.sh',
+            'docker exec jir_postfix sh /docker-init.d/31-jirmail-transport-maps.sh',
+            'docker exec jir_postfix postfix reload',
+            f'docker exec jir_postfix postmap -q {dom} pgsql:/etc/postfix/pgsql-virtual-domains.cf  → boş olmalı',
+        ]
+    else:
+        out['message'] = f'{dom} dış alıcı olarak doğru yapılandırılmış (yerel domain değil).'
+    return out
+
+
 def port25_reachable_from_postfix(*, container: str | None = None) -> bool:
     host, port, _label = OUTBOUND_PROBE_TARGETS[0]
     ok, _msg, _name = tcp_probe_from_postfix(host, port, container=container)

@@ -1,6 +1,35 @@
 #!/bin/sh
 # Ortak Postfix init yardımcıları (source ile yüklenir)
 
+# pgsql map sürümü — eski volume / boky-only imajdan kalan sorguları zorla yenile
+JIR_POSTFIX_MAPS_VERSION=3
+
+_jir_pgsql_map_needs_upgrade() {
+  _f="$1"
+  _kind="$2"
+  if [ ! -f "$_f" ]; then
+    return 0
+  fi
+  if ! grep -q '^query = ' "$_f" 2>/dev/null; then
+    return 0
+  fi
+  if ! grep -q 'gmail.com' "$_f" 2>/dev/null; then
+    return 0
+  fi
+  case "$_kind" in
+    virtual-domains)
+      grep -q "d.name='%s'" "$_f" || return 0
+      ;;
+    transport-maps)
+      grep -q "d.name='%d'" "$_f" || return 0
+      ;;
+  esac
+  if ! grep -q "JIR_POSTFIX_MAPS_VERSION=${JIR_POSTFIX_MAPS_VERSION}" "$_f" 2>/dev/null; then
+    return 0
+  fi
+  return 1
+}
+
 _write_pgsql_cf() {
   _dest="$1"
   _query="$2"
@@ -9,6 +38,7 @@ _write_pgsql_cf() {
     _hosts="${DB_HOST}:${DB_PORT}"
   fi
   {
+    printf '# JIR_POSTFIX_MAPS_VERSION=%s\n' "${JIR_POSTFIX_MAPS_VERSION}"
     printf 'hosts = %s\n' "$_hosts"
     printf 'user = %s\n' "${DB_USER:-postgres}"
     printf 'password = %s\n' "${DB_PASS:-}"

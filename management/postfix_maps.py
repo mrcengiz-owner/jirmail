@@ -20,6 +20,7 @@ def reload_virtual_mailboxes() -> bool:
 
     container = os.getenv('JIR_CONTAINER_POSTFIX', 'jir_postfix')
     script = '/docker-init.d/10-jirmail-inbound.sh'
+    transport_script = '/docker-init.d/31-jirmail-transport-maps.sh'
     try:
         result = subprocess.run(
             ['docker', 'exec', container, 'sh', script],
@@ -33,6 +34,12 @@ def reload_virtual_mailboxes() -> bool:
                 (result.stderr or result.stdout or '')[:500],
             )
             return False
+        subprocess.run(
+            ['docker', 'exec', container, 'sh', transport_script],
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
         return True
     except FileNotFoundError:
         logger.debug('docker CLI yok — postfix map yenileme atlandı (pgsql canlı)')

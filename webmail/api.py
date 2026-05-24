@@ -546,10 +546,11 @@ def save_draft(request: HttpRequest, data: SaveDraftSchema):
 def _outbound_delivery_report() -> dict:
     """Dış posta çıkışı (port 25 / relay) — tanılama."""
     try:
-        from management.outbound_autoconfig import ensure_outbound_delivery
+        from management.outbound_autoconfig import ensure_outbound_delivery, probe_postfix_recipient_routing
         from management.outbound_connectivity import check_outbound_smtp
 
         ensure_outbound_delivery(fix=True, full_heal=True)
+        routing = probe_postfix_recipient_routing(domain='gmail.com')
         report = check_outbound_smtp(include_django_probe=False)
     except Exception as exc:
         return {
@@ -560,25 +561,37 @@ def _outbound_delivery_report() -> dict:
         }
 
     fix_steps: list[str] = []
+    routing_ok = bool(routing.get('ok'))
+    if not routing_ok:
+        fix_steps.extend(routing.get('fix_steps') or [])
+        fix_steps.insert(0, routing.get('message') or 'Gmail yerel domain gibi yapılandırılmış (Dovecot hatası).')
+
     if report.get('mode') == 'relay':
         fix_steps.append(f'SMTP relay aktif: {report.get("relayhost")}')
         fix_steps.append('Dış posta relay üzerinden gidiyor; port 25 zorunlu değil.')
     elif report.get('ok'):
         fix_steps.append('Port 25 çıkışı çalışıyor — doğrudan internet SMTP kullanılabilir.')
-        fix_steps.append('Bounce devam ederse: PTR (reverse DNS), SPF ve DKIM kayıtlarını kontrol edin.')
+        if routing_ok:
+            fix_steps.append('Gmail routing OK — bounce devam ederse SPF, DKIM, DMARC ve PTR kontrol edin.')
+        else:
+            fix_steps.append('Port 25 açık olsa bile Postfix haritası hatalıysa mail Dovecot\'a gider (550).')
     else:
         fix_steps.append('Port 25 dışa kapalı (VPS sağlayıcısı engelliyor olabilir).')
-        fix_steps.append('Sistem deploy/gönderim sırasında otomatik relay uygular.')
         fix_steps.append('Kalıcı çözüm: .env → SMTP_RELAYHOST veya SMTP_RELAY_HOST/PORT/USER/PASSWORD')
-        fix_steps.append('Deploy sonrası stack otomatik yeniden yapılandırılır.')
+
+    overall_ok = (bool(report.get('ok')) or report.get('mode') == 'relay') and routing_ok
 
     return {
         'success': True,
-        'ok': bool(report.get('ok')) or report.get('mode') == 'relay',
+        'ok': overall_ok,
         'mode': report.get('mode') or 'direct',
         'relayhost': report.get('relayhost') or '',
-        'message': report.get('message') or '',
+        'message': (
+            (routing.get('message') + ' ' if routing.get('message') and not routing_ok else '')
+            + (report.get('message') or '')
+        ).strip(),
         'probes': report.get('probes') or [],
+        'routing': routing,
         'fix_steps': fix_steps,
         'recommendation': report.get('recommendation') or '',
     }

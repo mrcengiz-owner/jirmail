@@ -280,6 +280,15 @@
                           <li x-text="step"></li>
                         </template>
                       </ul>
+                      <template x-if="diagResult.routing && diagResult.routing.checks && diagResult.routing.checks.length">
+                        <ul class="mt-2 pl-0 list-none font-body-md text-on-surface-variant space-y-1">
+                          <template x-for="chk in diagResult.routing.checks" :key="chk.id">
+                            <li>
+                              <span x-text="(chk.ok ? '✓ ' : '✗ ') + (chk.title || chk.id) + ': ' + (chk.result || '')"></span>
+                            </li>
+                          </template>
+                        </ul>
+                      </template>
                     </div>
                   </template>
 

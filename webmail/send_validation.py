@@ -139,7 +139,20 @@ def validate_outbound_recipients(account, raw_to: str, raw_cc: str = '', raw_bcc
 
 
 _BOUNCE_HINTS = (
-    ('lmtp:inet:dovecot', 'Postfix dış alıcıyı yerel Dovecot\'a yönlendirdi — panelde gmail.com/proton.me gibi sağlayıcı domaini kayıtlı olabilir. Panel → Domainler veya: python manage.py fix_reserved_mail_domains'),
+    ('remote-mta: dns; dovecot', (
+        'Postfix Gmail/dış alıcıyı yerel Dovecot\'a yönlendirdi. '
+        'Sunucuda: docker exec jir_postfix sh /docker-init.d/10-jirmail-inbound.sh && '
+        'docker exec jir_postfix sh /docker-init.d/31-jirmail-transport-maps.sh && '
+        'docker exec jir_django python manage.py fix_reserved_mail_domains'
+    )),
+    ('host dovecot[', (
+        'Alıcı internet adresi (Gmail vb.) yanlışlıkla Dovecot\'a gitti — Postfix haritaları güncellenmeli. '
+        'Webmail → bounce → Sunucu tanılaması çalıştır veya fix_reserved_mail_domains.'
+    )),
+    ('lmtp:inet:dovecot', (
+        'Postfix dış alıcıyı yerel Dovecot\'a yönlendirdi — panelde gmail.com kayıtlı olabilir. '
+        'python manage.py fix_reserved_mail_domains'
+    )),
     ('lmtp:', 'Yerel LMTP teslimatı — alıcı domaini panelde yanlış kayıtlı olabilir (fix_reserved_mail_domains).'),
     ('network is unreachable', 'Sunucudan internete TCP çıkışı engelli. Sistem otomatik relay yapılandırmaya çalışır; .env içinde SMTP_RELAYHOST tanımlayın.'),
     ('connection timed out', 'Alıcı MX sunucusuna bağlanılamadı (port 25 engelli olabilir). SMTP relay otomatik uygulanır; yoksa .env ile tanımlayın.'),
@@ -205,11 +218,30 @@ def parse_bounce_report(body_html: str, body_plain: str = '') -> dict:
     reason = diag or said or smtp_code
 
     suggested = ''
-    haystack = (diag + ' ' + said + ' ' + text).lower()
+    haystack = (diag + ' ' + said + ' ' + mta + ' ' + text).lower()
     for needle, fix in _BOUNCE_HINTS:
         if needle in haystack:
             suggested = fix
             break
+
+    recip_low = (recipient or '').lower()
+    if not suggested and 'dovecot' in haystack and (
+        '@gmail.com' in recip_low
+        or '@googlemail.com' in recip_low
+        or '@outlook.com' in recip_low
+        or '@proton.' in recip_low
+    ):
+        suggested = (
+            'Dış alıcı (Gmail vb.) yerel Dovecot\'a yönlendirildi — Postfix pgsql haritaları hatalı. '
+            'Sunucu tanılaması çalıştırın veya postfix init script\'lerini uygulayın.'
+        )
+
+    if not suggested and ("user doesn't exist" in haystack or 'user unknown' in haystack):
+        if '@gmail.com' in recip_low or '@googlemail.com' in recip_low:
+            suggested = (
+                'Gmail adresine gönderim Dovecot üzerinden reddedilmiş olabilir (550). '
+                'postmap -q gmail.com pgsql:/etc/postfix/pgsql-virtual-domains.cf boş olmalı.'
+            )
 
     if not suggested and ('5.4.' in status or 'timed out' in haystack or 'unreachable' in haystack):
         suggested = (
