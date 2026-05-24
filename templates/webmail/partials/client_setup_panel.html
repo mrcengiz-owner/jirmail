@@ -21,6 +21,11 @@
     <section class="wm-settings-card wm-client-setup-card">
       <h2>Sunucu bilgileri</h2>
       <p class="wm-settings-hint">Aşağıdaki değerleri posta uygulamanıza girin. Kullanıcı adı her zaman tam e-posta adresinizdir.</p>
+      <ul class="wm-client-dns-hints" x-show="clientSetup.dns_hints && clientSetup.dns_hints.length">
+        <template x-for="(hint, idx) in (clientSetup.dns_hints || [])" :key="idx">
+          <li x-text="hint"></li>
+        </template>
+      </ul>
       <dl class="wm-client-kv">
         <div class="wm-client-kv__row">
           <dt>E-posta / kullanıcı adı</dt>

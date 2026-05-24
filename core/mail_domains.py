@@ -16,20 +16,6 @@ RESERVED_PUBLIC_DOMAINS: frozenset[str] = frozenset({
     'tutanota.com', 'tuta.io',
 })
 
-# Postfix pgsql: yalnızca en az bir aktif posta hesabı olan domainler yerel (LMTP)
-HOSTED_DOMAIN_SQL = (
-    'SELECT DISTINCT d.name FROM core_maildomain d '
-    'INNER JOIN core_mailaccount a ON a.domain_id = d.id AND a.is_active = true '
-    'WHERE d.is_active = true AND d.name=\'%s\' LIMIT 1'
-)
-
-HOSTED_DOMAIN_TRANSPORT_SQL = (
-    "SELECT 'lmtp:inet:dovecot:24' FROM core_maildomain d "
-    'INNER JOIN core_mailaccount a ON a.domain_id = d.id AND a.is_active = true '
-    "WHERE d.is_active = true AND d.name='%d' "
-    "AND d.name NOT IN ({reserved}) LIMIT 1"
-)
-
 
 def reserved_domains_sql_in_list() -> str:
     """Postfix pgsql sorguları için 'a.com', 'b.com' listesi."""
@@ -38,6 +24,22 @@ def reserved_domains_sql_in_list() -> str:
 
 def reserved_domains_sql_and(alias: str = 'd.name') -> str:
     return f"AND {alias} NOT IN ({reserved_domains_sql_in_list()})"
+
+
+# Postfix pgsql: yalnızca en az bir aktif posta hesabı olan domainler yerel (LMTP)
+HOSTED_DOMAIN_SQL = (
+    'SELECT 1 FROM core_maildomain d '
+    'INNER JOIN core_mailaccount a ON a.domain_id = d.id AND a.is_active = true '
+    "WHERE d.is_active = true AND d.name='%s' "
+    f"{reserved_domains_sql_and('d.name')} LIMIT 1"
+)
+
+HOSTED_DOMAIN_TRANSPORT_SQL = (
+    "SELECT 'lmtp:inet:dovecot:24' FROM core_maildomain d "
+    'INNER JOIN core_mailaccount a ON a.domain_id = d.id AND a.is_active = true '
+    f"WHERE d.is_active = true AND d.name='%d' {reserved_domains_sql_and('d.name')} LIMIT 1"
+)
+
 
 HOSTED_DOMAIN_NAMES_SQL = (
     'SELECT DISTINCT d.name FROM core_maildomain d '

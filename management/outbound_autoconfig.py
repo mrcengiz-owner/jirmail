@@ -31,6 +31,12 @@ POSTFIX_INIT_SCRIPTS = (
     '/docker-init.d/32-jirmail-relay-sasl.sh',
 )
 
+POSTFIX_MAP_SCRIPTS = (
+    '/docker-init.d/10-jirmail-inbound.sh',
+    '/docker-init.d/31-jirmail-transport-maps.sh',
+    '/docker-init.d/11-validate-pgsql.sh',
+)
+
 
 def _postfix_container_name() -> str:
     return (os.getenv('JIR_CONTAINER_POSTFIX') or 'jir_postfix').strip()
@@ -117,8 +123,8 @@ def _fix_reserved_domains() -> list[str]:
             fixed.append(name)
         if fixed:
             reload_virtual_mailboxes()
-            applied = apply_postfix_outbound_scripts()
-            logger.info('reserved domain fix: postfix init %s', applied.get('ok'))
+            applied = apply_postfix_map_scripts()
+            logger.info('reserved domain fix: postfix maps %s', applied.get('ok'))
         return fixed
     except Exception as exc:
         logger.warning('reserved domain fix: %s', exc)
@@ -127,12 +133,21 @@ def _fix_reserved_domains() -> list[str]:
 
 def apply_postfix_outbound_scripts(*, container: str | None = None) -> dict[str, Any]:
     """Postfix init script'lerini çalıştır (transport + outbound + relay SASL)."""
+    return _run_postfix_scripts(POSTFIX_INIT_SCRIPTS, container=container)
+
+
+def apply_postfix_map_scripts(*, container: str | None = None) -> dict[str, Any]:
+    """Yalnızca pgsql map / transport (gönderim öncesi hızlı onarım)."""
+    return _run_postfix_scripts(POSTFIX_MAP_SCRIPTS, container=container)
+
+
+def _run_postfix_scripts(scripts: tuple[str, ...], *, container: str | None = None) -> dict[str, Any]:
     name = container or _postfix_container_name()
     out: dict[str, Any] = {'container': name, 'ok': True, 'actions': []}
     try:
         client = _docker_client()
         c = client.containers.get(name)
-        for script in POSTFIX_INIT_SCRIPTS:
+        for script in scripts:
             code, logs = c.exec_run(['sh', script], demux=True)
             stderr = (logs[1] or b'').decode()[:500]
             stdout = (logs[0] or b'').decode()[:300]
@@ -164,7 +179,7 @@ def ensure_outbound_delivery(
     """Port 25 / relay / transport maps otomatik yapılandır.
 
     full_heal=True: Postfix init script'leri (deploy/cron — yavaş).
-    full_heal=False: yalnızca DB/domain düzeltmesi + hızlı probe (gönderim yolu).
+    full_heal=False: DB/domain düzeltmesi + pgsql map script'leri + hızlı probe.
     """
     global _last_run_at, _last_report
 
@@ -184,6 +199,8 @@ def ensure_outbound_delivery(
 
     if fix:
         report['fixed_domains'] = _fix_reserved_domains()
+        map_applied = apply_postfix_map_scripts()
+        report['actions'].append({'postfix_maps': map_applied})
         if full_heal:
             applied = apply_postfix_outbound_scripts()
             report['actions'].append({'postfix_init': applied})

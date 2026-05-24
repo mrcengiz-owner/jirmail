@@ -814,6 +814,17 @@ html.dark .wm-btn-primary {
   letter-spacing: 0.04em;
 }
 
+.wm-client-dns-hints {
+  margin: 0 0 12px;
+  padding-left: 1.2rem;
+  color: var(--st-text-2);
+  font-size: 12px;
+  line-height: 1.5;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
 .wm-client-kv {
   margin: 0;
   display: flex;

@@ -188,5 +188,11 @@ def build_client_setup(*, account_email: str) -> dict[str, Any]:
         'imap': imap,
         'smtp': smtp,
         'webmail_url_hint': (os.getenv('PUBLIC_URL') or '').strip() or None,
+        'dns_hints': [
+            f'{host} için DNS kaydı doğrudan sunucu IP’nize işaret etmeli (A kaydı).',
+            'Cloudflare kullanıyorsanız mail kaydında turuncu bulut (proxy) KAPALI olmalı — '
+            'yalnızca gri bulut (DNS only). Proxy açıkken 993/587 portları çalışmaz.',
+            'VPS güvenlik duvarında 993 (IMAP) ve 587 (SMTP) gelen bağlantılara açık olmalı.',
+        ],
         'clients': clients,
     }
