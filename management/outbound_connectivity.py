@@ -10,14 +10,16 @@ from django.conf import settings
 
 logger = logging.getLogger(__name__)
 
-# Bilinen MX sunucuları (doğrudan SMTP teslimat testi)
+# Bilinen MX sunucuları (doğrudan SMTP teslimat testi).
+# Google için yalnızca gmail-smtp-in kullanılır; aspmx.l.google.com sık zaman aşımı verir.
 OUTBOUND_PROBE_TARGETS: tuple[tuple[str, int, str], ...] = (
     ('gmail-smtp-in.l.google.com', 25, 'Gmail MX'),
     ('mail.protonmail.ch', 25, 'Proton MX'),
-    ('aspmx.l.google.com', 25, 'Google ASPMX'),
+    ('hotmail-com.olc.protection.outlook.com', 25, 'Outlook MX'),
 )
 
-PROBE_TIMEOUT_SEC = 6.0
+PROBE_TIMEOUT_SEC = 8.0
+PROBE_RETRIES = 1
 
 
 def _postfix_container_name() -> str:
@@ -47,24 +49,26 @@ def tcp_probe(host: str, port: int, *, timeout: float = PROBE_TIMEOUT_SEC) -> tu
 def tcp_probe_from_postfix(host: str, port: int, *, container: str | None = None) -> tuple[bool, str, str]:
     """Postfix konteynerinden çıkış testi (gerçek gönderim yolu)."""
     name = container or _postfix_container_name()
-    # bash /dev/tcp — boky/postfix imajında genelde mevcut
     shell = (
         f'timeout {int(PROBE_TIMEOUT_SEC)} bash -c '
         f'"exec 3<>/dev/tcp/{host}/{int(port)}" 2>/dev/null '
         f'&& echo OK || echo FAIL'
     )
-    try:
-        client = _docker_client()
-        c = client.containers.get(name)
-        code, logs = c.exec_run(['bash', '-c', shell], demux=True)
-        stdout = ((logs[0] or b'') + (logs[1] or b'')).decode().strip()
-        client.close()
-        if 'OK' in stdout:
-            return True, 'Postfix konteynerinden TCP OK', name
-        err = stdout or f'exit {code}'
-        return False, f'Postfix konteynerinden erişilemedi: {err}', name
-    except Exception as exc:
-        return False, f'Postfix exec hatası ({name}): {exc}', name
+    last_err = ''
+    for attempt in range(PROBE_RETRIES + 1):
+        try:
+            client = _docker_client()
+            c = client.containers.get(name)
+            code, logs = c.exec_run(['bash', '-c', shell], demux=True)
+            stdout = ((logs[0] or b'') + (logs[1] or b'')).decode().strip()
+            client.close()
+            if 'OK' in stdout:
+                suffix = f' (deneme {attempt + 1})' if attempt else ''
+                return True, f'Postfix konteynerinden TCP OK{suffix}', name
+            last_err = stdout or f'exit {code}'
+        except Exception as exc:
+            last_err = str(exc)
+    return False, f'Postfix konteynerinden erişilemedi: {last_err}', name
 
 
 def get_postfix_relayhost(*, container: str | None = None) -> str:
@@ -122,16 +126,22 @@ def check_outbound_smtp(*, include_django_probe: bool = True) -> dict[str, Any]:
 
     any_postfix = any(p['from_postfix'] for p in probes)
     any_panel = any(p.get('from_panel') for p in probes) if include_django_probe else False
+    postfix_ok_count = sum(1 for p in probes if p['from_postfix'])
+    postfix_total = len(probes)
 
     ok = any_postfix
     recommendation = ''
     if not ok:
         recommendation = (
             'Sunucudan (Postfix konteyneri) internet MX port 25\'e çıkış yok. '
-            'Bu VPS/hosting sağlayıcılarında yaygındır. Çözüm: .env dosyasına SMTP relay ekleyin, '
-            'örnek: SMTP_RELAYHOST=[smtp.sendgrid.net]:587 veya ISP SMTP sunucunuz. '
-            'Ardından: docker compose up -d postfix && docker exec jir_postfix '
-            'sh /docker-init.d/30-jirmail-outbound-smtp.sh'
+            'Deploy ve gönderim sırasında sistem otomatik relay uygular. '
+            'Kalıcı çözüm: .env → SMTP_RELAYHOST=[relay]:587 veya '
+            'SMTP_RELAY_HOST/PORT/USER/PASSWORD. Ardından stack yeniden başlatılır.'
+        )
+    elif postfix_ok_count < postfix_total:
+        recommendation = (
+            f'Postfix port 25 çıkışı çalışıyor ({postfix_ok_count}/{postfix_total} hedef OK). '
+            'Tekil MX zaman aşımı gönderimi engellemez; Gmail/Proton gibi en az bir hedef yeterlidir.'
         )
     elif not any_panel and include_django_probe:
         recommendation = (
@@ -139,17 +149,24 @@ def check_outbound_smtp(*, include_django_probe: bool = True) -> dict[str, Any]:
             'Gönderim Postfix üzerinden yapılır.'
         )
 
+    if ok and postfix_ok_count < postfix_total:
+        message = (
+            f'Port 25 doğrudan çıkış: OK ({postfix_ok_count}/{postfix_total} MX hedefi; '
+            'kısmi zaman aşımı normal)'
+        )
+    elif ok:
+        message = 'Port 25 doğrudan çıkış: OK'
+    else:
+        message = 'Port 25 doğrudan çıkış: BAŞARISIZ — SMTP_RELAYHOST gerekli'
+
     return {
         'ok': ok,
         'mode': 'direct',
         'relayhost': '',
         'env_relayhost': env_relay,
         'port25_required': True,
-        'message': (
-            'Port 25 doğrudan çıkış: OK'
-            if ok
-            else 'Port 25 doğrudan çıkış: BAŞARISIZ — SMTP_RELAYHOST gerekli'
-        ),
+        'message': message,
         'probes': probes,
+        'probe_summary': {'postfix_ok': postfix_ok_count, 'postfix_total': postfix_total},
         'recommendation': recommendation,
     }

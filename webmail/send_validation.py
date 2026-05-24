@@ -17,24 +17,45 @@ def active_local_domains() -> set[str]:
     return names
 
 
-def admin_stale_domain_warnings() -> list[str]:
+def admin_panel_domain_issues() -> list[dict[str, str]]:
     """Panelde hesapsız veya sağlayıcı domain — gönderimi engellemez, yönetici uyarısı."""
     from core.models import MailDomain
 
-    warnings: list[str] = []
+    issues: list[dict[str, str]] = []
     for dom in MailDomain.objects.filter(is_active=True):
         name = normalize_domain(dom.name)
         if not name:
             continue
         if is_reserved_public_domain(name):
-            warnings.append(
-                f'"{name}" panelde kayıtlı (e-posta sağlayıcısı; silinmeli). '
-                'Alıcılara göndermek için domain eklemeniz gerekmez.'
+            issues.append(
+                {
+                    'domain': name,
+                    'kind': 'reserved',
+                    'message': (
+                        f'"{name}" panelde kayıtlı (e-posta sağlayıcısı; silinmeli). '
+                        'Alıcılara göndermek için domain eklemeniz gerekmez.'
+                    ),
+                    'fix': 'python manage.py fix_reserved_mail_domains',
+                }
             )
             continue
         if not MailAccount.objects.filter(domain=dom, is_active=True).exists():
-            warnings.append(f'"{name}" için aktif posta hesabı yok.')
-    return warnings
+            issues.append(
+                {
+                    'domain': name,
+                    'kind': 'orphan',
+                    'message': f'"{name}" için aktif posta hesabı yok.',
+                    'fix': (
+                        f'Panel → Domainler → {name} → posta hesabı oluşturun '
+                        'veya domaini pasifleştirin/silin.'
+                    ),
+                }
+            )
+    return issues
+
+
+def admin_stale_domain_warnings() -> list[str]:
+    return [item['message'] for item in admin_panel_domain_issues()]
 
 
 def _domain_of(email: str) -> str:
@@ -118,8 +139,8 @@ def validate_outbound_recipients(account, raw_to: str, raw_cc: str = '', raw_bcc
 
 
 _BOUNCE_HINTS = (
-    ('network is unreachable', 'Sunucudan internete TCP çıkışı engelli (genelde port 25). SMTP_RELAYHOST tanımlayın.'),
-    ('connection timed out', 'Alıcı MX sunucusuna bağlanılamadı (port 25 engelli veya MX kayıtsız). SMTP_RELAYHOST tanımlayın.'),
+    ('network is unreachable', 'Sunucudan internete TCP çıkışı engelli. Sistem otomatik relay yapılandırmaya çalışır; .env içinde SMTP_RELAYHOST tanımlayın.'),
+    ('connection timed out', 'Alıcı MX sunucusuna bağlanılamadı (port 25 engelli olabilir). SMTP relay otomatik uygulanır; yoksa .env ile tanımlayın.'),
     ('connection refused', 'Alıcı MX bağlantıyı reddetti — IP itibarı/PTR sorunu olabilir. SMTP relay önerilir.'),
     ('blocked using ', 'IP itibar listesinde — RBL engellemesi. Yeni IP veya kimliği doğrulanmış relay gerekir.'),
     ('client host rejected', 'Alıcı sunucu IP/PTR doğrulamasında reddetti. Reverse DNS (PTR) ve SPF/DKIM kayıtlarını ekleyin.'),

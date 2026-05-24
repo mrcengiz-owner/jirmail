@@ -31,6 +31,11 @@ services:
       MAIL_TLS_CA_FILE: /etc/jir-mail/tls/ca.crt
       JIR_LOCAL_KEY: ${JIR_LOCAL_KEY:-change-me}
       JIR_AUTO_RESTART_STACK_ON_DEPLOY: ${JIR_AUTO_RESTART_STACK_ON_DEPLOY:-1}
+      SMTP_RELAYHOST: ${SMTP_RELAYHOST:-}
+      SMTP_RELAY_HOST: ${SMTP_RELAY_HOST:-}
+      SMTP_RELAY_PORT: ${SMTP_RELAY_PORT:-587}
+      SMTP_RELAY_USER: ${SMTP_RELAY_USER:-}
+      SMTP_RELAY_PASSWORD: ${SMTP_RELAY_PASSWORD:-}
       PYTHONUNBUFFERED: "1"
       DEBUG: "False"
     volumes:
@@ -77,8 +82,14 @@ services:
       DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-jir_mail_prod}
       CELERY_BROKER_URL: redis://redis:6379/0
       CELERY_RESULT_BACKEND: redis://redis:6379/0
+      SMTP_RELAYHOST: ${SMTP_RELAYHOST:-}
+      SMTP_RELAY_HOST: ${SMTP_RELAY_HOST:-}
+      SMTP_RELAY_PORT: ${SMTP_RELAY_PORT:-587}
+      SMTP_RELAY_USER: ${SMTP_RELAY_USER:-}
+      SMTP_RELAY_PASSWORD: ${SMTP_RELAY_PASSWORD:-}
     volumes:
       - config_data:/app/config
+      - /var/run/docker.sock:/var/run/docker.sock:ro
     depends_on:
       postgres:
         condition: service_healthy
@@ -149,6 +160,10 @@ services:
       HOSTNAME: ${MAIL_HOSTNAME:-mail.jircode.com}
       MAIL_DOMAIN: ${MAIL_DOMAIN:-jircode.com}
       SMTP_RELAYHOST: ${SMTP_RELAYHOST:-}
+      SMTP_RELAY_HOST: ${SMTP_RELAY_HOST:-}
+      SMTP_RELAY_PORT: ${SMTP_RELAY_PORT:-587}
+      SMTP_RELAY_USER: ${SMTP_RELAY_USER:-}
+      SMTP_RELAY_PASSWORD: ${SMTP_RELAY_PASSWORD:-}
       POSTFIX_myhostname: ${MAIL_HOSTNAME:-mail.jircode.com}
       POSTFIX_mynetworks: "127.0.0.0/8,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16"
       POSTFIX_smtpd_sender_restrictions: permit

@@ -41,15 +41,39 @@
             return fetch(url, opts);
         },
         json: function(url, opts) {
+            opts = opts || {};
+            opts.headers = opts.headers || {};
+            if (!opts.headers['Accept']) {
+                opts.headers['Accept'] = 'application/json';
+            }
             return this.fetch(url, opts).then(function(r) {
                 return r.text().then(function(raw) {
+                    var trimmed = (raw || '').trim();
+                    if (trimmed.indexOf('<!DOCTYPE') === 0 || trimmed.indexOf('<html') === 0) {
+                        var hint = 'Sunucu JSON yerine HTML sayfası döndürdü';
+                        if (r.status === 404) {
+                            hint = 'API endpoint bulunamadı (404). Sunucu kodu güncel olmayabilir.';
+                        } else if (r.status === 403 || r.status === 503) {
+                            hint = 'Erişim engellendi veya bakım sayfası (CDN/WAF).';
+                        } else if (r.status >= 500) {
+                            hint = 'Sunucu hatası (' + r.status + '). Logları kontrol edin.';
+                        }
+                        return {
+                            ok: false,
+                            status: r.status,
+                            data: { success: false, message: hint, html_response: true }
+                        };
+                    }
                     try {
                         return { ok: r.ok, status: r.status, data: JSON.parse(raw) };
                     } catch (e) {
                         return {
                             ok: false,
                             status: r.status,
-                            data: { success: false, message: raw.slice(0, 200) }
+                            data: {
+                                success: false,
+                                message: 'Geçersiz API yanıtı (JSON değil). Oturum süresi dolmuş olabilir — sayfayı yenileyip tekrar giriş yapın.'
+                            }
                         };
                     }
                 });

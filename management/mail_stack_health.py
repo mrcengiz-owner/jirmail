@@ -77,6 +77,9 @@ def heal_postfix_container(*, container: str | None = None) -> dict[str, Any]:
         c = client.containers.get(name)
         for script in (
             "/docker-init.d/10-jirmail-inbound.sh",
+            "/docker-init.d/31-jirmail-transport-maps.sh",
+            "/docker-init.d/30-jirmail-outbound-smtp.sh",
+            "/docker-init.d/32-jirmail-relay-sasl.sh",
             "/docker-init.d/11-validate-pgsql.sh",
         ):
             code, logs = c.exec_run(["sh", script], demux=True)
@@ -176,10 +179,20 @@ def verify_mail_stack(*, fix: bool = False, healthcheck: bool = False) -> dict[s
     add("smtp", smtp_ok, f"SMTP {smtp_host}:{smtp_port} {'OK' if smtp_ok else 'erişilemiyor'}")
     add("imap", imap_ok, f"IMAP {imap_host}:{imap_port} {'OK' if imap_ok else 'erişilemiyor'}")
 
-    # Dış posta çıkışı (port 25 veya relayhost)
+    # Dış posta çıkışı (port 25 veya relayhost) — otomatik yapılandır
     try:
+        from management.outbound_autoconfig import ensure_outbound_delivery
         from management.outbound_connectivity import check_outbound_smtp
         from webmail.send_validation import admin_stale_domain_warnings
+
+        if fix:
+            auto = ensure_outbound_delivery(fix=True)
+            if auto.get('fixed_domains'):
+                report["healed"].append(
+                    {"service": "domains", "fixed": auto.get('fixed_domains')}
+                )
+            if auto.get('actions'):
+                report["healed"].append({"service": "outbound", **auto})
 
         outbound = check_outbound_smtp(include_django_probe=False)
         stale = admin_stale_domain_warnings()
@@ -190,16 +203,26 @@ def verify_mail_stack(*, fix: bool = False, healthcheck: bool = False) -> dict[s
                 f"Yönetici notu (gönderimi engellemez): {stale[0][:120]}",
                 optional=True,
             )
+        outbound_ok = bool(outbound.get("ok")) or outbound.get("mode") == "relay"
         if outbound.get("mode") == "relay":
             add(
                 "outbound_smtp",
                 True,
                 f"Dış posta relayhost: {outbound.get('relayhost')}",
             )
+        elif healthcheck:
+            add(
+                "outbound_smtp",
+                True,
+                outbound.get("message", "port 25"),
+                optional=True,
+                warning=not outbound_ok,
+                recommendation=(outbound.get("recommendation") or "")[:200],
+            )
         else:
             add(
                 "outbound_smtp",
-                bool(outbound.get("ok")),
+                outbound_ok,
                 outbound.get("message", "port 25"),
                 recommendation=(outbound.get("recommendation") or "")[:200],
             )

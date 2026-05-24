@@ -6,7 +6,7 @@ import json
 from django.core.management.base import BaseCommand
 
 from management.outbound_connectivity import check_outbound_smtp
-from webmail.send_validation import admin_stale_domain_warnings
+from webmail.send_validation import admin_panel_domain_issues
 
 
 class Command(BaseCommand):
@@ -22,18 +22,20 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         report = check_outbound_smtp(include_django_probe=not options['skip_panel_probe'])
-        stale = admin_stale_domain_warnings()
+        issues = admin_panel_domain_issues()
+        stale = [i['message'] for i in issues]
 
         if options['json']:
-            out = {**report, 'panel_warnings': stale}
+            out = {**report, 'panel_warnings': stale, 'panel_issues': issues}
             self.stdout.write(json.dumps(out, ensure_ascii=False, indent=2))
             return
 
-        if stale:
-            self.stdout.write(self.style.WARNING('Panel (isteğe bağlı temizlik):'))
-            for w in stale[:5]:
-                self.stdout.write(f'  • {w}')
-            self.stdout.write('  → python manage.py fix_reserved_mail_domains\n')
+        if issues:
+            self.stdout.write(self.style.WARNING('Panel (gönderimi engellemez — yapılandırma notu):'))
+            for item in issues[:8]:
+                self.stdout.write(f"  • {item['message']}")
+                self.stdout.write(f"    → {item['fix']}")
+            self.stdout.write('')
 
         mode = report.get('mode', '')
         if mode == 'relay':
@@ -43,6 +45,16 @@ class Command(BaseCommand):
 
         self.stdout.write(self.style.MIGRATE_HEADING('Mod: doğrudan internet SMTP (port 25)'))
         self.stdout.write(report.get('message', ''))
+        summary = report.get('probe_summary') or {}
+        if summary.get('postfix_total'):
+            ok_n = summary.get('postfix_ok', 0)
+            total = summary['postfix_total']
+            if ok_n < total and report.get('ok'):
+                self.stdout.write(
+                    self.style.NOTICE(
+                        f'Not: {ok_n}/{total} Postfix hedefi yanıt verdi — en az biri OK ise gönderim yapılabilir.'
+                    )
+                )
         self.stdout.write('')
 
         for p in report.get('probes') or []:

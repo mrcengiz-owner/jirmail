@@ -619,25 +619,52 @@ document.addEventListener('alpine:init', function() {
                 if (self.diagRunning) return;
                 self.diagRunning = true;
                 self.diagResult = null;
-                WmApi.json('/api/mail/diagnostics/outbound').then(function(r) {
-                    self.diagRunning = false;
-                    if (!r.ok || !r.data || r.data.success === false) {
+
+                function applyResult(data) {
+                    if (!data || data.success === false) {
                         self.diagResult = {
-                            message: (r.data && r.data.message) || 'Tanılama başarısız',
-                            fix_steps: []
+                            message: (data && data.message) || 'Tanılama başarısız',
+                            fix_steps: (data && data.fix_steps) || [
+                                'Sunucuda şu komutu çalıştırın:',
+                                'docker exec jir_postfix timeout 6 bash -c "echo >/dev/tcp/gmail-smtp-in.l.google.com/25" && echo OK || echo KAPALI'
+                            ]
                         };
                         return;
                     }
                     self.diagResult = {
-                        message: r.data.message || '',
-                        fix_steps: r.data.fix_steps || [],
-                        ok: r.data.ok,
-                        mode: r.data.mode,
-                        relayhost: r.data.relayhost
+                        message: data.message || '',
+                        fix_steps: data.fix_steps || [],
+                        ok: data.ok,
+                        mode: data.mode,
+                        relayhost: data.relayhost
                     };
-                }).catch(function(e) {
+                }
+
+                function finish() {
                     self.diagRunning = false;
-                    self.diagResult = { message: e.message || 'Bağlantı hatası', fix_steps: [] };
+                }
+
+                // quota?outbound=1 — mevcut deploy'larda da çalışır
+                WmApi.json('/api/mail/quota?outbound=1').then(function(r) {
+                    if (r.ok && r.data && r.data.success !== false && !r.data.html_response) {
+                        finish();
+                        applyResult(r.data);
+                        return;
+                    }
+                    return WmApi.json('/api/mail/diagnostics/outbound').then(function(r2) {
+                        finish();
+                        if (r2.ok && r2.data && !r2.data.html_response) {
+                            applyResult(r2.data);
+                        } else {
+                            applyResult(r.data || r2.data);
+                        }
+                    });
+                }).catch(function(e) {
+                    finish();
+                    self.diagResult = {
+                        message: e.message || 'Bağlantı hatası',
+                        fix_steps: ['docker exec jir_django python manage.py check_outbound_smtp']
+                    };
                 });
             },
 

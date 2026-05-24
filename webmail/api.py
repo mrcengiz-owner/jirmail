@@ -328,6 +328,12 @@ def send(request: HttpRequest, data: SendMailSchema):
 
         from webmail.send_validation import validate_outbound_recipients
 
+        try:
+            from management.outbound_autoconfig import ensure_outbound_delivery
+            ensure_outbound_delivery(fix=True)
+        except Exception as heal_exc:
+            log.debug('outbound auto-config atlandı: %s', heal_exc)
+
         check = validate_outbound_recipients(account, data.to, data.cc, data.bcc)
         if not check['ok']:
             return {'success': False, 'message': check['message'], 'invalid': check.get('invalid', [])}
@@ -536,11 +542,55 @@ def save_draft(request: HttpRequest, data: SaveDraftSchema):
         return {'success': False, 'message': str(exc)}
 
 
+def _outbound_delivery_report() -> dict:
+    """Dış posta çıkışı (port 25 / relay) — tanılama."""
+    try:
+        from management.outbound_autoconfig import ensure_outbound_delivery
+        from management.outbound_connectivity import check_outbound_smtp
+
+        ensure_outbound_delivery(fix=True)
+        report = check_outbound_smtp(include_django_probe=False)
+    except Exception as exc:
+        return {
+            'success': False,
+            'ok': False,
+            'message': f'Tanılama hatası: {exc}',
+            'fix_steps': ['Docker soketi veya Postfix konteyneri erişilemiyor olabilir.'],
+        }
+
+    fix_steps: list[str] = []
+    if report.get('mode') == 'relay':
+        fix_steps.append(f'SMTP relay aktif: {report.get("relayhost")}')
+        fix_steps.append('Dış posta relay üzerinden gidiyor; port 25 zorunlu değil.')
+    elif report.get('ok'):
+        fix_steps.append('Port 25 çıkışı çalışıyor — doğrudan internet SMTP kullanılabilir.')
+        fix_steps.append('Bounce devam ederse: PTR (reverse DNS), SPF ve DKIM kayıtlarını kontrol edin.')
+    else:
+        fix_steps.append('Port 25 dışa kapalı (VPS sağlayıcısı engelliyor olabilir).')
+        fix_steps.append('Sistem deploy/gönderim sırasında otomatik relay uygular.')
+        fix_steps.append('Kalıcı çözüm: .env → SMTP_RELAYHOST veya SMTP_RELAY_HOST/PORT/USER/PASSWORD')
+        fix_steps.append('Deploy sonrası stack otomatik yeniden yapılandırılır.')
+
+    return {
+        'success': True,
+        'ok': bool(report.get('ok')) or report.get('mode') == 'relay',
+        'mode': report.get('mode') or 'direct',
+        'relayhost': report.get('relayhost') or '',
+        'message': report.get('message') or '',
+        'probes': report.get('probes') or [],
+        'fix_steps': fix_steps,
+        'recommendation': report.get('recommendation') or '',
+    }
+
+
 @router.get('/quota', summary='Depolama kotası')
-def mail_quota(request: HttpRequest):
+def mail_quota(request: HttpRequest, outbound: bool = False):
     account, _ = _get_account_and_password(request)
     if not account:
         return {'success': False, 'message': 'Oturum yok'}
+
+    if outbound:
+        return _outbound_delivery_report()
 
     used = account.current_storage_bytes
     quota = account.quota_bytes
@@ -660,42 +710,11 @@ class WebmailSettingsPatchSchema(Schema):
 
 @router.get('/diagnostics/outbound', summary='Dış gönderim tanılaması')
 def diagnostics_outbound(request: HttpRequest):
-    """Port 25 / relay kontrolü — bounce nedenini netleştirir."""
+    """Port 25 / relay kontrolü (alternatif: GET /api/mail/quota?outbound=1)."""
     account, _ = _get_account_and_password(request)
     if not account:
         return {'success': False, 'message': 'Oturum yok'}
-
-    try:
-        from management.outbound_connectivity import check_outbound_smtp
-
-        report = check_outbound_smtp(include_django_probe=False)
-    except Exception as exc:
-        return {'success': False, 'message': f'Tanılama hatası: {exc}'}
-
-    fix_steps: list[str] = []
-    if report.get('mode') == 'relay':
-        fix_steps.append('Mod: SMTP RELAY aktif.')
-        fix_steps.append(f"Relay: {report.get('relayhost')}")
-        fix_steps.append('Bounce hala alıyorsanız relay sağlayıcısının gönderim limit/yetki ayarlarını kontrol edin.')
-    elif report.get('ok'):
-        fix_steps.append('Postfix konteynerinden port 25 OK — doğrudan internet SMTP çalışıyor.')
-        fix_steps.append('Bounce alıyorsanız alıcı SPF/DKIM/PTR doğrulayabilir. PTR (reverse DNS) kaydınızı VPS panelinden mail.alanadi.com olacak şekilde ayarlayın.')
-    else:
-        fix_steps.append('SORUN: Sunucudan port 25 dışa kapalı (VPS sağlayıcısı engelliyor).')
-        fix_steps.append('Çözüm 1 (önerilen): .env dosyasına SMTP_RELAYHOST=[smtp.saglayici.com]:587 ekleyin.')
-        fix_steps.append('Çözüm 2: VPS sağlayıcınızdan port 25 dışa erişimini açın (genelde destek talebi).')
-        fix_steps.append('Ardından: docker compose up -d postfix')
-
-    return {
-        'success': True,
-        'ok': bool(report.get('ok')) or report.get('mode') == 'relay',
-        'mode': report.get('mode'),
-        'relayhost': report.get('relayhost') or '',
-        'message': report.get('message') or '',
-        'probes': report.get('probes') or [],
-        'fix_steps': fix_steps,
-        'recommendation': report.get('recommendation') or '',
-    }
+    return _outbound_delivery_report()
 
 
 @router.get('/settings', summary='Webmail ayarları')

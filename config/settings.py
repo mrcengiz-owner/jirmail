@@ -394,6 +394,10 @@ MAIL_TLS_CA_FILE = os.getenv('MAIL_TLS_CA_FILE', '/etc/jir-mail/tls/ca.crt')
 SMTP_HOST = _resolve_mail_service_host('postfix', 'jir_postfix')
 SMTP_PORT = int(os.getenv('SMTP_PORT', '587'))
 SMTP_RELAYHOST = os.getenv('SMTP_RELAYHOST', '').strip()
+SMTP_RELAY_HOST = os.getenv('SMTP_RELAY_HOST', '').strip()
+SMTP_RELAY_PORT = os.getenv('SMTP_RELAY_PORT', '587').strip()
+SMTP_RELAY_USER = os.getenv('SMTP_RELAY_USER', '').strip()
+SMTP_RELAY_PASSWORD = os.getenv('SMTP_RELAY_PASSWORD', '').strip()
 # Yerel compose: docker-compose.yml içinde DOCKER_HOST=tcp://docker-proxy:2375 verilir.
 # Coolify / tek konteyner: soket mount edildiğinde unix soketi kullanılır (docker-proxy yok).
 DOCKER_HOST = os.getenv('DOCKER_HOST', 'unix:///var/run/docker.sock')
