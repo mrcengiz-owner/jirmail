@@ -1054,8 +1054,8 @@ def factory_reset_api(request, data: FactoryResetSchema):
     return {
         "status": "ok",
         "message": (
-            "Sistem sıfırlandı. Dokploy/Coolify üzerinden stack\'i yeniden deploy edin, '
-            'sonra kurulum sihirbazına gidin.'
+            "Sistem sıfırlandı. Dokploy/Coolify üzerinden stack'i yeniden deploy edin, "
+            "sonra kurulum sihirbazına gidin."
         ),
         "redirect": report.get('redirect') or '/setup/',
         "report": report,
