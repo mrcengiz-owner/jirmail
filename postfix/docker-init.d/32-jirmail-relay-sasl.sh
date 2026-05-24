@@ -2,6 +2,8 @@
 # Kimlik doğrulamalı SMTP relay (SendGrid, Mailgun, ISP SMTP vb.)
 set -e
 
+. /docker-init.d/_jirmail-common.sh
+
 RELAYHOST="${SMTP_RELAYHOST:-}"
 USER="${SMTP_RELAY_USER:-}"
 PASS="${SMTP_RELAY_PASSWORD:-}"
@@ -37,5 +39,5 @@ postconf -e 'smtp_sasl_security_options=noanonymous'
 postconf -e 'smtp_tls_security_level=encrypt'
 postconf -e "relayhost=${RELAYHOST}"
 
-postfix reload 2>/dev/null || true
+_postfix_reload_if_running
 echo "[jirmail-postfix] relay SASL: ${_key} (kimlik doğrulama aktif)"

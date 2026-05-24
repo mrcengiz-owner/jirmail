@@ -2,6 +2,8 @@
 # Gönderim: yalnızca virtual domainler Dovecot LMTP; dış adresler internet SMTP veya relay.
 set -e
 
+. /docker-init.d/_jirmail-common.sh
+
 _port25_ok() {
   timeout 5 bash -c 'exec 3<>/dev/tcp/gmail-smtp-in.l.google.com/25' 2>/dev/null
 }
@@ -46,7 +48,7 @@ if [ -f /docker-init.d/32-jirmail-relay-sasl.sh ]; then
   sh /docker-init.d/32-jirmail-relay-sasl.sh
 fi
 
-postfix reload 2>/dev/null || true
+_postfix_reload_if_running
 if [ -z "$RELAYHOST" ]; then
   echo "[jirmail-postfix] outbound: virtual domain -> LMTP, dış adresler -> internet SMTP (port 25)"
 else

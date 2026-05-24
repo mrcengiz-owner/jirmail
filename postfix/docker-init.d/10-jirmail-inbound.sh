@@ -2,6 +2,8 @@
 # Gelen posta (MX): dış göndericiler (Gmail vb.) kabul + Postgres'ten canlı adres listesi
 set -e
 
+. /docker-init.d/_jirmail-common.sh
+
 DOMAIN="${MAIL_DOMAIN:-mail.local}"
 DB_HOST="${DB_HOST:-postgres}"
 DB_PORT="${DB_PORT:-5432}"
@@ -11,7 +13,8 @@ export DB_HOST DB_PORT DB_NAME DB_USER DB_PASS MAIL_DOMAIN
 
 echo "[jirmail-postfix] Inbound MX (domain=${DOMAIN}, db=${DB_NAME})"
 
-# Gönderen kısıtları: 20-anti-spoof (port 25) ve 99-submission (587) scriptlerinde
+_strip_legacy_pgsql_port_lines
+
 postconf -e 'smtpd_client_restrictions=permit'
 postconf -e 'smtpd_helo_restrictions=permit'
 postconf -e 'smtpd_tls_security_level=may'
@@ -20,24 +23,6 @@ postconf -e 'smtpd_recipient_restrictions=permit_mynetworks,permit_sasl_authenti
 postconf -e 'smtpd_relay_restrictions=permit_mynetworks,permit_sasl_authenticated,reject_unauth_destination'
 
 rm -f /etc/postfix/allowed_senders /etc/postfix/allowed_senders.db 2>/dev/null || true
-
-# Postfix pgsql: hosts= tek satır + envsubst şifreyi host= sanıyor → çok satırlı yaz
-_write_pgsql_cf() {
-  _dest="$1"
-  _query="$2"
-  _hosts="$DB_HOST"
-  if [ -n "$DB_PORT" ] && [ "$DB_PORT" != "5432" ]; then
-    _hosts="${DB_HOST}:${DB_PORT}"
-  fi
-  {
-    printf 'hosts = %s\n' "$_hosts"
-    printf 'user = %s\n' "$DB_USER"
-    printf 'password = %s\n' "$DB_PASS"
-    printf 'dbname = %s\n' "$DB_NAME"
-    printf 'query = %s\n' "$_query"
-  } >"$_dest"
-  chmod 600 "$_dest"
-}
 
 _write_pgsql_cf /etc/postfix/pgsql-virtual-mailboxes.cf \
   "SELECT CONCAT(a.email, ' ', d.name, '/', a.username, '/') AS mailbox FROM core_mailaccount a INNER JOIN core_maildomain d ON d.id = a.domain_id WHERE a.is_active = true AND d.is_active = true"
@@ -57,5 +42,5 @@ if postconf -Mf submission/inet >/dev/null 2>&1; then
   postconf -P submission/inet -e smtpd_tls_security_level=encrypt 2>/dev/null || true
 fi
 
-postfix reload 2>/dev/null || true
+_postfix_reload_if_running
 echo "[jirmail-postfix] pgsql virtual maps aktif (dbname=${DB_NAME})"
