@@ -3,10 +3,12 @@
 
 {% block title %}Gelen Kutusu — Jîr-Mail{% endblock %}
 
-{# Root <div class="wm-portal-shell"> üzerine Alpine app'i takıyoruz.
-   Böylece sidebar (setFolder, openCompose, unreadCount) ve topbar
-   (searchQuery, syncing, themeSync, avatarColor, initials) state'i
-   sidebar/topbar partial'larından erişilebilir. #}
+{% comment %}
+Root <div class="wm-portal-shell"> üzerine Alpine app'i takıyoruz.
+Böylece sidebar (setFolder, openCompose, unreadCount) ve topbar
+(searchQuery, syncing, themeSync, avatarColor, initials) state'i
+sidebar/topbar partial'larından erişilebilir.
+{% endcomment %}
 {% block shell_extra_attrs %}
   x-data="mailApp()"
   x-init="init()"

@@ -1,17 +1,10 @@
-{# ====================================================================
-   Webmail portal kabuk — sidebar + topbar her sayfada DRY olarak yüklenir.
-   Sayfalar bu layout'u extend edip sadece içerik block'larını doldurur.
-
-   Block'lar:
-     - shell_extra_attrs : root <div> üzerine ekstra Alpine x-data vs.
-     - shell_overlay     : sayfa içine sığmayan elementler (modal, toast).
-     - shell_content     : asıl içerik (sağ panel).
-
-   Aktif Alpine app her zaman root'a takılır (mailApp, settingsApp, ...).
-   Sidebar/topbar partial'ları o app'in state'inden (sidebarOpen vs.) çeker.
-   Alpine olmayan bir sayfa varsa bile statik fallback'ler çalışır.
-   ==================================================================== */ #}
 {% extends "webmail/base.html" %}
+{% comment %}
+Webmail portal kabuk — sidebar + topbar her sayfada DRY olarak yüklenir.
+Sayfalar bu layout'u extend edip sadece içerik block'larını doldurur:
+shell_extra_attrs (root Alpine x-data), shell_content (asıl içerik),
+shell_overlay (sayfa dışına taşan modal/toast).
+{% endcomment %}
 
 {% block body %}
 <div class="wm-portal-shell" {% block shell_extra_attrs %}{% endblock %}>

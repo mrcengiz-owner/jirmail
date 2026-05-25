@@ -1,17 +1,10 @@
-{# ====================================================================
-   Webmail ortak sidebar — ProtonMail tarzı tek tablo formatı.
-   TÜM webmail sayfalarında include edilir (inbox, settings, client_setup).
-
-   Aktiflik request'ten okunur (Django bağımlılığı):
-     {{ request.resolver_match.url_name }}  → 'inbox' | 'settings' | 'client_setup'
-     {{ request.GET.folder|default:'inbox' }}  → 'inbox' | 'sent' | 'drafts' | ...
-
-   Alpine bağımlılıkları (sadece inbox sayfasında geçerli, diğerinde sessizce
-   yok sayılır):
-     unreadCount, quota, quotaLabel(), userEmail, avatarColor(), initials()
-
-   userEmail görünürlüğü için view her zaman context'e {{ email }} koyar.
-   ==================================================================== */ #}
+{% comment %}
+Webmail ortak sidebar — ProtonMail tarzı tek tablo formatı.
+TÜM webmail sayfalarında include edilir (inbox, settings, client_setup).
+Aktiflik request'ten okunur; Alpine bağımlılıkları (unreadCount, quota,
+avatarColor, initials) sadece inbox sayfasında geçerli, diğerlerinde
+sessizce yok sayılır.
+{% endcomment %}
 {% with current_url=request.resolver_match.url_name folder=request.GET.folder|default:'inbox' %}
 <aside class="wm-sidebar-ds"
        :class="sidebarOpen ? 'is-open' : ''"
@@ -27,8 +20,7 @@
     </span>
   </a>
 
-  {# Compose: inbox sayfasındaysa Alpine modal'ı açar, diğer sayfalarda
-     inbox'a ?compose=1 ile gider (mail-app.js init'te yakalar). #}
+  {% comment %} Compose: inbox sayfasındaysa Alpine modal'ı açar, diğer sayfalarda inbox'a ?compose=1 ile gider (mail-app.js init'te yakalar). {% endcomment %}
   {% if current_url == 'inbox' %}
   <button type="button" @click="openCompose(); sidebarOpen = false" class="wm-sb-compose">
     <span class="material-symbols-outlined wm-material-icon-fill">edit</span>
@@ -135,12 +127,10 @@
     {% if email %}
     <div class="wm-sb-row wm-sb-row--account" role="group" aria-label="Hesap">
       {% if current_url == 'inbox' %}
-        {# Alpine app aktif: renkli hash avatar + dinamik initial. #}
         <span class="wm-sb-row__avatar"
               :style="'background:' + avatarColor(userEmail)"
               x-text="initials(userEmail)"></span>
       {% else %}
-        {# Statik fallback: brand renkte sabit initial. #}
         <span class="wm-sb-row__avatar" style="background: var(--jm-brand-500);">{{ email|slice:":2"|upper }}</span>
       {% endif %}
       <span class="wm-sb-row__label">{{ email }}</span>

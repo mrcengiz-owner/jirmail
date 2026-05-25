@@ -1,22 +1,16 @@
-{# ====================================================================
-   Webmail ortak topbar — tüm webmail sayfalarında.
-   Mobil hamburger + sayfa başlığı + tema toggle + ayarlar + avatar.
-
-   Sayfa başlığı view'den {{ page_title }} ile gelir (fallback: 'Webmail').
-   Search input sadece inbox sayfasında render edilir (mailApp state'ine
-   bağımlı: searchQuery, onSearch, syncing, syncNow).
-   ==================================================================== */ #}
+{% comment %}
+Webmail ortak topbar — tüm webmail sayfalarında.
+Mobil hamburger + sayfa başlığı + tema toggle + ayarlar + avatar.
+Search input sadece inbox sayfasında render edilir (mailApp state'ine bağlı).
+{% endcomment %}
 {% with current_url=request.resolver_match.url_name %}
 <header class="wm-topbar-ds">
-  {# Mobil hamburger — sidebarOpen state'i her Alpine app'te var (mailApp,
-     settingsApp, clientSetupGuide). Yoksa graceful no-op. #}
   <button type="button" class="wm-tb-hamburger lg:hidden"
           @click="sidebarOpen = true" aria-label="Menü">
     <span class="material-symbols-outlined">menu</span>
   </button>
 
   {% if current_url == 'inbox' %}
-    {# Inbox — geniş arama kutusu (mailApp state). #}
     <div class="wm-tb-search">
       <span class="material-symbols-outlined wm-tb-search__icon">search</span>
       <input type="search"
@@ -30,7 +24,6 @@
       </button>
     </div>
   {% else %}
-    {# Diğer sayfalar — sade başlık. #}
     <div class="wm-tb-title">{{ page_title|default:'Webmail' }}</div>
   {% endif %}
 
