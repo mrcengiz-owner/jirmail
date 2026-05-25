@@ -1,45 +1,25 @@
-{% extends "webmail/base.html" %}
+{% extends "webmail/layouts/portal_shell.html" %}
 
 {% block title %}Cihazda kurulum — Jîr-Mail{% endblock %}
 
 {% block extra_head %}
-<link rel="stylesheet" href="{% url 'webmail:asset' asset_path='css/webmail-settings.css' %}?v=20260525a">
+<link rel="stylesheet" href="{% url 'webmail:asset' asset_path='css/webmail-settings.css' %}?v=20260525c">
 {% endblock %}
 
-{% block body %}
-<div class="wm-shell wm-shell--settings flex h-dvh w-full overflow-hidden"
-     x-data="clientSetupGuide()"
-     x-init="init()"
-     data-user-email="{{ email|default:''|escape }}">
+{% block shell_extra_attrs %}
+  x-data="clientSetupGuide()"
+  x-init="init()"
+  data-user-email="{{ email|default:''|escape }}"
+{% endblock %}
 
-  <div class="wm-backdrop"
-       :class="{ 'is-open': sidebarOpen }"
-       @click="sidebarOpen = false"
-       x-show="sidebarOpen"
-       x-cloak></div>
-
-  {% include "webmail/partials/sidebar_client_setup.html" %}
-
-  <div class="wm-main">
-    <header class="wm-mobile-header wm-settings-mobile-head">
-      <button type="button" class="wm-icon-btn" @click="sidebarOpen = true" aria-label="Menü">
-        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5"/></svg>
-      </button>
-      <h2 class="wm-flex-1 wm-truncate wm-m-0">Cihazda kurulum</h2>
-      <a href="{% url 'webmail:inbox' %}" class="wm-icon-btn" aria-label="Gelen kutusu" title="Gelen kutusu">
-        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M2.25 13.5h3.86a2.25 2.25 0 002.012 1.244l.256-.012a2.25 2.25 0 002.013-1.244l3.865-7.772a2.25 2.25 0 013.963 0l3.865 7.772a2.25 2.25 0 002.013 1.244H21.75M4.5 19.5h15"/></svg>
-      </a>
-    </header>
-
-    <div class="wm-settings-main">
-      <div class="wm-settings-scroll">
-        {% include "webmail/partials/client_setup_panel.html" %}
-      </div>
-    </div>
+{% block shell_content %}
+<div class="wm-page-scroll">
+  <div class="wm-page-inner">
+    {% include "webmail/partials/client_setup_panel.html" %}
   </div>
 </div>
 {% endblock %}
 
 {% block extra_scripts %}
-<script src="{% url 'webmail:asset' asset_path='js/webmail/client-setup-guide.js' %}?v=20260525a"></script>
+<script src="{% url 'webmail:asset' asset_path='js/webmail/client-setup-guide.js' %}?v=20260525c"></script>
 {% endblock %}

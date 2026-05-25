@@ -1,0 +1,59 @@
+{# ====================================================================
+   Webmail ortak topbar — tüm webmail sayfalarında.
+   Mobil hamburger + sayfa başlığı + tema toggle + ayarlar + avatar.
+
+   Sayfa başlığı view'den {{ page_title }} ile gelir (fallback: 'Webmail').
+   Search input sadece inbox sayfasında render edilir (mailApp state'ine
+   bağımlı: searchQuery, onSearch, syncing, syncNow).
+   ==================================================================== */ #}
+{% with current_url=request.resolver_match.url_name %}
+<header class="wm-topbar-ds">
+  {# Mobil hamburger — sidebarOpen state'i her Alpine app'te var (mailApp,
+     settingsApp, clientSetupGuide). Yoksa graceful no-op. #}
+  <button type="button" class="wm-tb-hamburger lg:hidden"
+          @click="sidebarOpen = true" aria-label="Menü">
+    <span class="material-symbols-outlined">menu</span>
+  </button>
+
+  {% if current_url == 'inbox' %}
+    {# Inbox — geniş arama kutusu (mailApp state). #}
+    <div class="wm-tb-search">
+      <span class="material-symbols-outlined wm-tb-search__icon">search</span>
+      <input type="search"
+             placeholder="Postada ara… (konu, gönderen, içerik)"
+             x-model.debounce.350ms="searchQuery"
+             @input="onSearch()">
+      <button type="button" class="wm-tb-search__sync"
+              :class="syncing && 'is-spinning'"
+              @click="syncNow()" title="Senkronize">
+        <span class="material-symbols-outlined">refresh</span>
+      </button>
+    </div>
+  {% else %}
+    {# Diğer sayfalar — sade başlık. #}
+    <div class="wm-tb-title">{{ page_title|default:'Webmail' }}</div>
+  {% endif %}
+
+  <div class="wm-tb-actions">
+    <button type="button" class="wm-tb-iconbtn"
+            onclick="window.WmTheme && window.WmTheme.toggle()"
+            title="Tema değiştir" aria-label="Tema">
+      <span class="material-symbols-outlined wm-tb-light-icon">light_mode</span>
+      <span class="material-symbols-outlined wm-tb-dark-icon">dark_mode</span>
+    </button>
+    <a href="{% url 'webmail:settings' %}" class="wm-tb-iconbtn"
+       title="Ayarlar" aria-label="Ayarlar">
+      <span class="material-symbols-outlined">settings</span>
+    </a>
+    {% if email %}
+    <span class="wm-tb-avatar" aria-hidden="true"
+          {% if current_url == 'inbox' %}
+            :style="'background:' + avatarColor(userEmail)"
+            x-text="initials(userEmail)"
+          {% else %}
+            style="background: var(--jm-brand-500);"
+          {% endif %}>{% if current_url != 'inbox' %}{{ email|slice:":2"|upper }}{% endif %}</span>
+    {% endif %}
+  </div>
+</header>
+{% endwith %}

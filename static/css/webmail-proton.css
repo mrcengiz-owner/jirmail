@@ -199,6 +199,243 @@ html.dark .bg-surface-container-highest {
 }
 
 /* ====================================================================
+   Portal shell (yeni ortak kabuk) — sidebar + topbar + içerik kolonu
+   ==================================================================== */
+.wm-portal-shell {
+  display: flex;
+  height: 100dvh;
+  width: 100%;
+  overflow: hidden;
+  background: var(--jm-bg);
+  color: var(--jm-text);
+}
+
+.wm-portal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  background: rgba(20, 23, 50, 0.45);
+  backdrop-filter: blur(2px);
+}
+@media (min-width: 1024px) {
+  .wm-portal-backdrop { display: none !important; }
+}
+
+.wm-portal-main {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--jm-bg);
+  overflow: hidden;
+}
+
+.wm-portal-content {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* Genel sayfa scroll wrapper (settings, client_setup için).
+   inbox.html kendi 3-kolon layout'unu kullanır, bunu kullanmaz. */
+.wm-page-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 24px clamp(16px, 4vw, 32px) 40px;
+}
+.wm-page-inner {
+  max-width: 720px;
+  width: 100%;
+  margin: 0 auto;
+}
+.wm-page-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+.wm-page-head__title {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.015em;
+  color: var(--jm-text);
+}
+.wm-page-head__sub {
+  margin: 4px 0 0;
+  font-size: 13px;
+  color: var(--jm-text-muted);
+}
+
+/* Mobil sidebar slide */
+@media (max-width: 1023px) {
+  aside.wm-sidebar-ds {
+    position: fixed !important;
+    inset: 0 auto 0 0;
+    z-index: 50;
+    transform: translateX(-100%);
+    transition: transform 0.2s ease;
+  }
+  aside.wm-sidebar-ds.is-open {
+    transform: translateX(0);
+  }
+}
+
+/* ====================================================================
+   Yeni topbar — webmail_topbar.html partial'ı
+   ==================================================================== */
+.wm-topbar-ds {
+  flex-shrink: 0;
+  height: 52px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 14px;
+  background: var(--jm-surface);
+  border-bottom: 1px solid var(--jm-border);
+}
+
+.wm-tb-hamburger {
+  width: 36px;
+  height: 36px;
+  border: none;
+  background: transparent;
+  border-radius: 6px;
+  color: var(--jm-text-muted);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+.wm-tb-hamburger:hover { background: var(--jm-surface-2); }
+.wm-tb-hamburger .material-symbols-outlined { font-size: 22px; }
+
+.wm-tb-search {
+  flex: 1;
+  max-width: 640px;
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+.wm-tb-search input[type="search"] {
+  width: 100%;
+  height: 34px;
+  padding: 0 36px 0 34px;
+  font-size: 13px;
+  font-family: inherit;
+  color: var(--jm-text);
+  background: var(--jm-surface-2);
+  border: 1px solid var(--jm-border);
+  border-radius: var(--jm-radius-md);
+  outline: none;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.wm-tb-search input[type="search"]:focus {
+  border-color: var(--jm-brand-500);
+  box-shadow: 0 0 0 3px rgba(91, 108, 255, 0.12);
+}
+.wm-tb-search input[type="search"]::placeholder {
+  color: var(--jm-text-faint);
+}
+.wm-tb-search__icon {
+  position: absolute;
+  left: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--jm-text-faint);
+  font-size: 18px !important;
+  pointer-events: none;
+}
+.wm-tb-search__sync {
+  position: absolute;
+  right: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 28px;
+  height: 28px;
+  border: none;
+  background: transparent;
+  color: var(--jm-text-faint);
+  border-radius: 6px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.wm-tb-search__sync:hover { color: var(--jm-brand-600); background: var(--jm-surface-3); }
+.wm-tb-search__sync .material-symbols-outlined { font-size: 18px; }
+.wm-tb-search__sync.is-spinning .material-symbols-outlined { animation: wm-spin 0.8s linear infinite; }
+@keyframes wm-spin { to { transform: rotate(360deg); } }
+
+.wm-tb-title {
+  flex: 1;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--jm-text);
+  letter-spacing: -0.005em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wm-tb-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+.wm-tb-iconbtn {
+  width: 36px;
+  height: 36px;
+  border: none;
+  background: transparent;
+  color: var(--jm-text-muted);
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  text-decoration: none;
+  transition: background 0.12s, color 0.12s;
+}
+.wm-tb-iconbtn:hover { background: var(--jm-surface-2); color: var(--jm-text); }
+.wm-tb-iconbtn .material-symbols-outlined { font-size: 20px; }
+
+/* Tema ikonları — html.dark class'ı ile değişir */
+.wm-tb-light-icon { display: none; }
+.wm-tb-dark-icon  { display: inline-block; }
+html.dark .wm-tb-light-icon { display: inline-block; }
+html.dark .wm-tb-dark-icon  { display: none; }
+
+.wm-tb-avatar {
+  width: 30px;
+  height: 30px;
+  margin-left: 4px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  flex-shrink: 0;
+  letter-spacing: 0;
+}
+
+@media (max-width: 768px) {
+  .wm-tb-search input[type="search"]::placeholder {
+    font-size: 12px;
+  }
+  .wm-tb-actions .wm-tb-iconbtn:not(:last-child) { display: none; }
+  /* Mobilde sadece avatar + tema ikonu kalır */
+}
+
+/* ====================================================================
    Sidebar — ProtonMail tarzı tek-tablo formatı.
    Tüm satırlar (folder, tool, hesap) aynı .wm-sb-row kalıbını paylaşır.
    ==================================================================== */
@@ -439,34 +676,9 @@ html.dark .wm-sb-row.is-active .wm-sb-row__icon {
   margin-bottom: 6px;
 }
 
-/* Top bar */
-header.wm-topbar-ds {
-  height: 52px !important;
-  min-height: 52px;
-  padding: 0 16px !important;
-  background: var(--jm-surface) !important;
-  border-color: var(--jm-border) !important;
-}
-header.wm-topbar-ds input[type="search"] {
-  background: var(--jm-surface-2) !important;
-  border-color: var(--jm-border) !important;
-  font-size: var(--jm-fs-md) !important;
-  padding: 6px 36px 6px 34px !important;
-  height: 34px !important;
-  border-radius: var(--jm-radius-md) !important;
-  box-shadow: none !important;
-}
-header.wm-topbar-ds input[type="search"]:focus {
-  border-color: var(--jm-brand-500) !important;
-  box-shadow: 0 0 0 3px rgba(91, 108, 255, 0.12) !important;
-}
-header.wm-topbar-ds .material-symbols-outlined {
-  font-size: 20px !important;
-}
-header.wm-topbar-ds button {
-  width: 36px !important;
-  height: 36px !important;
-}
+/* Top bar — stilller .wm-tb-* class'larıyla tanımlı (portal shell section'ı).
+   Eski header.wm-topbar-ds override'ları kaldırıldı — artık partial kendi
+   class'larını kullanıyor. */
 
 /* Liste kolonu */
 section.wm-list-column,

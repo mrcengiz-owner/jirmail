@@ -85,6 +85,16 @@ document.addEventListener('alpine:init', function() {
                 if (folderParam && FOLDER_MAP[folderParam]) {
                     self.currentFolder = folderParam;
                 }
+                // Diğer sayfalardan "Yeni mesaj" linki ?compose=1 ile gelir —
+                // gelir gelmez compose modal'ı aç ve param'ı URL'den temizle.
+                if (params.get('compose') === '1') {
+                    setTimeout(function() { self.openCompose(); }, 60);
+                    try {
+                        var u = new URL(window.location.href);
+                        u.searchParams.delete('compose');
+                        history.replaceState(null, '', u.pathname + u.search);
+                    } catch (e) { /* ignore */ }
+                }
                 self.loadQuota();
                 self.fetchMails();
                 self.syncAllFoldersBackground();
