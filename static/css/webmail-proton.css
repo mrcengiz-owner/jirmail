@@ -198,71 +198,245 @@ html.dark .bg-surface-container-highest {
   color: var(--jm-text);
 }
 
-/* Sidebar */
+/* ====================================================================
+   Sidebar — ProtonMail tarzı tek-tablo formatı.
+   Tüm satırlar (folder, tool, hesap) aynı .wm-sb-row kalıbını paylaşır.
+   ==================================================================== */
+
 aside.wm-sidebar-ds {
   width: var(--jm-sidebar-w) !important;
   background: var(--jm-surface) !important;
-  border-color: var(--jm-border) !important;
-  padding: 14px 10px !important;
+  border-right: 1px solid var(--jm-border) !important;
+  padding: 0 !important;
+  display: flex;
+  flex-direction: column;
 }
 
-aside.wm-sidebar-ds .text-headline-md {
-  font-size: 15px !important;
-  font-weight: 700 !important;
-  color: var(--jm-brand-600) !important;
+/* Brand satırı */
+.wm-sb-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 14px 12px;
+  text-decoration: none;
+  color: inherit;
+  border-bottom: 1px solid var(--jm-border-soft);
+}
+.wm-sb-brand__logo {
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  background: var(--jm-brand-500);
+  color: #fff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  box-shadow: 0 1px 3px rgba(91, 108, 255, 0.3);
+}
+.wm-sb-brand__logo .material-symbols-outlined { font-size: 18px; }
+.wm-sb-brand__text {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.1;
+  min-width: 0;
+}
+.wm-sb-brand__title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--jm-text);
+  letter-spacing: -0.01em;
+}
+.wm-sb-brand__sub {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--jm-text-faint);
+  margin-top: 1px;
 }
 
-/* Sidebar "Yeni mesaj" butonu — brand */
-aside.wm-sidebar-ds button.bg-primary {
-  background: var(--jm-brand-500) !important;
-  color: #fff !important;
-  font-size: var(--jm-fs-md) !important;
-  font-weight: 600 !important;
-  border-radius: var(--jm-radius-md) !important;
-  padding: 10px 14px !important;
-  box-shadow: 0 1px 3px rgba(91, 108, 255, 0.25);
-  transition: background 0.15s ease, transform 0.05s ease;
+/* Compose CTA */
+.wm-sb-compose {
+  margin: 12px 12px 8px;
+  height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: none;
+  background: var(--jm-brand-500);
+  color: #fff;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  border-radius: var(--jm-radius-md);
+  cursor: pointer;
+  box-shadow: 0 1px 3px rgba(91, 108, 255, 0.28);
+  transition: background 0.15s, transform 0.05s;
 }
-aside.wm-sidebar-ds button.bg-primary:hover {
-  background: var(--jm-brand-600) !important;
-}
-aside.wm-sidebar-ds button.bg-primary:active {
-  transform: scale(0.99);
+.wm-sb-compose:hover  { background: var(--jm-brand-600); }
+.wm-sb-compose:active { transform: scale(0.99); }
+.wm-sb-compose .material-symbols-outlined { font-size: 17px; }
+
+/* Tek scroll alanı (folders + tools birlikte) */
+.wm-sb-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 4px 0 8px;
 }
 
-/* Sidebar nav item'ları (template x-for ile üretilen) */
-aside.wm-sidebar-ds nav button {
-  font-size: var(--jm-fs-md) !important;
-  padding: 7px 10px !important;
-  border-radius: 8px !important;
-  font-weight: 500 !important;
-  color: var(--jm-text-muted) !important;
-  letter-spacing: 0 !important;
-  min-height: 32px;
+/* Section başlığı (uppercase, ince) */
+.wm-sb-section__title {
+  margin: 14px 16px 4px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--jm-text-faint);
 }
-aside.wm-sidebar-ds nav button:hover:not(.bg-tertiary-fixed) {
-  background: var(--jm-surface-2) !important;
-}
-/* Aktif (seçili) klasör */
-aside.wm-sidebar-ds nav button.bg-tertiary-fixed,
-aside.wm-sidebar-ds nav button.dark\:bg-tertiary-container {
-  background: var(--jm-brand-50) !important;
-  color: var(--jm-brand-700) !important;
-  font-weight: 600 !important;
-}
-html.dark aside.wm-sidebar-ds nav button.bg-tertiary-fixed,
-html.dark aside.wm-sidebar-ds nav button.dark\:bg-tertiary-container {
-  background: rgba(91, 108, 255, 0.18) !important;
-  color: var(--jm-brand-300) !important;
+.wm-sb-scroll > .wm-sb-section__title:first-child { margin-top: 6px; }
+
+/* List wrapper */
+.wm-sb-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 0 8px;
 }
 
-/* Sidebar - unread badge */
-aside.wm-sidebar-ds nav button .bg-primary {
-  background: var(--jm-brand-500) !important;
-  color: #fff !important;
-  font-size: 10px !important;
-  padding: 1px 7px !important;
-  font-weight: 600 !important;
+.wm-sb-form { display: contents; }
+
+/* ====================================================================
+   .wm-sb-row — TEK satır kalıbı (folder, tool, hesap, çıkış hepsi aynı)
+   ==================================================================== */
+.wm-sb-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  height: 34px;
+  padding: 0 10px;
+  border: none;
+  background: transparent;
+  color: var(--jm-text-muted);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  text-align: left;
+  text-decoration: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+.wm-sb-row:hover {
+  background: var(--jm-surface-2);
+  color: var(--jm-text);
+}
+.wm-sb-row.is-active {
+  background: var(--jm-brand-50);
+  color: var(--jm-brand-700);
+  font-weight: 600;
+}
+html.dark .wm-sb-row.is-active {
+  background: rgba(91, 108, 255, 0.16);
+  color: var(--jm-brand-300);
+}
+.wm-sb-row.is-active .wm-sb-row__icon {
+  color: var(--jm-brand-600);
+}
+html.dark .wm-sb-row.is-active .wm-sb-row__icon {
+  color: var(--jm-brand-300);
+}
+
+.wm-sb-row__icon {
+  font-size: 19px !important;
+  flex-shrink: 0;
+  color: var(--jm-text-faint);
+  transition: color 0.12s;
+}
+.wm-sb-row:hover .wm-sb-row__icon { color: var(--jm-text-muted); }
+
+.wm-sb-row__label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wm-sb-row__badge {
+  flex-shrink: 0;
+  min-width: 18px;
+  height: 16px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--jm-brand-500);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Çıkış satırı — kırmızı vurgu ama aynı kalıp */
+.wm-sb-row--danger {
+  color: var(--jm-danger);
+}
+.wm-sb-row--danger:hover {
+  background: rgba(216, 58, 58, 0.08);
+  color: var(--jm-danger);
+}
+.wm-sb-row--danger .wm-sb-row__icon { color: var(--jm-danger); }
+
+/* Hesap satırı — avatar, aynı satır kalıbı */
+.wm-sb-row--account {
+  height: 40px;
+  cursor: default;
+}
+.wm-sb-row--account:hover {
+  background: transparent;
+  color: var(--jm-text-muted);
+}
+.wm-sb-row__avatar {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-weight: 700;
+  color: #fff;
+  flex-shrink: 0;
+  letter-spacing: 0;
+}
+.wm-sb-row--account .wm-sb-row__label {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--jm-text);
+}
+
+/* Footer (alt sabit) */
+.wm-sb-footer {
+  border-top: 1px solid var(--jm-border-soft);
+  padding: 10px 8px;
+  background: var(--jm-surface);
+}
+
+.wm-sb-quota {
+  padding: 4px 10px 10px;
+}
+.wm-sb-quota__head {
+  display: flex;
+  justify-content: space-between;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--jm-text-faint);
+  margin-bottom: 6px;
 }
 
 /* Top bar */
