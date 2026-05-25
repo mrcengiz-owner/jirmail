@@ -212,7 +212,8 @@
                     <h2 class="text-sm font-semibold text-white">Mail stack onarımı</h2>
                     <p class="text-xs text-slate-400 mt-1">Postfix routing, Gmail gönderimi ve stack doğrulama</p>
                 </div>
-                <a href="{% url 'repair' %}" class="btn btn-primary btn-sm">Onarım sayfası</a>
+                {% url 'repair' as repair_url %}
+                <a href="{{ repair_url|default:'/repair/' }}" class="btn btn-primary btn-sm">Onarım sayfası</a>
             </div>
         </section>
 

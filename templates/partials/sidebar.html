@@ -113,7 +113,8 @@
             <span class="text-sm font-medium">System Logs</span>
         </a>
 
-        <a href="{% url 'repair' %}"
+        {% url 'repair' as repair_url %}
+        <a href="{{ repair_url|default:'/repair/' }}"
            class="group flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all
                   {% if current_page == 'repair' %}bg-primary-500/10 text-primary-300 border border-primary-500/20{% else %}text-slate-400 hover:bg-slate-800/60 hover:text-white border border-transparent{% endif %}">
             <svg class="w-5 h-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">

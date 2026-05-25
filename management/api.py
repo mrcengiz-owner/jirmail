@@ -36,6 +36,9 @@ class HealthStatusSchema(Schema):
     pending_migrations: int = 0
     mail_repair_table: bool = True
     repair_route: bool = True
+    repair_route_error: str = ''
+    url_names_sample: list[str] = []
+    code_version: str = ''
 
 
 class SystemSettingsUpdateSchema(Schema):
@@ -160,6 +163,8 @@ def health_check(request):
     pending_migrations = 0
     mail_repair_table = True
     repair_route = True
+    repair_route_error = ''
+    url_names_sample: list[str] = []
     if checks['database']:
         try:
             from django.db.migrations.executor import MigrationExecutor
@@ -173,12 +178,34 @@ def health_check(request):
                 cursor.execute("SELECT 1 FROM management_mailrepairrun LIMIT 1")
         except Exception:
             mail_repair_table = False
-        try:
-            from django.urls import reverse
 
+    try:
+        from django.urls import reverse, get_resolver
+
+        try:
             reverse('repair')
-        except Exception:
+        except Exception as exc:
             repair_route = False
+            repair_route_error = f'{type(exc).__name__}: {exc}'
+        resolver = get_resolver()
+        url_names_sample = sorted(
+            [p.name for p in resolver.url_patterns if getattr(p, 'name', None)]
+        )
+    except Exception as exc:
+        repair_route = False
+        repair_route_error = f'resolver: {type(exc).__name__}: {exc}'
+
+    code_version = ''
+    try:
+        import subprocess
+        code_version = subprocess.check_output(
+            ['git', 'rev-parse', '--short', 'HEAD'],
+            cwd=str(settings.BASE_DIR),
+            stderr=subprocess.DEVNULL,
+            timeout=2,
+        ).decode().strip()
+    except Exception:
+        code_version = os.getenv('JIR_CODE_VERSION', '') or ''
 
     status_label = "healthy" if all_healthy else "degraded"
     if pending_migrations > 0 or not mail_repair_table or not repair_route:
@@ -194,6 +221,9 @@ def health_check(request):
         "pending_migrations": pending_migrations,
         "mail_repair_table": mail_repair_table,
         "repair_route": repair_route,
+        "repair_route_error": repair_route_error,
+        "url_names_sample": url_names_sample,
+        "code_version": code_version,
     }
 
 

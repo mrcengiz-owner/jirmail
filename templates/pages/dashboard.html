@@ -120,7 +120,8 @@
     <!-- Mail Operations -->
     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 mb-4 sm:mb-6">
 
-        <a href="{% url 'repair' %}"
+        {% url 'repair' as repair_url %}
+        <a href="{{ repair_url|default:'/repair/' }}"
            class="bento-card bento-card-hover block border border-warning-500/25 bg-warning-500/5 hover:border-warning-500/40 transition-colors">
             <div class="flex items-center justify-between mb-3">
                 <span class="text-xs sm:text-sm font-medium text-warning-300 uppercase tracking-wider">Mail Onarım</span>
