@@ -30,6 +30,30 @@ echo "=== Running migrations ==="
 # Prod'da makemigrations çalıştırma — migration çakışması / 502 riski
 python manage.py migrate --noinput
 
+echo "=== Ensuring mail repair schema ==="
+python manage.py shell << 'EOF' || true
+from django.core.management import call_command
+from django.db import connection
+
+def table_ok():
+    try:
+        with connection.cursor() as c:
+            c.execute("SELECT 1 FROM management_mailrepairrun LIMIT 1")
+        return True
+    except Exception:
+        return False
+
+if not table_ok():
+    print("management_mailrepairrun eksik — migrate management çalıştırılıyor…")
+    call_command("migrate", "management", verbosity=1, interactive=False)
+    if table_ok():
+        print("✓ management_mailrepairrun hazır")
+    else:
+        print("⚠ management_mailrepairrun hâlâ yok — panel onarım geçmişi devre dışı kalabilir")
+else:
+    print("✓ management_mailrepairrun mevcut")
+EOF
+
 echo "=== Collecting static files ==="
 mkdir -p /app/staticfiles
 python manage.py collectstatic --noinput --clear

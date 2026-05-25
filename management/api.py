@@ -33,6 +33,9 @@ class HealthStatusSchema(Schema):
     dovecot: bool
     outbound_delivery: bool = True
     outbound_mode: str = ''
+    pending_migrations: int = 0
+    mail_repair_table: bool = True
+    repair_route: bool = True
 
 
 class SystemSettingsUpdateSchema(Schema):
@@ -154,13 +157,43 @@ def health_check(request):
     core_ok = checks['database'] and checks['postfix'] and checks['dovecot']
     all_healthy = core_ok and checks.get('outbound_delivery', True)
 
+    pending_migrations = 0
+    mail_repair_table = True
+    repair_route = True
+    if checks['database']:
+        try:
+            from django.db.migrations.executor import MigrationExecutor
+
+            executor = MigrationExecutor(connection)
+            pending_migrations = len(executor.migration_plan(executor.loader.graph.leaf_nodes()))
+        except Exception:
+            pending_migrations = -1
+        try:
+            with connection.cursor() as cursor:
+                cursor.execute("SELECT 1 FROM management_mailrepairrun LIMIT 1")
+        except Exception:
+            mail_repair_table = False
+        try:
+            from django.urls import reverse
+
+            reverse('repair')
+        except Exception:
+            repair_route = False
+
+    status_label = "healthy" if all_healthy else "degraded"
+    if pending_migrations > 0 or not mail_repair_table or not repair_route:
+        status_label = "degraded"
+
     return {
-        "status": "healthy" if all_healthy else "degraded",
+        "status": status_label,
         "database": checks['database'],
         "postfix": checks['postfix'],
         "dovecot": checks['dovecot'],
         "outbound_delivery": checks.get('outbound_delivery', True),
         "outbound_mode": checks.get('outbound_mode') or '',
+        "pending_migrations": pending_migrations,
+        "mail_repair_table": mail_repair_table,
+        "repair_route": repair_route,
     }
 
 
@@ -1763,14 +1796,24 @@ def mail_repair_status_api(request):
     denied = _require_panel_api(request)
     if denied:
         return denied
-    from management.mail_repair import collect_repair_status, list_repair_actions
+    try:
+        from management.mail_repair import collect_repair_status, list_repair_actions, _sanitize_report
 
-    status = collect_repair_status()
-    return {
-        "status": "ok",
-        "actions": list_repair_actions(),
-        **status,
-    }
+        status = collect_repair_status()
+        return {
+            "status": "ok",
+            "actions": list_repair_actions(),
+            **(_sanitize_report(status) if isinstance(status, dict) else {}),
+        }
+    except Exception as exc:
+        import logging
+        logging.exception('mail-repair/status')
+        return {
+            "status": "error",
+            "message": f"Durum alınamadı: {exc}",
+            "checks": [],
+            "actions": [],
+        }
 
 
 @router.get("/mail-repair/history", summary="Onarım geçmişi (FULL)")
@@ -1778,9 +1821,14 @@ def mail_repair_history_api(request, limit: int = 20):
     denied = _require_panel_api(request)
     if denied:
         return denied
-    from management.mail_repair import list_repair_history
+    try:
+        from management.mail_repair import list_repair_history
 
-    return {"status": "ok", "history": list_repair_history(limit=limit)}
+        return {"status": "ok", "history": list_repair_history(limit=limit)}
+    except Exception as exc:
+        import logging
+        logging.exception('mail-repair/history')
+        return {"status": "ok", "history": [], "warning": str(exc)}
 
 
 @router.post("/mail-repair/run", summary="Tek onarım işlemi (FULL veya JIR_LOCAL_KEY)")
