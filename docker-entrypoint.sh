@@ -1,22 +1,12 @@
 #!/bin/bash
 set -e
 
-CONFIG_FILE="/app/config/db_config.json"
-INSTALLED_FLAG="/app/config/.installed"
+# Cache flag'leri /tmp altında — /app/config Django code klasörü, volume olamaz.
+INSTALLED_FLAG="/tmp/.jir-installed"
 POST_DEPLOY_LOG="${JIR_POST_DEPLOY_LOG:-/tmp/jir-post-deploy.log}"
 
-# DB config varsa yükle
-if [ -f "$CONFIG_FILE" ]; then
-    echo "=== Loading persisted database config ==="
-    python manage.py shell << 'EOF' || true
-import json
-from django.conf import settings
-with open('/app/config/db_config.json') as f:
-    db_conf = json.load(f)
-    settings.DATABASES['default'] = db_conf
-    print(f"DB config loaded: {db_conf.get('ENGINE')}")
-EOF
-fi
+# DB yapılandırması artık DATABASE_URL env değişkeninden geliyor — eski db_config.json
+# fallback'i kaldırıldı (Django config klasörünü override eden volume'la birlikte).
 
 if [ "${JIR_COMPOSE_STACK}" = "1" ]; then
     echo "=== Compose stack: mail TLS (Postfix/Dovecot aynı ağda) ==="
@@ -88,7 +78,7 @@ for rel in css/webmail.css js/webmail/core.js js/webmail/mail-app.js; do
     fi
 done
 
-# Kurulum durumunu kontrol et
+# Kurulum durumunu kontrol et (cache /tmp/.jir-installed dosyasında)
 if [ -f "$INSTALLED_FLAG" ]; then
     echo "✓ System already installed (cached flag found)"
 else
@@ -98,7 +88,7 @@ from saas.models import SystemConfig
 config = SystemConfig.objects.first()
 if config and config.is_installed:
     print(f"✓ System already installed (Instance: {config.instance_id})")
-    with open('/app/config/.installed', 'w') as f:
+    with open('/tmp/.jir-installed', 'w') as f:
         f.write(str(config.instance_id))
 else:
     print("⚠ System not yet installed - Setup wizard will appear")

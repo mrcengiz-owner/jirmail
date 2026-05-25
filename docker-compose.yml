@@ -10,7 +10,15 @@ services:
     container_name: jir_django
     restart: unless-stopped
     entrypoint: ["./docker-entrypoint.sh"]
-    command: ["gunicorn", "--bind", "0.0.0.0:8000", "--workers", "4", "--timeout", "120", "config.wsgi:application"]
+    # gthread worker class: SSE long-polling (webmail) sync worker'ı bloke etmesin diye.
+    # threads sayesinde tek worker birden fazla request paralel handle edebilir.
+    command: ["gunicorn", "--bind", "0.0.0.0:8000",
+              "--worker-class", "gthread",
+              "--workers", "4", "--threads", "8",
+              "--timeout", "300",
+              "--graceful-timeout", "30",
+              "--keep-alive", "5",
+              "config.wsgi:application"]
     environment:
       JIR_COMPOSE_STACK: "1"
       DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-jir_mail_prod}
@@ -38,8 +46,9 @@ services:
       SMTP_RELAY_PASSWORD: ${SMTP_RELAY_PASSWORD:-}
       PYTHONUNBUFFERED: "1"
       DEBUG: "False"
+    # NOT: /app/config bir Docker volume'üne mount EDİLMEZ — Django'nun config klasörünü
+    # (settings.py / urls.py / wsgi.py) override eder ve image güncellemeleri propagate olmaz.
     volumes:
-      - config_data:/app/config
       - jir_mail_tls:/etc/jir-mail/tls
       - mail_data:/var/mail
       - /var/run/docker.sock:/var/run/docker.sock:ro
@@ -87,8 +96,8 @@ services:
       SMTP_RELAY_PORT: ${SMTP_RELAY_PORT:-587}
       SMTP_RELAY_USER: ${SMTP_RELAY_USER:-}
       SMTP_RELAY_PASSWORD: ${SMTP_RELAY_PASSWORD:-}
+    # config_data mount'u BİLİNÇLİ olarak yok — bkz. django servisindeki açıklama.
     volumes:
-      - config_data:/app/config
       - /var/run/docker.sock:/var/run/docker.sock:ro
     depends_on:
       postgres:
@@ -240,8 +249,8 @@ volumes:
     name: jir_mail_data
   jir_mail_tls:
     name: jir_mail_tls
-  config_data:
-    name: jir_config_data
+  # config_data volume kaldırıldı — Django config klasörünü (settings.py/urls.py) override
+  # ediyordu ve image güncellemeleri tutmuyordu. Migration state DB'de, secrets env'de.
 
 networks:
   jir_network:
