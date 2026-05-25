@@ -27,7 +27,7 @@
         root.classList.toggle('wm-dark', t === 'dark');
 
         var meta = document.querySelector('meta[name="theme-color"]');
-        if (meta) meta.setAttribute('content', t === 'light' ? '#f8f9fa' : '#1a1c1e');
+        if (meta) meta.setAttribute('content', t === 'light' ? '#f4f4f8' : '#16161d');
         var scheme = document.querySelector('meta[name="color-scheme"]');
         if (scheme) scheme.setAttribute('content', t === 'light' ? 'light' : 'dark');
         try { localStorage.setItem(STORAGE_KEY, t); } catch (e) { /* ignore */ }

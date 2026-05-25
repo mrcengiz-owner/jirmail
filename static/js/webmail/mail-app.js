@@ -18,9 +18,10 @@ document.addEventListener('alpine:init', function() {
         trash: 'Çöp kutusu',
         starred: 'Yıldızlı'
     };
+    // Jîr brand purple paletinden türetilmiş soft avatar tonları (ProtonMail tarzı tek-aileli).
     var AVATAR_COLORS = [
-        '#6366f1', '#8b5cf6', '#10b981', '#f43f5e',
-        '#f59e0b', '#3b82f6', '#ec4899', '#06b6d4'
+        '#5b6cff', '#7785ff', '#4855e6', '#3641cf',
+        '#6f7aff', '#8b94ff', '#5566eb', '#4351d6'
     ];
     Alpine.data('mailApp', function() {
         return {

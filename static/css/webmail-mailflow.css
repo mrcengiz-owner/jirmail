@@ -1,55 +1,19 @@
-/* MailFlow / Material — scrollbar, toast, dark mode yüzeyler, Quill uyumu */
+/* Webmail — temel utility'ler (toast, mail-body, quill, scrollbar).
+   Renk paletini webmail-proton.css'deki --jm-* değişkenlerinden alır.
+   webmail-proton.css'in BU dosyadan SONRA yüklenmesi gerekir
+   (master tema, override önceliği). */
 
 .wm-material-icon {
-  font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+  font-variation-settings: 'FILL' 0, 'wght' 350, 'GRAD' 0, 'opsz' 24;
 }
 .wm-material-icon-fill {
   font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24;
 }
 
-html.dark body {
-  background-color: rgb(43 43 43);
-  color: rgb(240 242 244);
-}
+/* Body / shell yedek tonları — gerçek override webmail-proton.css'de */
+html.dark body { background-color: #16161d; color: #e7e9f3; }
 
-html.dark .wm-mailflow-shell {
-  background-color: rgb(43 43 43);
-}
-
-/* Karanlık modda yüzeyler — Tailwind CDN token’larına yakın tonlar */
-html.dark aside.wm-sidebar-ds {
-  background-color: #2e3132;
-  border-color: #454652;
-}
-
-html.dark aside.wm-sidebar-ds .wm-nav-entry:hover {
-  background-color: rgba(255,255,255,0.06);
-}
-
-html.dark .wm-list-column {
-  background-color: #2e3132;
-  border-color: #454652;
-}
-
-html.dark .wm-read-pane {
-  background-color: #252829;
-}
-
-html.dark header.wm-topbar-ds {
-  background-color: #2e3132;
-  border-color: #454652;
-}
-
-::-webkit-scrollbar { width: 6px; height: 6px; }
-::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb {
-  background-color: #d9dadb;
-  border-radius: 10px;
-}
-html.dark ::-webkit-scrollbar-thumb { background-color: #5c5e66; }
-::-webkit-scrollbar-thumb:hover { background-color: #c5c5d4; }
-html.dark ::-webkit-scrollbar-thumb:hover { background-color: #757683; }
-
+/* Toast (webmail-proton.css'de stillerle override edilir) */
 .wm-toast-root {
   position: fixed;
   top: 1rem;
@@ -61,101 +25,55 @@ html.dark ::-webkit-scrollbar-thumb:hover { background-color: #757683; }
   max-width: min(360px, calc(100vw - 2rem));
   pointer-events: none;
 }
-
 .wm-toast {
   pointer-events: auto;
-  padding: 0.65rem 1rem;
-  border-radius: 0.75rem;
-  font-size: 0.8125rem;
+  padding: 10px 14px;
+  border-radius: 10px;
+  font-size: 13px;
   font-weight: 500;
-  background: #edeeef;
-  border: 1px solid #c5c5d4;
-  color: #191c1d;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
 }
 
-html.dark .wm-toast {
-  background: #3d4042;
-  border-color: #5c5e66;
-  color: #e8eaed;
+/* Mail body — mailflow seviyesinde temel */
+.wm-mail-body {
+  line-height: 1.6;
+  font-size: 14px;
+  word-break: break-word;
+}
+.wm-mail-body img { max-width: 100%; height: auto; border-radius: 8px; }
+.wm-mail-body pre {
+  padding: 12px;
+  border-radius: 8px;
+  overflow-x: auto;
+  font-size: 12.5px;
 }
 
+/* Quota bar (renk webmail-proton.css'de) */
+.wm-quota-bar {
+  height: 4px;
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+/* Bounce banner — hizalama */
 .wm-bounce-banner code {
   font-family: ui-monospace, monospace;
-  background: rgba(0, 0, 0, 0.06);
   padding: 0.1em 0.35em;
   border-radius: 4px;
 }
 
-html.dark .wm-bounce-banner code {
-  background: rgba(255, 255, 255, 0.08);
-}
-
-.wm-toast--success { border-color: rgba(16, 43, 138, 0.35); color: #102b8a; }
-html.dark .wm-toast--success { color: #b9c3ff; border-color: rgba(185, 195, 255, 0.4); }
-
-.wm-toast--error { border-color: rgba(186, 26, 26, 0.4); color: #ba1a1a; }
-
-.wm-compose-editor .ql-toolbar {
-  border-color: #c5c5d4 !important;
-  border-radius: 0.5rem 0.5rem 0 0;
-}
-
-html.dark .wm-compose-editor .ql-toolbar {
-  background-color: #2e3132 !important;
-  border-color: #454652 !important;
-}
-
-html.dark .wm-compose-editor .ql-container {
-  background-color: #252829 !important;
-  border-color: #454652 !important;
-  color: #e8eaed;
-}
-
+/* Quill compose editor — taban (renk webmail-proton.css'de) */
 .wm-compose-editor .ql-container {
   min-height: 160px;
-  border-radius: 0 0 0.5rem 0.5rem;
+  border-radius: 0 0 6px 6px;
 }
-
+.wm-compose-editor .ql-toolbar {
+  border-radius: 6px 6px 0 0;
+}
 .wm-compose-editor .ql-editor.ql-blank::before {
-  color: #757683;
   font-style: normal;
 }
 
-html.dark .wm-compose-editor .ql-editor.ql-blank::before { color: #9aa0ab; }
-
-.wm-mail-body {
-  line-height: 1.65;
-  font-size: 1rem;
-  word-break: break-word;
-}
-
-.wm-mail-body img { max-width: 100%; height: auto; border-radius: 0.5rem; }
-.wm-mail-body a { color: #273e9b; }
-html.dark .wm-mail-body a { color: #b9c3ff; }
-.wm-mail-body pre {
-  background: #f3f4f5;
-  padding: 0.75rem;
-  border-radius: 0.5rem;
-  overflow-x: auto;
-}
-html.dark .wm-mail-body pre { background: #1a1c1e; color: #e2e8f0; }
-
-.wm-quota-bar {
-  height: 4px;
-  border-radius: 999px;
-  background: #edeeef;
-  overflow: hidden;
-}
-html.dark .wm-quota-bar { background: #454652; }
-
-.wm-quota-bar__fill {
-  height: 100%;
-  border-radius: inherit;
-  background: linear-gradient(90deg, #102b8a, #3b54c3);
-  transition: width 0.3s ease;
-}
-
+/* Modal gölgesi yedek (webmail-proton.css'de override edilir) */
 .modal-shadow {
   box-shadow:
     0 8px 32px rgba(0, 0, 0, 0.08),
@@ -168,3 +86,7 @@ html.dark .wm-quota-bar { background: #454652; }
     display: none !important;
   }
 }
+
+/* Scrollbar (webmail-proton.css'de override edilir, burası yedek) */
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: transparent; }

@@ -5,79 +5,82 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <meta name="csrf-token" content="{{ csrf_token }}">
-    <meta name="theme-color" content="#f8f9fa">
-    <meta name="color-scheme" content="light">
+    <meta name="theme-color" content="#f4f4f8">
+    <meta name="color-scheme" content="light dark">
     <title>{% block title %}Webmail — Jîr-Mail{% endblock %}</title>
     <link rel="icon" type="image/svg+xml" href="{% static 'brand/favicon.svg' %}">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
-    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0..1,0&amp;display=swap" rel="stylesheet"/>
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,350,0..1,0&amp;display=swap" rel="stylesheet"/>
     <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
     <script id="tailwind-mailflow-config">
+      // Jîr-Mail brand purple paletinden türetilmiş Tailwind tema. Tüm "primary",
+      // "secondary", "tertiary" token'ları brand'e oturuyor. Daha ince kontrol
+      // webmail-proton.css'de !important utility override'ları ile yapılıyor.
       tailwind.config = {
         darkMode: 'class',
         theme: {
           extend: {
             colors: {
-              'tertiary-fixed': '#e0e2ee',
-              'inverse-surface': '#2e3132',
-              'primary-fixed': '#dde1ff',
-              'secondary-fixed': '#dde1ff',
-              'surface-tint': '#4257b4',
-              surface: '#f8f9fa',
-              'secondary-container': '#768eff',
-              'on-primary-container': '#acbaff',
-              tertiary: '#32353f',
+              primary: '#5b6cff',
+              'primary-fixed': '#dfe3ff',
+              'primary-fixed-dim': '#c4cbff',
+              'primary-container': '#dfe3ff',
               'on-primary': '#ffffff',
-              'on-tertiary-container': '#babdc8',
-              'tertiary-container': '#494c56',
-              'on-tertiary': '#ffffff',
-              'outline-variant': '#c5c5d4',
-              'surface-container-lowest': '#ffffff',
-              'on-secondary-container': '#002186',
-              'surface-container-low': '#f3f4f5',
-              'on-secondary-fixed-variant': '#1e3aaa',
-              'primary-container': '#2e44a1',
-              'on-primary-fixed-variant': '#273e9b',
+              'on-primary-container': '#3641cf',
+              'on-primary-fixed': '#1f2880',
+              'on-primary-fixed-variant': '#3641cf',
+              secondary: '#4855e6',
+              'secondary-container': '#dfe3ff',
+              'secondary-fixed': '#dfe3ff',
+              'secondary-fixed-dim': '#c4cbff',
               'on-secondary': '#ffffff',
-              'on-background': '#191c1d',
-              background: '#f8f9fa',
-              'on-error-container': '#93000a',
-              'surface-container-high': '#e7e8e9',
-              'on-tertiary-fixed-variant': '#434750',
-              'error-container': '#ffdad6',
-              'on-primary-fixed': '#001356',
-              'surface-container': '#edeeef',
-              'surface-container-highest': '#e1e3e4',
-              secondary: '#3b54c3',
-              'on-surface': '#191c1d',
-              'secondary-fixed-dim': '#b9c3ff',
-              'surface-bright': '#f8f9fa',
-              'inverse-primary': '#b9c3ff',
-              primary: '#102b8a',
-              error: '#ba1a1a',
-              'on-tertiary-fixed': '#181b24',
-              'on-secondary-fixed': '#001257',
-              'inverse-on-surface': '#f0f1f2',
-              'on-surface-variant': '#454652',
-              outline: '#757683',
-              'surface-variant': '#e1e3e4',
-              'surface-dim': '#d9dadb',
+              'on-secondary-container': '#1f2880',
+              tertiary: '#eef0ff',
+              'tertiary-fixed': '#eef0ff',
+              'tertiary-container': '#dfe3ff',
+              'on-tertiary': '#1f2880',
+              'on-tertiary-container': '#3641cf',
+              'on-tertiary-fixed': '#1f2880',
+              'on-tertiary-fixed-variant': '#3641cf',
+
+              surface: '#ffffff',
+              background: '#f4f4f8',
+              'on-surface': '#1a1d2e',
+              'on-surface-variant': '#5b6175',
+              'on-background': '#1a1d2e',
+              'surface-bright': '#ffffff',
+              'surface-dim': '#eaeaf2',
+              'surface-tint': '#5b6cff',
+              'surface-variant': '#f8f9fc',
+              'surface-container-lowest': '#ffffff',
+              'surface-container-low': '#f8f9fc',
+              'surface-container': '#f4f4f8',
+              'surface-container-high': '#eef0ff',
+              'surface-container-highest': '#e5e7ee',
+              'inverse-surface': '#1f1f29',
+              'inverse-on-surface': '#e7e9f3',
+              'inverse-primary': '#9da7ff',
+
+              'outline-variant': '#e5e7ee',
+              outline: '#8a8fa6',
+              error: '#d83a3a',
+              'error-container': '#fde2e2',
               'on-error': '#ffffff',
-              'tertiary-fixed-dim': '#c4c6d2',
-              'primary-fixed-dim': '#b9c3ff'
+              'on-error-container': '#7a1313'
             },
             borderRadius: {
-              DEFAULT: '0.25rem',
+              DEFAULT: '0.375rem',
               lg: '0.5rem',
-              xl: '0.75rem',
+              xl: '0.625rem',
+              '2xl': '0.875rem',
               full: '9999px'
             },
             spacing: {
               'list-width': '360px',
-              'sidebar-width': '256px',
-              'container-padding': '24px',
-              gutter: '16px',
-              'stack-md': '16px',
+              'sidebar-width': '232px',
+              'container-padding': '16px',
+              gutter: '14px',
+              'stack-md': '14px',
               'stack-sm': '8px'
             },
             fontFamily: {
@@ -89,28 +92,31 @@
               'body-lg': ['Inter', 'system-ui', 'sans-serif'],
               'headline-md': ['Inter', 'system-ui', 'sans-serif']
             },
+            // Material 3 fontSize token'ları kompaktlaştırıldı (Proton density).
+            // Daha ince kontrol için .text-* override'ları webmail-proton.css'de.
             fontSize: {
-              'body-md': ['14px', { lineHeight: '20px', fontWeight: '400' }],
-              'label-md': ['12px', { lineHeight: '16px', letterSpacing: '0.02em', fontWeight: '500' }],
-              'display-sm': ['24px', { lineHeight: '32px', letterSpacing: '-0.01em', fontWeight: '600' }],
-              'headline-sm': ['16px', { lineHeight: '24px', fontWeight: '600' }],
-              'label-sm': ['11px', { lineHeight: '14px', fontWeight: '600' }],
-              'body-lg': ['16px', { lineHeight: '24px', fontWeight: '400' }],
-              'headline-md': ['20px', { lineHeight: '28px', letterSpacing: '-0.01em', fontWeight: '600' }]
+              'body-md':     ['13px', { lineHeight: '20px', fontWeight: '400' }],
+              'body-lg':     ['14px', { lineHeight: '22px', fontWeight: '400' }],
+              'label-sm':    ['11px', { lineHeight: '14px', fontWeight: '600' }],
+              'label-md':    ['12px', { lineHeight: '16px', fontWeight: '500' }],
+              'headline-sm': ['13px', { lineHeight: '18px', fontWeight: '600' }],
+              'headline-md': ['16px', { lineHeight: '22px', fontWeight: '600', letterSpacing: '-0.005em' }],
+              'display-sm':  ['18px', { lineHeight: '24px', fontWeight: '600', letterSpacing: '-0.01em' }]
             }
           }
         }
       };
     </script>
-    <link rel="stylesheet" href="{% url 'webmail:asset' asset_path='css/webmail-mailflow.css' %}?v=20260524a">
+    <link rel="stylesheet" href="{% url 'webmail:asset' asset_path='css/webmail-mailflow.css' %}?v=20260525a">
     <link href="https://cdn.jsdelivr.net/npm/quill@2.0.2/dist/quill.snow.css" rel="stylesheet">
+    <link rel="stylesheet" href="{% url 'webmail:asset' asset_path='css/webmail-proton.css' %}?v=20260525a">
     {% block extra_head %}{% endblock %}
 </head>
 <body class="bg-background text-on-surface font-body-md text-body-md h-dvh w-full overflow-hidden selection:bg-primary-fixed selection:text-on-primary-fixed">
     {% block body %}{% endblock %}
     <div id="wm-toast-root" class="wm-toast-root" aria-live="polite"></div>
-    <script src="{% url 'webmail:asset' asset_path='js/webmail/theme.js' %}?v=20260524a"></script>
-    <script src="{% url 'webmail:asset' asset_path='js/webmail/core.js' %}?v=20260524a"></script>
+    <script src="{% url 'webmail:asset' asset_path='js/webmail/theme.js' %}?v=20260525a"></script>
+    <script src="{% url 'webmail:asset' asset_path='js/webmail/core.js' %}?v=20260525a"></script>
     <script src="https://cdn.jsdelivr.net/npm/dompurify@3.1.6/dist/purify.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/quill@2.0.2/dist/quill.js"></script>
     {% block extra_scripts %}{% endblock %}

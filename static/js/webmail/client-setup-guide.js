@@ -2,9 +2,10 @@
  * Webmail — cihaz / istemci kurulum rehberi (IMAP/SMTP)
  */
 document.addEventListener('alpine:init', function() {
+    // Jîr brand purple paletinden türetilmiş soft avatar tonları (mail-app.js ile aynı).
     var AVATAR_COLORS = [
-        '#8b6cef', '#6d4aff', '#3dd68c', '#f66f7a',
-        '#f5c451', '#5b8def', '#e879f9', '#38bdf8'
+        '#5b6cff', '#7785ff', '#4855e6', '#3641cf',
+        '#6f7aff', '#8b94ff', '#5566eb', '#4351d6'
     ];
 
     Alpine.data('clientSetupGuide', function() {

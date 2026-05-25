@@ -1,8 +1,569 @@
-/* ProtonMail esintili webmail — Tailwind üzerine ince katman */
+/* =====================================================================
+   Jîr-Mail webmail — Proton esintili tasarım sistemi
+   Tek master tema dosyası: brand renkler, tipografi, density tweaks ve
+   Tailwind / Material 3 utility override'ları burada.
 
-.wm-proton {
-  font-family: Inter, system-ui, sans-serif;
+   Yükleme sırası: webmail-mailflow.css → webmail-settings.css → BU dosya
+   (override önceliği için en sonda).
+   ===================================================================== */
+
+/* --------------------------------------------------------------------- */
+/* 1) Brand renk paleti (CSS değişkenleri)                                */
+/* --------------------------------------------------------------------- */
+
+:root {
+  /* Jîr brand purple (mor-mavi) */
+  --jm-brand-50:  #eef0ff;
+  --jm-brand-100: #dfe3ff;
+  --jm-brand-200: #c4cbff;
+  --jm-brand-300: #9da7ff;
+  --jm-brand-400: #7785ff;
+  --jm-brand-500: #5b6cff;   /* ana brand */
+  --jm-brand-600: #4855e6;   /* hover */
+  --jm-brand-700: #3641cf;   /* active */
+  --jm-brand-800: #2a35a8;
+  --jm-brand-900: #1f2880;
+
+  /* Light tema yüzeyleri */
+  --jm-bg:           #f4f4f8;
+  --jm-surface:      #ffffff;
+  --jm-surface-2:    #f8f9fc;
+  --jm-surface-3:    #eef0ff;     /* primary-soft */
+  --jm-border:       #e5e7ee;
+  --jm-border-soft:  #eef0f4;
+  --jm-text:         #1a1d2e;
+  --jm-text-muted:   #5b6175;
+  --jm-text-faint:   #8a8fa6;
+  --jm-on-brand:     #ffffff;
+  --jm-success:      #1b9265;
+  --jm-warning:      #d97706;
+  --jm-danger:       #d83a3a;
+  --jm-info:         #2563eb;
+
+  /* Tipografi */
+  --jm-font: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --jm-fs-xs:  11px;
+  --jm-fs-sm:  12px;
+  --jm-fs-md:  13px;
+  --jm-fs-lg:  14px;
+  --jm-fs-xl:  16px;
+  --jm-fs-h1:  18px;
+  --jm-fs-h2:  16px;
+
+  /* Density */
+  --jm-row-h: 64px;
+  --jm-sidebar-w: 232px;
+  --jm-list-w: 360px;
+  --jm-topbar-h: 48px;
+  --jm-radius-sm: 6px;
+  --jm-radius-md: 10px;
+  --jm-radius-lg: 14px;
+  --jm-radius-pill: 999px;
+
+  /* Gölgeler */
+  --jm-shadow-1: 0 1px 2px rgba(20, 23, 50, 0.06);
+  --jm-shadow-2: 0 4px 12px rgba(20, 23, 50, 0.08);
+  --jm-shadow-modal: 0 16px 48px rgba(20, 23, 50, 0.18), 0 2px 8px rgba(20, 23, 50, 0.06);
 }
+
+html.dark {
+  --jm-bg:           #16161d;
+  --jm-surface:      #1f1f29;
+  --jm-surface-2:    #262732;
+  --jm-surface-3:    #2e2f3e;
+  --jm-border:       rgba(255, 255, 255, 0.07);
+  --jm-border-soft:  rgba(255, 255, 255, 0.04);
+  --jm-text:         #e7e9f3;
+  --jm-text-muted:   #b1b4c4;
+  --jm-text-faint:   #777a8c;
+  --jm-on-brand:     #ffffff;
+  --jm-shadow-1: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --jm-shadow-2: 0 4px 14px rgba(0, 0, 0, 0.4);
+  --jm-shadow-modal: 0 16px 48px rgba(0, 0, 0, 0.6);
+}
+
+/* --------------------------------------------------------------------- */
+/* 2) Body — temel tipografi (Tailwind body class'ı üzerine)              */
+/* --------------------------------------------------------------------- */
+
+html.wm-html {
+  font-size: var(--jm-fs-md);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  font-family: var(--jm-font);
+  background: var(--jm-bg) !important;
+  color: var(--jm-text) !important;
+  font-size: var(--jm-fs-md);
+  line-height: 1.5;
+}
+
+html.dark body {
+  background: var(--jm-bg) !important;
+  color: var(--jm-text) !important;
+}
+
+/* --------------------------------------------------------------------- */
+/* 3) Material 3 / Tailwind utility override'ları                         */
+/* Material 3 fontSize token'ları çok büyüktü — Proton density'sine indir.*/
+/* --------------------------------------------------------------------- */
+
+/* Font boyutu utility'leri (Material 3 token'ları yeniden boyutla) */
+.text-body-md   { font-size: var(--jm-fs-md) !important; line-height: 1.5 !important; font-weight: 400 !important; }
+.text-body-lg   { font-size: var(--jm-fs-lg) !important; line-height: 1.55 !important; font-weight: 400 !important; }
+.text-label-sm  { font-size: var(--jm-fs-xs) !important; line-height: 1.3 !important; font-weight: 600 !important; letter-spacing: 0.02em !important; }
+.text-label-md  { font-size: var(--jm-fs-sm) !important; line-height: 1.35 !important; font-weight: 500 !important; }
+.text-headline-sm { font-size: var(--jm-fs-md) !important; line-height: 1.4 !important; font-weight: 600 !important; }
+.text-headline-md { font-size: var(--jm-fs-xl) !important; line-height: 1.4 !important; font-weight: 600 !important; letter-spacing: -0.005em !important; }
+.text-display-sm  { font-size: var(--jm-fs-h1) !important; line-height: 1.35 !important; font-weight: 600 !important; letter-spacing: -0.01em !important; }
+.text-display-md  { font-size: 22px !important; line-height: 1.3 !important; font-weight: 600 !important; letter-spacing: -0.01em !important; }
+
+/* font-* utility'leri (Tailwind config'de tanımlıydı) — boş bırak (etki yok) */
+
+/* Yüzey renkleri (Tailwind utility'leri) → Jîr brand palette ile yeniden */
+.bg-background, body.bg-background           { background: var(--jm-bg) !important; }
+.bg-surface                                  { background: var(--jm-surface) !important; }
+.bg-surface-container-lowest                 { background: var(--jm-surface) !important; }
+.bg-surface-container-low,
+.bg-surface-container                        { background: var(--jm-surface-2) !important; }
+.bg-surface-container-high,
+.bg-surface-container-highest                { background: var(--jm-surface-3) !important; }
+.bg-surface-bright                           { background: var(--jm-surface) !important; }
+.bg-surface-variant                          { background: var(--jm-surface-2) !important; }
+
+.bg-inverse-surface                          { background: var(--jm-surface) !important; }
+.bg-tertiary                                 { background: var(--jm-surface-3) !important; }
+.bg-tertiary-fixed                           { background: var(--jm-brand-50) !important; }
+.bg-tertiary-container                       { background: var(--jm-surface-3) !important; }
+
+/* Primary (brand) */
+.bg-primary                                  { background: var(--jm-brand-500) !important; }
+.bg-primary-fixed                            { background: var(--jm-brand-100) !important; }
+.bg-primary-container                        { background: var(--jm-brand-100) !important; }
+.text-primary                                { color: var(--jm-brand-600) !important; }
+.text-primary-fixed                          { color: var(--jm-brand-300) !important; }
+.text-on-primary                             { color: var(--jm-on-brand) !important; }
+.text-on-primary-container                   { color: var(--jm-brand-700) !important; }
+.text-on-primary-fixed                       { color: var(--jm-brand-700) !important; }
+
+/* Secondary — brand'in soft tonu */
+.bg-secondary                                { background: var(--jm-brand-600) !important; }
+.bg-secondary-container                      { background: var(--jm-brand-100) !important; }
+.text-secondary                              { color: var(--jm-brand-600) !important; }
+.text-on-secondary                           { color: var(--jm-on-brand) !important; }
+
+/* Metin renkleri */
+.text-on-surface                             { color: var(--jm-text) !important; }
+.text-on-surface-variant                     { color: var(--jm-text-muted) !important; }
+.text-on-background                          { color: var(--jm-text) !important; }
+.text-outline                                { color: var(--jm-text-faint) !important; }
+
+/* Border / outline */
+.border-outline                              { border-color: var(--jm-border) !important; }
+.border-outline-variant                      { border-color: var(--jm-border) !important; }
+.border-surface-variant                      { border-color: var(--jm-border-soft) !important; }
+.border-l-primary                            { border-left-color: var(--jm-brand-500) !important; }
+
+/* Error palette — kalibrasyon */
+.text-error                                  { color: var(--jm-danger) !important; }
+.bg-error-container                          { background: rgba(216, 58, 58, 0.08) !important; }
+.text-on-error                               { color: #fff !important; }
+
+/* Dark tema için Tailwind dark: utility'leri zaten html.dark altında çalışır,
+   biz CSS değişkenleri zaten dark'ta override ettiğimiz için ek iş yok. */
+html.dark .bg-tertiary,
+html.dark .bg-tertiary-container,
+html.dark .bg-tertiary-fixed,
+html.dark .bg-inverse-surface,
+html.dark .bg-surface-container-lowest,
+html.dark .bg-surface-container-low,
+html.dark .bg-surface,
+html.dark .bg-background {
+  background: var(--jm-surface) !important;
+}
+html.dark .bg-surface-container-high,
+html.dark .bg-surface-container-highest {
+  background: var(--jm-surface-2) !important;
+}
+
+/* --------------------------------------------------------------------- */
+/* 4) Webmail layout — sidebar / topbar / panel / mail item               */
+/* --------------------------------------------------------------------- */
+
+/* Shell — workspace arka planı */
+.wm-mailflow-shell {
+  background: var(--jm-bg) !important;
+  color: var(--jm-text);
+}
+
+/* Sidebar */
+aside.wm-sidebar-ds {
+  width: var(--jm-sidebar-w) !important;
+  background: var(--jm-surface) !important;
+  border-color: var(--jm-border) !important;
+  padding: 14px 10px !important;
+}
+
+aside.wm-sidebar-ds .text-headline-md {
+  font-size: 15px !important;
+  font-weight: 700 !important;
+  color: var(--jm-brand-600) !important;
+}
+
+/* Sidebar "Yeni mesaj" butonu — brand */
+aside.wm-sidebar-ds button.bg-primary {
+  background: var(--jm-brand-500) !important;
+  color: #fff !important;
+  font-size: var(--jm-fs-md) !important;
+  font-weight: 600 !important;
+  border-radius: var(--jm-radius-md) !important;
+  padding: 10px 14px !important;
+  box-shadow: 0 1px 3px rgba(91, 108, 255, 0.25);
+  transition: background 0.15s ease, transform 0.05s ease;
+}
+aside.wm-sidebar-ds button.bg-primary:hover {
+  background: var(--jm-brand-600) !important;
+}
+aside.wm-sidebar-ds button.bg-primary:active {
+  transform: scale(0.99);
+}
+
+/* Sidebar nav item'ları (template x-for ile üretilen) */
+aside.wm-sidebar-ds nav button {
+  font-size: var(--jm-fs-md) !important;
+  padding: 7px 10px !important;
+  border-radius: 8px !important;
+  font-weight: 500 !important;
+  color: var(--jm-text-muted) !important;
+  letter-spacing: 0 !important;
+  min-height: 32px;
+}
+aside.wm-sidebar-ds nav button:hover:not(.bg-tertiary-fixed) {
+  background: var(--jm-surface-2) !important;
+}
+/* Aktif (seçili) klasör */
+aside.wm-sidebar-ds nav button.bg-tertiary-fixed,
+aside.wm-sidebar-ds nav button.dark\:bg-tertiary-container {
+  background: var(--jm-brand-50) !important;
+  color: var(--jm-brand-700) !important;
+  font-weight: 600 !important;
+}
+html.dark aside.wm-sidebar-ds nav button.bg-tertiary-fixed,
+html.dark aside.wm-sidebar-ds nav button.dark\:bg-tertiary-container {
+  background: rgba(91, 108, 255, 0.18) !important;
+  color: var(--jm-brand-300) !important;
+}
+
+/* Sidebar - unread badge */
+aside.wm-sidebar-ds nav button .bg-primary {
+  background: var(--jm-brand-500) !important;
+  color: #fff !important;
+  font-size: 10px !important;
+  padding: 1px 7px !important;
+  font-weight: 600 !important;
+}
+
+/* Top bar */
+header.wm-topbar-ds {
+  height: 52px !important;
+  min-height: 52px;
+  padding: 0 16px !important;
+  background: var(--jm-surface) !important;
+  border-color: var(--jm-border) !important;
+}
+header.wm-topbar-ds input[type="search"] {
+  background: var(--jm-surface-2) !important;
+  border-color: var(--jm-border) !important;
+  font-size: var(--jm-fs-md) !important;
+  padding: 6px 36px 6px 34px !important;
+  height: 34px !important;
+  border-radius: var(--jm-radius-md) !important;
+  box-shadow: none !important;
+}
+header.wm-topbar-ds input[type="search"]:focus {
+  border-color: var(--jm-brand-500) !important;
+  box-shadow: 0 0 0 3px rgba(91, 108, 255, 0.12) !important;
+}
+header.wm-topbar-ds .material-symbols-outlined {
+  font-size: 20px !important;
+}
+header.wm-topbar-ds button {
+  width: 36px !important;
+  height: 36px !important;
+}
+
+/* Liste kolonu */
+section.wm-list-column,
+section.wm-col-list {
+  width: var(--jm-list-w) !important;
+  background: var(--jm-surface) !important;
+  border-color: var(--jm-border) !important;
+}
+
+/* Liste kolonu başlık */
+section.wm-list-column > div:first-child {
+  padding: 10px 14px !important;
+  background: var(--jm-surface) !important;
+}
+section.wm-list-column h2.text-headline-sm {
+  font-size: var(--jm-fs-lg) !important;
+  font-weight: 600 !important;
+  color: var(--jm-text) !important;
+}
+
+/* Mail item — kompakt Proton stil */
+section.wm-list-column article {
+  padding: 10px 14px !important;
+  border-bottom: 1px solid var(--jm-border-soft) !important;
+  min-height: var(--jm-row-h);
+  display: block !important;
+}
+
+/* Okunmamış vurgusu */
+section.wm-list-column article.bg-surface-container-lowest {
+  background: var(--jm-surface) !important;
+  border-left: 3px solid var(--jm-brand-500) !important;
+}
+html.dark section.wm-list-column article.bg-surface-container-lowest {
+  background: var(--jm-surface) !important;
+}
+
+/* Mail item — typography ayarları (içerdeki Tailwind class'ları) */
+section.wm-list-column article .font-label-md {
+  font-size: var(--jm-fs-md) !important;
+  line-height: 1.3 !important;
+}
+section.wm-list-column article .font-label-sm {
+  font-size: var(--jm-fs-xs) !important;
+  line-height: 1.2 !important;
+  font-variant-numeric: tabular-nums;
+}
+section.wm-list-column article h3 {
+  font-size: var(--jm-fs-md) !important;
+  line-height: 1.35 !important;
+  font-weight: 500 !important;
+  margin-bottom: 2px !important;
+}
+section.wm-list-column article h3.font-bold {
+  font-weight: 700 !important;
+}
+section.wm-list-column article p.font-body-md,
+section.wm-list-column article p.line-clamp-2 {
+  font-size: var(--jm-fs-sm) !important;
+  line-height: 1.4 !important;
+  color: var(--jm-text-faint) !important;
+}
+
+/* Hover satır eylem grubu */
+section.wm-list-column article .group-hover\:flex {
+  background: var(--jm-surface) !important;
+  border-color: var(--jm-border) !important;
+  box-shadow: var(--jm-shadow-1);
+}
+
+/* Liste boş durumu */
+section.wm-list-column .p-12,
+section.wm-list-column .p-6 {
+  padding: 28px 16px !important;
+  font-size: var(--jm-fs-md);
+  color: var(--jm-text-muted);
+}
+
+/* Okuma paneli */
+section.wm-col-read,
+section.wm-read-pane {
+  background: var(--jm-surface-2) !important;
+  box-shadow: none !important;
+}
+html.dark section.wm-col-read,
+html.dark section.wm-read-pane {
+  background: var(--jm-bg) !important;
+}
+
+/* Mesaj başlığı (display-sm) — daha küçük */
+section.wm-col-read h1.font-display-sm,
+section.wm-col-read h1.text-display-sm,
+section.wm-col-read article h1 {
+  font-size: 20px !important;
+  line-height: 1.3 !important;
+  font-weight: 600 !important;
+  letter-spacing: -0.01em !important;
+  color: var(--jm-text) !important;
+  margin-bottom: 14px !important;
+}
+
+/* Mesaj okuma alanı — okunaklı ama "büyük" değil */
+.wm-mail-body {
+  font-size: var(--jm-fs-lg) !important;
+  line-height: 1.62 !important;
+  color: var(--jm-text);
+}
+.wm-mail-body a { color: var(--jm-brand-600) !important; }
+html.dark .wm-mail-body a { color: var(--jm-brand-300) !important; }
+.wm-mail-body pre {
+  background: var(--jm-surface-3) !important;
+  font-size: 12.5px;
+  padding: 12px;
+  border-radius: var(--jm-radius-md);
+}
+html.dark .wm-mail-body pre {
+  background: var(--jm-surface-2) !important;
+  color: #e2e8f0;
+}
+
+/* Mesaj toolbar (yanıtla, ilet, arşivle) */
+section.wm-col-read header,
+section.wm-col-read > div > div:first-child {
+  background: var(--jm-surface-2) !important;
+  border-color: var(--jm-border) !important;
+}
+html.dark section.wm-col-read > div > div:first-child {
+  background: var(--jm-bg) !important;
+}
+section.wm-col-read button.w-10.h-10 {
+  width: 34px !important;
+  height: 34px !important;
+}
+section.wm-col-read button.w-10.h-10 .material-symbols-outlined {
+  font-size: 19px !important;
+}
+
+/* Mesaj içeriği — article padding */
+section.wm-col-read article {
+  padding-left: clamp(16px, 4vw, 40px) !important;
+  padding-right: clamp(16px, 4vw, 40px) !important;
+  padding-top: 24px !important;
+  padding-bottom: 48px !important;
+}
+
+/* Sender header (avatar + name + date) */
+section.wm-col-read article .border-b {
+  margin-bottom: 24px !important;
+  padding-bottom: 16px !important;
+}
+section.wm-col-read article .font-headline-sm.text-on-surface,
+section.wm-col-read article .text-headline-sm.text-on-surface {
+  font-size: 14px !important;
+  font-weight: 600 !important;
+}
+section.wm-col-read article .font-body-md.text-on-surface-variant {
+  font-size: var(--jm-fs-sm) !important;
+}
+
+/* Boş durum (henüz mail seçilmedi) */
+section.wm-col-read .min-h-\[50vh\] h3 {
+  font-size: var(--jm-fs-xl) !important;
+}
+section.wm-col-read .min-h-\[50vh\] p {
+  font-size: var(--jm-fs-md) !important;
+}
+section.wm-col-read .min-h-\[50vh\] .w-24.h-24 {
+  width: 72px !important;
+  height: 72px !important;
+}
+section.wm-col-read .min-h-\[50vh\] .material-symbols-outlined {
+  font-size: 36px !important;
+}
+section.wm-col-read .bg-gradient-to-b {
+  background: linear-gradient(to bottom, var(--jm-surface-2), var(--jm-bg)) !important;
+}
+html.dark section.wm-col-read .bg-gradient-to-b {
+  background: linear-gradient(to bottom, var(--jm-bg), #0f0f15) !important;
+}
+
+/* Compose modal — Proton tarzı orta-alt yerleşim */
+.wm-compose-shell {
+  background: var(--jm-surface) !important;
+  border-color: var(--jm-border) !important;
+  box-shadow: var(--jm-shadow-modal) !important;
+  border-radius: var(--jm-radius-lg) !important;
+}
+.wm-compose-shell header {
+  background: var(--jm-surface-2) !important;
+  border-color: var(--jm-border) !important;
+  padding: 9px 14px !important;
+}
+.wm-compose-shell header .font-label-md {
+  font-size: var(--jm-fs-md) !important;
+  text-transform: none !important;
+  letter-spacing: 0 !important;
+  font-weight: 600 !important;
+  color: var(--jm-text) !important;
+}
+.wm-compose-shell .px-6 { padding-left: 16px !important; padding-right: 16px !important; }
+.wm-compose-shell label.font-label-md {
+  font-size: var(--jm-fs-sm) !important;
+  font-weight: 500 !important;
+  color: var(--jm-text-muted) !important;
+  width: 48px !important;
+}
+.wm-compose-shell input[type="email"],
+.wm-compose-shell input[type="text"] {
+  font-size: var(--jm-fs-md) !important;
+  color: var(--jm-text) !important;
+  padding: 6px 0 !important;
+}
+.wm-compose-shell input::placeholder {
+  color: var(--jm-text-faint) !important;
+}
+.wm-compose-shell footer {
+  background: var(--jm-surface-2) !important;
+  border-color: var(--jm-border) !important;
+  padding: 10px 14px !important;
+}
+.wm-compose-shell footer button.bg-primary {
+  background: var(--jm-brand-500) !important;
+  border-radius: var(--jm-radius-md) !important;
+  padding: 8px 18px !important;
+  font-size: var(--jm-fs-md) !important;
+  font-weight: 600 !important;
+}
+.wm-compose-shell footer button.bg-primary:hover {
+  background: var(--jm-brand-600) !important;
+}
+
+/* Quill — brand tonu */
+.wm-compose-editor .ql-toolbar {
+  background: var(--jm-surface-2) !important;
+  border-color: var(--jm-border) !important;
+  border-radius: var(--jm-radius-sm) var(--jm-radius-sm) 0 0 !important;
+}
+html.dark .wm-compose-editor .ql-toolbar {
+  background: var(--jm-surface-2) !important;
+  border-color: var(--jm-border) !important;
+}
+.wm-compose-editor .ql-container {
+  background: var(--jm-surface) !important;
+  border-color: var(--jm-border) !important;
+  font-size: var(--jm-fs-md) !important;
+  color: var(--jm-text);
+  border-radius: 0 0 var(--jm-radius-sm) var(--jm-radius-sm) !important;
+}
+html.dark .wm-compose-editor .ql-container {
+  background: var(--jm-surface) !important;
+  border-color: var(--jm-border) !important;
+}
+.wm-compose-editor .ql-editor {
+  min-height: 180px;
+  padding: 12px !important;
+}
+.wm-compose-editor .ql-editor.ql-blank::before {
+  color: var(--jm-text-faint) !important;
+  font-style: normal;
+}
+.wm-compose-editor .ql-snow .ql-stroke { stroke: var(--jm-text-muted); }
+.wm-compose-editor .ql-snow .ql-fill   { fill: var(--jm-text-muted); }
+.wm-compose-editor .ql-snow .ql-picker { color: var(--jm-text-muted); }
+.wm-compose-editor .ql-snow .ql-active .ql-stroke,
+.wm-compose-editor .ql-snow button:hover .ql-stroke {
+  stroke: var(--jm-brand-500);
+}
+
+/* --------------------------------------------------------------------- */
+/* 5) Toast (üst sağ bildirim)                                            */
+/* --------------------------------------------------------------------- */
 
 .wm-toast-root {
   position: fixed;
@@ -15,103 +576,267 @@
   max-width: min(360px, calc(100vw - 2rem));
   pointer-events: none;
 }
-
 .wm-toast {
   pointer-events: auto;
-  padding: 0.65rem 1rem;
-  border-radius: 0.75rem;
-  font-size: 0.8125rem;
+  padding: 10px 14px;
+  border-radius: var(--jm-radius-md);
+  font-size: var(--jm-fs-md);
   font-weight: 500;
-  background: rgb(30 41 59);
-  border: 1px solid rgb(51 65 85);
-  color: rgb(241 245 249);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  background: var(--jm-surface);
+  border: 1px solid var(--jm-border);
+  color: var(--jm-text);
+  box-shadow: var(--jm-shadow-2);
 }
+.wm-toast--success { border-left: 3px solid var(--jm-success); }
+.wm-toast--error   { border-left: 3px solid var(--jm-danger); color: var(--jm-danger); }
+.wm-toast--warning { border-left: 3px solid var(--jm-warning); }
 
-.wm-toast--success { border-color: rgba(52, 211, 153, 0.4); color: #6ee7b7; }
-.wm-toast--error { border-color: rgba(248, 113, 113, 0.4); color: #fca5a5; }
-.wm-toast--warning { border-color: rgba(251, 191, 36, 0.4); color: #fcd34d; }
-
-/* Quill karanlık tema */
-.wm-compose-editor .ql-toolbar {
-  border-color: rgb(51 65 85) !important;
-  background: rgb(15 23 42);
-  border-radius: 0.5rem 0.5rem 0 0;
-}
-.wm-compose-editor .ql-container {
-  border-color: rgb(51 65 85) !important;
-  background: rgb(15 23 42);
-  color: rgb(226 232 240);
-  min-height: 140px;
-  border-radius: 0 0 0.5rem 0.5rem;
-  font-size: 0.875rem;
-}
-.wm-compose-editor .ql-editor.ql-blank::before {
-  color: rgb(100 116 139);
-  font-style: normal;
-}
-
-.wm-mail-body {
-  line-height: 1.65;
-  font-size: 0.875rem;
-  word-break: break-word;
-}
-.wm-mail-body img { max-width: 100%; height: auto; border-radius: 0.5rem; }
-.wm-mail-body a { color: rgb(129 140 248); }
-.wm-mail-body pre {
-  background: rgb(15 23 42);
-  padding: 0.75rem;
-  border-radius: 0.5rem;
-  overflow-x: auto;
-}
+/* --------------------------------------------------------------------- */
+/* 6) Quota bar                                                            */
+/* --------------------------------------------------------------------- */
 
 .wm-quota-bar {
   height: 4px;
   border-radius: 999px;
-  background: rgb(51 65 85);
+  background: var(--jm-surface-3);
   overflow: hidden;
 }
 .wm-quota-bar__fill {
   height: 100%;
   border-radius: inherit;
-  background: linear-gradient(90deg, rgb(99 102 241), rgb(129 140 248));
+  background: linear-gradient(90deg, var(--jm-brand-400), var(--jm-brand-600));
   transition: width 0.3s ease;
 }
 
-.wm-compose-modal {
-  box-shadow: 0 -8px 40px rgba(0, 0, 0, 0.45);
+/* --------------------------------------------------------------------- */
+/* 7) Scrollbar (ince, Proton tarzı)                                      */
+/* --------------------------------------------------------------------- */
+
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background-color: rgba(91, 108, 255, 0.25);
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(91, 108, 255, 0.5);
+  background-clip: content-box;
+}
+html.dark ::-webkit-scrollbar-thumb {
+  background-color: rgba(157, 167, 255, 0.18);
+  background-clip: content-box;
+}
+html.dark ::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(157, 167, 255, 0.35);
+  background-clip: content-box;
 }
 
-@media (max-width: 1023px) {
-  .wm-col-list.is-hidden,
-  .wm-col-read.is-hidden {
-    display: none !important;
-  }
+/* --------------------------------------------------------------------- */
+/* 8) Material Symbols ince variation                                      */
+/* --------------------------------------------------------------------- */
+
+.material-symbols-outlined {
+  font-variation-settings: 'FILL' 0, 'wght' 350, 'GRAD' 0, 'opsz' 24;
+}
+.wm-material-icon-fill,
+.material-symbols-outlined.wm-material-icon-fill {
+  font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24;
 }
 
-/* Giriş sayfası */
+/* --------------------------------------------------------------------- */
+/* 9) Bounce banner (renk hizalama)                                       */
+/* --------------------------------------------------------------------- */
+
+.wm-bounce-banner {
+  font-size: var(--jm-fs-md);
+}
+.wm-bounce-banner code {
+  font-family: ui-monospace, monospace;
+  background: rgba(91, 108, 255, 0.08);
+  padding: 0.1em 0.35em;
+  border-radius: 4px;
+  font-size: 11.5px;
+}
+html.dark .wm-bounce-banner code {
+  background: rgba(157, 167, 255, 0.14);
+}
+
+/* --------------------------------------------------------------------- */
+/* 10) Login sayfası — light-first Jîr brand                              */
+/* --------------------------------------------------------------------- */
+
 .wm-login-page {
   min-height: 100dvh;
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 1.5rem;
-  background: radial-gradient(ellipse 80% 50% at 50% -20%, rgba(99, 102, 241, 0.2), transparent), rgb(2 6 23);
+  background:
+    radial-gradient(ellipse 60% 50% at 50% -10%, rgba(91, 108, 255, 0.18), transparent 70%),
+    var(--jm-bg);
 }
+html.dark .wm-login-page {
+  background:
+    radial-gradient(ellipse 60% 50% at 50% -10%, rgba(91, 108, 255, 0.22), transparent 70%),
+    #0f0f15;
+}
+
 .wm-login-card {
   width: 100%;
-  max-width: 400px;
-  padding: 2rem;
-  border-radius: 1rem;
-  background: rgb(15 23 42);
-  border: 1px solid rgb(51 65 85);
+  max-width: 380px;
+  padding: 28px 24px;
+  border-radius: var(--jm-radius-lg);
+  background: var(--jm-surface);
+  border: 1px solid var(--jm-border);
+  box-shadow: var(--jm-shadow-2);
 }
-.wm-login-card__brand { text-align: center; margin-bottom: 1.5rem; }
-.wm-login-card__brand img { width: 48px; height: 48px; margin: 0 auto 0.75rem; }
-.wm-login-card__brand h1 { font-size: 1.25rem; font-weight: 700; color: white; }
-.wm-login-card__brand h1 span { color: rgb(129 140 248); }
-.wm-form-group { margin-bottom: 1rem; }
-.wm-form-group label { display: block; font-size: 0.75rem; font-weight: 600; color: rgb(148 163 184); margin-bottom: 0.35rem; }
-.wm-alert--error { padding: 0.5rem 0.75rem; border-radius: 0.5rem; background: rgba(248, 113, 113, 0.15); color: #fca5a5; font-size: 0.8125rem; margin-bottom: 0.75rem; }
-.wm-login-footer { text-align: center; margin-top: 1rem; font-size: 0.75rem; }
-.wm-login-footer a { color: rgb(129 140 248); }
+
+.wm-login-card__brand {
+  text-align: center;
+  margin-bottom: 22px;
+}
+.wm-login-card__brand img {
+  width: 44px;
+  height: 44px;
+  margin: 0 auto 12px;
+}
+.wm-login-card__brand h1 {
+  font-size: 19px;
+  font-weight: 700;
+  color: var(--jm-text);
+  margin: 0 0 4px;
+  letter-spacing: -0.01em;
+}
+.wm-login-card__brand h1 span {
+  color: var(--jm-brand-500);
+}
+.wm-login-card__brand p {
+  font-size: var(--jm-fs-sm);
+  color: var(--jm-text-muted);
+  margin: 0;
+}
+
+.wm-form-group { margin-bottom: 14px; }
+.wm-form-group label {
+  display: block;
+  font-size: var(--jm-fs-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--jm-text-muted);
+  margin-bottom: 6px;
+}
+.wm-form-group input {
+  width: 100%;
+  padding: 10px 12px;
+  font-size: var(--jm-fs-md);
+  border: 1px solid var(--jm-border);
+  border-radius: var(--jm-radius-md);
+  background: var(--jm-surface-2);
+  color: var(--jm-text);
+  font-family: inherit;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.wm-form-group input:focus {
+  outline: none;
+  border-color: var(--jm-brand-500);
+  box-shadow: 0 0 0 3px rgba(91, 108, 255, 0.15);
+}
+html.dark .wm-form-group input {
+  background: var(--jm-surface-2);
+  border-color: var(--jm-border);
+}
+
+.wm-input-error,
+.wm-form-group input.wm-input-error {
+  border-color: var(--jm-danger) !important;
+}
+
+.wm-alert {
+  padding: 8px 12px;
+  border-radius: var(--jm-radius-md);
+  font-size: var(--jm-fs-sm);
+  margin-bottom: 12px;
+}
+.wm-alert--error {
+  background: rgba(216, 58, 58, 0.08);
+  color: var(--jm-danger);
+  border: 1px solid rgba(216, 58, 58, 0.18);
+}
+
+.wm-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px 18px;
+  border-radius: var(--jm-radius-md);
+  font-size: var(--jm-fs-md);
+  font-weight: 600;
+  font-family: inherit;
+  border: none;
+  cursor: pointer;
+  transition: background 0.15s, opacity 0.15s, transform 0.05s;
+  text-decoration: none;
+}
+.wm-btn:disabled { opacity: 0.55; cursor: not-allowed; }
+.wm-btn-primary {
+  background: var(--jm-brand-500);
+  color: #fff;
+  box-shadow: 0 1px 3px rgba(91, 108, 255, 0.25);
+}
+.wm-btn-primary:hover:not(:disabled) { background: var(--jm-brand-600); }
+.wm-btn-primary:active:not(:disabled) { transform: scale(0.99); }
+.wm-btn-secondary {
+  background: var(--jm-surface-2);
+  color: var(--jm-text);
+  border: 1px solid var(--jm-border);
+}
+.wm-btn-secondary:hover:not(:disabled) { background: var(--jm-surface-3); }
+.wm-w-full { width: 100%; }
+
+.wm-login-footer {
+  text-align: center;
+  margin: 16px 0 0;
+  font-size: var(--jm-fs-sm);
+  color: var(--jm-text-muted);
+}
+.wm-login-footer a {
+  color: var(--jm-brand-600);
+  font-weight: 500;
+  text-decoration: none;
+}
+.wm-login-footer a:hover { text-decoration: underline; }
+html.dark .wm-login-footer a { color: var(--jm-brand-300); }
+
+/* --------------------------------------------------------------------- */
+/* 11) Modal gölgesi (mevcut .modal-shadow utility)                       */
+/* --------------------------------------------------------------------- */
+
+.modal-shadow {
+  box-shadow: var(--jm-shadow-modal) !important;
+}
+
+/* --------------------------------------------------------------------- */
+/* 12) Mobile / responsive                                                 */
+/* --------------------------------------------------------------------- */
+
+@media (max-width: 1023px) {
+  .wm-col-list.is-hidden,
+  .wm-col-read.is-hidden { display: none !important; }
+  section.wm-list-column,
+  section.wm-col-list { width: 100% !important; }
+}
+
+@media (max-width: 768px) {
+  :root {
+    --jm-fs-md: 13px;
+    --jm-row-h: 60px;
+  }
+  header.wm-topbar-ds { padding: 0 10px !important; }
+  section.wm-col-read article { padding: 18px 14px 32px !important; }
+}
+
+/* x-cloak fallback (Alpine ilk yüklenmeden önce gizle) */
+[x-cloak] { display: none !important; }

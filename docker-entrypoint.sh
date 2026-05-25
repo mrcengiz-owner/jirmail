@@ -70,7 +70,7 @@ else
     python manage.py check_deploy || true
 fi
 
-for rel in css/webmail.css js/webmail/core.js js/webmail/mail-app.js; do
+for rel in css/webmail-proton.css css/webmail-mailflow.css css/webmail-settings.css js/webmail/core.js js/webmail/mail-app.js; do
     if [ -f "/app/staticfiles/$rel" ] || [ -f "/app/static/$rel" ]; then
         echo "  [ok] static $rel"
     else

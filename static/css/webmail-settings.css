@@ -1,21 +1,23 @@
-/* Ayarlar — MailFlow token’ları (webmail.css’e bağımlı değil) */
+/* Ayarlar / client-setup — Jîr brand purple paletine bağlı.
+   --jm-* değişkenleri webmail-proton.css'de tanımlı; --st-* alias'ları
+   geri uyum için tutuluyor ama değerleri brand'den türetiliyor. */
 
 .wm-shell.wm-shell--settings {
-  --st-bg: #f8f9fa;
-  --st-surface: #ffffff;
-  --st-surface-2: #f3f4f5;
-  --st-surface-3: #edeeef;
-  --st-border: #e1e3e4;
-  --st-border-soft: #c5c5d4;
-  --st-text: #191c1d;
-  --st-text-2: #454652;
-  --st-text-3: #757683;
-  --st-primary: #102b8a;
-  --st-primary-hover: #273e9b;
-  --st-primary-soft: rgba(16, 43, 138, 0.1);
+  --st-bg: var(--jm-bg, #f4f4f8);
+  --st-surface: var(--jm-surface, #ffffff);
+  --st-surface-2: var(--jm-surface-2, #f8f9fc);
+  --st-surface-3: var(--jm-surface-3, #eef0ff);
+  --st-border: var(--jm-border, #e5e7ee);
+  --st-border-soft: var(--jm-border-soft, #eef0f4);
+  --st-text: var(--jm-text, #1a1d2e);
+  --st-text-2: var(--jm-text-muted, #5b6175);
+  --st-text-3: var(--jm-text-faint, #8a8fa6);
+  --st-primary: var(--jm-brand-500, #5b6cff);
+  --st-primary-hover: var(--jm-brand-600, #4855e6);
+  --st-primary-soft: rgba(91, 108, 255, 0.10);
   --st-on-primary: #ffffff;
-  --st-success: #1b7a4a;
-  --st-danger: #ba1a1a;
+  --st-success: var(--jm-success, #1b9265);
+  --st-danger: var(--jm-danger, #d83a3a);
   --st-radius: 10px;
   --st-radius-lg: 14px;
   --st-radius-pill: 999px;
@@ -27,26 +29,25 @@
   overflow: hidden;
   background: var(--st-bg);
   color: var(--st-text);
-  font-family: Inter, system-ui, sans-serif;
-  font-size: 14px;
+  font-family: 'Inter', system-ui, sans-serif;
+  font-size: 13px;
 }
 
 html.dark .wm-shell.wm-shell--settings {
-  --st-bg: #2b2b2b;
-  --st-surface: #2e3132;
-  --st-surface-2: #3d4042;
-  --st-surface-3: #454652;
-  --st-border: #5c5e66;
-  --st-border-soft: #757683;
-  --st-text: #f0f1f2;
-  --st-text-2: #cbcfd6;
-  --st-text-3: #9aa0a6;
-  --st-primary: #b9c3ff;
-  --st-primary-hover: #dde1ff;
-  --st-primary-soft: rgba(185, 195, 255, 0.12);
-  --st-on-primary: #001356;
-  --st-success: #3dd68c;
-  --st-danger: #ffb4ab;
+  --st-bg: var(--jm-bg, #16161d);
+  --st-surface: var(--jm-surface, #1f1f29);
+  --st-surface-2: var(--jm-surface-2, #262732);
+  --st-surface-3: var(--jm-surface-3, #2e2f3e);
+  --st-border: var(--jm-border, rgba(255, 255, 255, 0.07));
+  --st-border-soft: var(--jm-border-soft, rgba(255, 255, 255, 0.04));
+  --st-text: var(--jm-text, #e7e9f3);
+  --st-text-2: var(--jm-text-muted, #b1b4c4);
+  --st-text-3: var(--jm-text-faint, #777a8c);
+  --st-primary: var(--jm-brand-400, #7785ff);
+  --st-primary-hover: var(--jm-brand-300, #9da7ff);
+  --st-primary-soft: rgba(91, 108, 255, 0.18);
+  --st-on-primary: #ffffff;
+  --st-danger: #ff7373;
 }
 
 .wm-shell--settings .wm-main {
@@ -95,8 +96,8 @@ html.dark .wm-shell.wm-shell--settings {
 }
 
 html.dark .wm-settings-sidebar {
-  background: #2e3132;
-  border-color: #454652;
+  background: var(--st-surface);
+  border-color: var(--st-border);
 }
 
 @media (min-width: 1024px) {
@@ -133,8 +134,8 @@ html.dark .wm-settings-sidebar {
 }
 
 html.dark .wm-settings-sidebar__logo {
-  background: #2e44a1;
-  color: #dde1ff;
+  background: var(--st-primary);
+  color: #ffffff;
 }
 
 .wm-settings-sidebar__title {
@@ -146,7 +147,7 @@ html.dark .wm-settings-sidebar__logo {
 }
 
 html.dark .wm-settings-sidebar__title {
-  color: #dde1ff;
+  color: var(--st-primary);
 }
 
 .wm-settings-sidebar__sub {
@@ -176,7 +177,7 @@ html.dark .wm-settings-sidebar__title {
 }
 
 html.dark .wm-settings-sidebar__compose {
-  background: #2e44a1;
+  background: var(--st-primary);
   color: #ffffff;
 }
 
@@ -212,14 +213,14 @@ html.dark .wm-settings-sidebar__compose {
 }
 
 .wm-settings-sidebar__link.is-active {
-  background: #e0e2ee;
+  background: var(--jm-brand-50, #eef0ff);
   color: var(--st-primary);
-  font-weight: 700;
+  font-weight: 600;
 }
 
 html.dark .wm-settings-sidebar__link.is-active {
-  background: #494c56;
-  color: #acbaff;
+  background: rgba(91, 108, 255, 0.18);
+  color: var(--jm-brand-300, #9da7ff);
 }
 
 .wm-settings-sidebar__footer {
@@ -508,8 +509,8 @@ html.dark .wm-settings-card {
 
 html.dark .wm-input,
 html.dark .wm-textarea {
-  background: #3d4042;
-  border-color: #5c5e66;
+  background: var(--st-surface-2);
+  border-color: var(--st-border);
 }
 
 .wm-input:focus,
@@ -581,7 +582,7 @@ html.dark .wm-textarea {
 }
 
 html.dark .wm-theme-btn.is-active {
-  background: #2e44a1;
+  background: var(--st-primary);
   color: #ffffff;
 }
 
@@ -644,7 +645,7 @@ html.dark .wm-settings-msg.is-err {
 }
 
 html.dark .wm-btn-primary {
-  background: #2e44a1;
+  background: var(--st-primary);
   color: #ffffff;
 }
 

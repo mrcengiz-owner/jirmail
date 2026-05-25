@@ -19,7 +19,7 @@ RUN mkdir -p /app/staticfiles && chmod -R 755 /app/static /app/staticfiles
 ENV SECRET_KEY=build-collectstatic-only
 ENV DEBUG=False
 RUN python manage.py collectstatic --noinput 2>/dev/null || true \
-    && test -f /app/staticfiles/css/webmail.css || test -f /app/static/css/webmail.css
+    && test -f /app/staticfiles/css/webmail-proton.css || test -f /app/static/css/webmail-proton.css
 
 RUN chmod +x manage.py
 RUN chmod +x docker-entrypoint.sh
