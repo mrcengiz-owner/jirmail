@@ -14,6 +14,7 @@ PANEL_PATH_PREFIXES: tuple[str, ...] = (
     '/backups/',
     '/logs/',
     '/settings/',
+    '/repair/',
     '/master-panel/',
     '/mail-panel/',
 )

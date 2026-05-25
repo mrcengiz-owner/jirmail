@@ -407,3 +407,18 @@ def settings_view(request):
         'JIR_LOCAL_KEY': get_jir_key(),
         'current_page': 'settings',
     })
+
+
+@ensure_csrf_cookie
+def repair_view(request):
+    """Mail stack onarım — yalnızca süper yönetici."""
+    if not is_installed():
+        return redirect('setup')
+    denied = require_panel_page(request)
+    if denied:
+        return denied
+
+    return render(request, 'pages/repair.html', {
+        'JIR_LOCAL_KEY': get_jir_key(),
+        'current_page': 'repair',
+    })

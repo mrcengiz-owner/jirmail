@@ -1743,3 +1743,61 @@ def create_mail_account(request, data: MailAccountSchema):
         import logging
         logging.exception('Create account error')
         return {"status": "error", "message": f"Hesap oluşturulamadı: {str(e)}"}
+
+
+class MailRepairRunSchema(Schema):
+    action: str = 'full'
+
+
+def _require_panel_api(request):
+    if not request.session.get('is_logged_in'):
+        return {"status": "error", "message": "Oturum gerekli.", "code": "unauthorized"}
+    from jir_core.dashboard_auth import session_has_panel_access
+    if not session_has_panel_access(request):
+        return {"status": "error", "message": "Yetkiniz yok. Süper yönetici yetkisi gerekir.", "code": "forbidden"}
+    return None
+
+
+@router.get("/mail-repair/status", summary="Onarım durumu (FULL)")
+def mail_repair_status_api(request):
+    denied = _require_panel_api(request)
+    if denied:
+        return denied
+    from management.mail_repair import collect_repair_status, list_repair_actions
+
+    status = collect_repair_status()
+    return {
+        "status": "ok",
+        "actions": list_repair_actions(),
+        **status,
+    }
+
+
+@router.get("/mail-repair/history", summary="Onarım geçmişi (FULL)")
+def mail_repair_history_api(request, limit: int = 20):
+    denied = _require_panel_api(request)
+    if denied:
+        return denied
+    from management.mail_repair import list_repair_history
+
+    return {"status": "ok", "history": list_repair_history(limit=limit)}
+
+
+@router.post("/mail-repair/run", summary="Tek onarım işlemi (FULL veya JIR_LOCAL_KEY)")
+@csrf_exempt
+def mail_repair_run_api(request, data: MailRepairRunSchema):
+    from management.repair_auth import require_repair_caller, session_has_repair_access
+
+    denied = require_repair_caller(request)
+    if denied:
+        return denied
+    from management.mail_repair import run_repair_action, _client_ip
+
+    actor = (request.session.get('email') or '').strip()
+    if not actor and not session_has_repair_access(request):
+        actor = 'local-key'
+    return run_repair_action(
+        data.action,
+        actor_email=actor,
+        ip_address=_client_ip(request),
+    )

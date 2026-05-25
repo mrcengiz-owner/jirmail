@@ -1666,6 +1666,99 @@
             };
         });
 
+        Alpine.data('repairApp', function() {
+            return {
+                loading: false,
+                running: false,
+                error: '',
+                checks: [],
+                actions: [],
+                history: [],
+                lastRepair: null,
+                lastResult: null,
+                lastResultJson: '',
+
+                get advancedActions() {
+                    return (this.actions || []).filter(function(a) { return a.id !== 'full'; });
+                },
+
+                init: function() {
+                    this.fetchStatus();
+                    this.fetchHistory();
+                },
+
+                fetchStatus: function() {
+                    var self = this;
+                    self.loading = true;
+                    self.error = '';
+                    fetch('/api/management/mail-repair/status', { credentials: 'same-origin' })
+                        .then(function(res) { return res.json(); })
+                        .then(function(data) {
+                            if (data.status === 'error' || data.code === 'forbidden') {
+                                self.error = data.message || 'Durum alınamadı';
+                                return;
+                            }
+                            self.checks = data.checks || [];
+                            self.actions = data.actions || [];
+                            self.lastRepair = data.last_repair || null;
+                        })
+                        .catch(function(e) {
+                            self.error = e.message || 'Bağlantı hatası';
+                        })
+                        .finally(function() { self.loading = false; });
+                },
+
+                fetchHistory: function() {
+                    var self = this;
+                    fetch('/api/management/mail-repair/history?limit=15', { credentials: 'same-origin' })
+                        .then(function(res) { return res.json(); })
+                        .then(function(data) {
+                            if (data.history) self.history = data.history;
+                        })
+                        .catch(function() {});
+                },
+
+                runAction: function(actionId, confirmFull) {
+                    var self = this;
+                    if (confirmFull && !window.confirm('Tam stack onarımı başlatılsın mı? Kısa süreli gecikme olabilir.')) {
+                        return;
+                    }
+                    self.running = true;
+                    self.error = '';
+                    fetch('/api/management/mail-repair/run', {
+                        method: 'POST',
+                        credentials: 'same-origin',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-CSRFToken': window.getCsrfToken()
+                        },
+                        body: JSON.stringify({ action: actionId })
+                    })
+                    .then(function(res) { return res.json(); })
+                    .then(function(data) {
+                        self.lastResult = data;
+                        try {
+                            self.lastResultJson = JSON.stringify(data.report || data, null, 2);
+                        } catch (e) {
+                            self.lastResultJson = String(data.message || '');
+                        }
+                        if (data.ok) {
+                            window.showToast(data.message || 'Onarım tamamlandı', 'success');
+                        } else {
+                            window.showToast(data.message || 'Onarım başarısız', data.retry_after_sec ? 'warning' : 'error');
+                        }
+                        self.fetchStatus();
+                        self.fetchHistory();
+                    })
+                    .catch(function(e) {
+                        self.error = e.message || 'İstek başarısız';
+                        window.showToast(self.error, 'error');
+                    })
+                    .finally(function() { self.running = false; });
+                }
+            };
+        });
+
     });
 
     // ========================================================================

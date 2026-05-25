@@ -307,6 +307,11 @@ class MailAutoSetupSchema(Schema):
 @csrf_exempt
 def fix_postfix_routing_api(request: HttpRequest):
     """Dış alıcılar Dovecot'a düşüyorsa pgsql map dosyalarını doğrudan yazar."""
+    from management.repair_auth import require_repair_caller
+
+    denied = require_repair_caller(request)
+    if denied:
+        return denied
     from management.postfix_maps import force_fix_postfix_routing
 
     return force_fix_postfix_routing()
@@ -316,6 +321,11 @@ def fix_postfix_routing_api(request: HttpRequest):
 @csrf_exempt
 def heal_mail_stack_api(request: HttpRequest, data: MailAutoSetupSchema):
     """Postfix çalışmıyorsa init script + start/restart dener."""
+    from management.repair_auth import require_repair_caller
+
+    denied = require_repair_caller(request)
+    if denied:
+        return denied
     dom = (data.domain or '').strip()
     mh = (data.mail_hostname or '').strip() or (f'mail.{dom}' if dom else '')
     return _compose_mail_stack_heal(domain=dom, mail_hostname=mh)

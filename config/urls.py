@@ -18,7 +18,7 @@ from monitoring.api import router as monitoring_router
 from monitoring.api import logs_stream
 from management.views import (
     dashboard, setup, login, login_success, logout_view, forbidden_view,
-    domains_view, accounts_view, containers_view, backups_view, logs_view, settings_view,
+    domains_view, accounts_view, containers_view, backups_view, logs_view, settings_view, repair_view,
 )
 from management.views import is_installed as check_installed
 
@@ -67,6 +67,7 @@ urlpatterns = [
     path('backups/', backups_view, name='backups'),
     path('logs/', logs_view, name='logs'),
     path('settings/', settings_view, name='settings'),
+    path('repair/', repair_view, name='repair'),
 
     path('setup/', setup, name='setup'),
     path('login/', login, name='login'),
