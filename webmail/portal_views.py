@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from django.http import HttpResponseRedirect
 from django.shortcuts import redirect, render
-from django.views.decorators.csrf import csrf_exempt, ensure_csrf_cookie
+from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.decorators.http import require_http_methods
 
 from jir_core.session_auth import logout_response
@@ -66,7 +66,6 @@ def login_view(request):
 
 
 @require_http_methods(['GET', 'POST'])
-@csrf_exempt
 @_require_installed
 def logout_view(request):
     return logout_response(request)

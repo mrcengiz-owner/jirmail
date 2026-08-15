@@ -5,7 +5,6 @@
 
 {% block extra_head %}
 <script>
-    window.JIR_KEY = "{{ JIR_LOCAL_KEY|escapejs }}";
     window.INSTANCE_ID = "{{ instance_id|escapejs }}";
     window.TIER = "{{ tier|escapejs }}";
     window.CAN_MANAGE_DOCKER = {% if can_manage_docker %}true{% else %}false{% endif %};

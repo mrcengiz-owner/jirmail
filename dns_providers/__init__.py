@@ -8,6 +8,7 @@ from .manual import ManualProvider
 from .cloudflare import CloudflareProvider
 from .route53 import Route53Provider
 from .namecheap import NamecheapProvider
+from .records import apply_mail_dns, build_mail_dns_records, detect_public_ip
 
 
 PROVIDER_REGISTRY: dict[str, type[DNSProvider]] = {
@@ -26,4 +27,12 @@ def get_provider(name: str, credentials: dict | None = None) -> DNSProvider:
     return PROVIDER_REGISTRY[name](credentials or {})
 
 
-__all__ = ['DNSProvider', 'DNSRecord', 'get_provider', 'PROVIDER_REGISTRY']
+__all__ = [
+    'DNSProvider',
+    'DNSRecord',
+    'get_provider',
+    'PROVIDER_REGISTRY',
+    'apply_mail_dns',
+    'build_mail_dns_records',
+    'detect_public_ip',
+]

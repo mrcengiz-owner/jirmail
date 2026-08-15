@@ -5,7 +5,7 @@ from jir_core.dashboard_auth import session_has_panel_access
 from jir_core.permissions import apply_account_session
 from django.contrib.auth.decorators import login_required
 from django.views.decorators.http import require_http_methods
-from django.views.decorators.csrf import csrf_exempt, ensure_csrf_cookie
+from django.views.decorators.csrf import ensure_csrf_cookie
 from jir_core.session_auth import logout_response
 import os
 
@@ -90,14 +90,9 @@ def forbidden_view(request):
 
 
 def get_jir_key():
-    try:
-        from saas.models import SystemConfig
-        config = SystemConfig.objects.first()
-        if config and config.jir_local_key:
-            return config.jir_local_key
-    except Exception:
-        pass
-    return getattr(settings, 'JIR_LOCAL_KEY', 'JirCode_Alpha_2026_Secure_Key_v1')
+    """Yalnızca sunucu tarafı kullanım — template'e basılmamalı."""
+    from jir_core.dashboard_auth import get_configured_local_key
+    return get_configured_local_key() or ''
 
 
 def get_instance_info():
@@ -135,7 +130,6 @@ def dashboard(request):
         inactive_accounts = 0
 
     return render(request, 'pages/dashboard.html', {
-        'JIR_LOCAL_KEY': get_jir_key(),
         'instance_id': instance_info['instance_id'],
         'tier': instance_info['tier'],
         'current_page': 'dashboard',
@@ -180,7 +174,6 @@ def mail_panel(request):
 
 
 @require_http_methods(["POST"])
-@csrf_exempt
 def login_success(request):
     """
     Login sonrası role bazlı yönlendirme.
@@ -188,6 +181,13 @@ def login_success(request):
     Diğerleri = Mail Panel (User)
     """
     import json
+    from jir_core.login_throttle import (
+        clear_login_failures,
+        login_blocked,
+        record_login_failure,
+    )
+    from jir_core.session_secrets import store_mail_password
+
     try:
         data = json.loads(request.body)
     except json.JSONDecodeError:
@@ -199,15 +199,21 @@ def login_success(request):
     if not email or not password:
         return JsonResponse({'status': 'error', 'message': 'Email and password required', 'redirect_url': None})
 
+    blocked = login_blocked(request, email)
+    if blocked:
+        return JsonResponse({'status': 'error', 'message': blocked, 'redirect_url': None})
+
     try:
         import bcrypt
         from core.models import MailAccount
 
         account = MailAccount.objects.filter(email=email.lower()).first()
         if not account:
+            record_login_failure(request, email)
             return JsonResponse({'status': 'error', 'message': 'Invalid credentials', 'redirect_url': None})
 
         if not bcrypt.checkpw(password.encode('utf-8'), account.password_hash.encode('utf-8')):
+            record_login_failure(request, email)
             return JsonResponse({'status': 'error', 'message': 'Invalid credentials', 'redirect_url': None})
 
         if not account.is_active:
@@ -216,15 +222,11 @@ def login_success(request):
         request.session.flush()
 
         permissions = apply_account_session(request, account)
-        # IMAP/SMTP istemcisi için kullanıcının düz parolası geçici cache'lenir.
-        request.session['mail_password'] = password
-        request.session.set_expiry(86400)
+        store_mail_password(request.session, password)
+        request.session.set_expiry(getattr(settings, 'SESSION_COOKIE_AGE', 28800))
         request.session.modified = True
         request.session.save()
-
-        from saas.models import SystemConfig
-        config = SystemConfig.objects.first()
-        jir_key = config.jir_local_key if config else get_jir_key()
+        clear_login_failures(request, email)
 
         if account.can_access_panel:
             redirect_url = '/dashboard/'
@@ -234,7 +236,6 @@ def login_success(request):
         return JsonResponse({
             'status': 'success',
             'message': 'Login successful',
-            'jir_key': jir_key,
             'email': account.email,
             'role': account.role,
             'role_display': account.get_role_display(),
@@ -244,13 +245,13 @@ def login_success(request):
             'redirect_url': redirect_url,
         })
 
-    except Exception as e:
-        import traceback
-        return JsonResponse({'status': 'error', 'message': str(e), 'redirect_url': None})
+    except Exception:
+        import logging
+        logging.getLogger(__name__).exception('Login failed')
+        return JsonResponse({'status': 'error', 'message': 'Giriş başarısız', 'redirect_url': None})
 
 
 @require_http_methods(["GET", "POST"])
-@csrf_exempt
 def logout_view(request):
     return logout_response(request)
 
@@ -290,7 +291,6 @@ def domains_view(request):
     mail_hostname = (getattr(settings, 'MAIL_SERVER_HOSTNAME', None) or '').strip()
 
     return render(request, 'pages/domains.html', {
-        'JIR_LOCAL_KEY': get_jir_key(),
         'domains_bootstrap': domains_bootstrap,
         'dns_provider_choices': dns_provider_choices,
         'mail_hostname': mail_hostname,
@@ -331,15 +331,11 @@ def accounts_view(request):
     except Exception:
         accounts = []
 
-    import json
-
     from jir_core.permissions import ROLE_CHOICES_FOR_UI
 
     return render(request, 'pages/accounts.html', {
-        'JIR_LOCAL_KEY': get_jir_key(),
         'domains_json': domains_json,
         'accounts_bootstrap': accounts,
-        'domains_list': json.dumps(domains_json),
         'role_choices_json': ROLE_CHOICES_FOR_UI,
         'current_page': 'accounts',
     })
@@ -361,7 +357,6 @@ def containers_view(request):
         compose_mode = False
 
     return render(request, 'pages/containers.html', {
-        'JIR_LOCAL_KEY': get_jir_key(),
         'current_page': 'containers',
         'compose_stack': compose_mode,
     })
@@ -376,7 +371,6 @@ def backups_view(request):
         return denied
 
     return render(request, 'pages/backups.html', {
-        'JIR_LOCAL_KEY': get_jir_key(),
         'current_page': 'backups',
     })
 
@@ -390,7 +384,6 @@ def logs_view(request):
         return denied
 
     return render(request, 'pages/logs.html', {
-        'JIR_LOCAL_KEY': get_jir_key(),
         'current_page': 'logs',
     })
 
@@ -404,7 +397,6 @@ def settings_view(request):
         return denied
 
     return render(request, 'pages/settings.html', {
-        'JIR_LOCAL_KEY': get_jir_key(),
         'current_page': 'settings',
     })
 
@@ -419,6 +411,5 @@ def repair_view(request):
         return denied
 
     return render(request, 'pages/repair.html', {
-        'JIR_LOCAL_KEY': get_jir_key(),
         'current_page': 'repair',
     })

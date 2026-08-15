@@ -2,7 +2,6 @@ from ninja import Router, Schema
 from django.conf import settings
 from django.db import connection
 from django.http import JsonResponse
-from django.views.decorators.csrf import csrf_exempt
 from core.models import MailAccount, MailDomain
 from saas.models import SystemConfig
 import bcrypt
@@ -65,33 +64,41 @@ class LoginSchema(Schema):
 
 
 @router.post("/login", summary="Admin Girişi")
-@csrf_exempt
 def admin_login(request, data: LoginSchema):
+    from jir_core.login_throttle import (
+        clear_login_failures,
+        login_blocked,
+        record_login_failure,
+    )
+
+    blocked = login_blocked(request, data.email)
+    if blocked:
+        return {"status": "error", "message": blocked}
+
     try:
         account = MailAccount.objects.filter(email=data.email.lower()).first()
         if not account:
+            record_login_failure(request, data.email)
             return {"status": "error", "message": "Invalid email or password"}
 
         if not bcrypt.checkpw(data.password.encode('utf-8'), account.password_hash.encode('utf-8')):
+            record_login_failure(request, data.email)
             return {"status": "error", "message": "Invalid email or password"}
 
         if not account.is_active:
             return {"status": "error", "message": "Account is inactive"}
 
-        config = SystemConfig.objects.first()
-        jir_key = config.jir_local_key if config else getattr(settings, 'JIR_LOCAL_KEY', 'JirCode_Alpha_2026_Secure_Key_v1')
-
+        clear_login_failures(request, data.email)
         return {
             "status": "success",
             "message": "Login successful",
-            "jir_key": jir_key,
             "email": account.email,
             "role": account.role
         }
-    except Exception as e:
+    except Exception:
         return {
             "status": "error",
-            "message": f"Login error: {str(e)}"
+            "message": "Login error"
         }
 
 
@@ -252,6 +259,11 @@ class SetupCompleteSchema(Schema):
 
 @router.post("/test-db", summary="Veritabanı Bağlantı Testi")
 def test_db(request, data: TestDbSchema):
+    from jir_core.dashboard_auth import require_installer_access
+
+    denied = require_installer_access(request, allow_panel_when_installed=False)
+    if denied:
+        return denied
     try:
         if data.db_type == 'sqlite':
             return {
@@ -755,6 +767,10 @@ def check_service_in_docker(container_name, docker_host=None):
 
 @router.get("/system-requirements", response={200: dict}, summary="Sistem Gereksinimleri Kontrol")
 def check_system_requirements(request):
+    from jir_core.dashboard_auth import require_panel_api
+    denied = require_panel_api(request)
+    if denied:
+        return denied
     ram = psutil.virtual_memory()
     disk = psutil.disk_usage('/')
 
@@ -1024,7 +1040,6 @@ def get_system_settings(request):
 
 
 @router.post("/system-settings", summary="Sistem ayarlarını güncelle (FULL, DB hariç)")
-@csrf_exempt
 def update_system_settings(request, data: SystemSettingsUpdateSchema):
     if not request.session.get('is_logged_in'):
         return {"status": "error", "message": "Oturum gerekli."}
@@ -1076,7 +1091,6 @@ def update_system_settings(request, data: SystemSettingsUpdateSchema):
 
 
 @router.post("/factory-reset", summary="Sıfırdan kurulum (tehlikeli)")
-@csrf_exempt
 def factory_reset_api(request, data: FactoryResetSchema):
     """Veritabanını sıfırla, kurulum bayraklarını temizle, stack konteynerlerini kaldır."""
     if not request.session.get('is_logged_in'):
@@ -1127,6 +1141,10 @@ def factory_reset_api(request, data: FactoryResetSchema):
 
 @router.get("/system-specs", response={200: SystemSpecsSchema}, summary="Sistem Özelliklerini Getir")
 def get_system_specs(request):
+    from jir_core.dashboard_auth import require_panel_api
+    denied = require_panel_api(request)
+    if denied:
+        return denied
     cpu_percent = psutil.cpu_percent(interval=0.1)
     ram = psutil.virtual_memory()
     disk = psutil.disk_usage('/')
@@ -1206,6 +1224,10 @@ class SystemStatsSchema(Schema):
 
 @router.get("/system-stats", response={200: SystemStatsSchema}, summary="Navbar İstatistikleri")
 def get_system_stats(request):
+    from jir_core.dashboard_auth import require_panel_api
+    denied = require_panel_api(request)
+    if denied:
+        return denied
     from core.models import MailAccount, MailDomain
 
     active_domains = MailDomain.objects.filter(is_active=True).count()
@@ -1340,7 +1362,6 @@ def get_container_status(request):
 
 
 @router.post("/container/{container_name}/{action}", summary="Container Start/Stop/Restart")
-@csrf_exempt
 def container_action(request, container_name, action):
     """Start, stop, or restart a Docker container (dashboard — FULL oturum gerekir)."""
     if not request.session.get('is_logged_in'):
@@ -1484,21 +1505,17 @@ class LogEntrySchema(Schema):
 
 @router.get("/logs", summary="Mail Loglarını Getir")
 def get_logs(request, key: str = None, lines: int = 100, filter_type: str = None):
-    # Key doğrulama: settings, DB veya session'dan kontrol et
-    valid_key = getattr(settings, 'JIR_LOCAL_KEY', None)
-    try:
-        config = SystemConfig.objects.first()
-        if config and config.jir_local_key:
-            valid_key = config.jir_local_key
-    except Exception:
-        pass
+    from jir_core.dashboard_auth import require_panel_api
 
-    # Session'dan giriş yapmış kullanıcı da erişebilir
-    session_logged_in = getattr(request, 'session', {}).get('is_logged_in', False)
-
-    if not session_logged_in and key != valid_key:
+    denied = require_panel_api(request)
+    if denied:
         return [
-            {'timestamp': datetime.now().isoformat(), 'type': 'error', 'message': 'Yetkisiz erişim! Geçersiz anahtar.', 'source': 'system'}
+            {
+                'timestamp': datetime.now().isoformat(),
+                'type': 'error',
+                'message': denied.get('message', 'Yetkisiz erişim'),
+                'source': 'system',
+            }
         ]
 
     log_files = [
@@ -1862,7 +1879,6 @@ def mail_repair_history_api(request, limit: int = 20):
 
 
 @router.post("/mail-repair/run", summary="Tek onarım işlemi (FULL veya JIR_LOCAL_KEY)")
-@csrf_exempt
 def mail_repair_run_api(request, data: MailRepairRunSchema):
     from management.repair_auth import require_repair_caller, session_has_repair_access
 

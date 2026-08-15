@@ -87,32 +87,26 @@ def update_postfix_vmail(email, action="add"):
 
 
 def get_api_key():
-    try:
-        config = SystemConfig.objects.first()
-        if config and config.jir_local_key:
-            return config.jir_local_key
-    except Exception:
-        pass
-    return getattr(settings, 'JIR_LOCAL_KEY', None)
+    """API anahtarını SystemConfig / env'den al (hardcoded fallback yok)."""
+    from jir_core.dashboard_auth import get_configured_local_key
+    return get_configured_local_key()
 
 
 def check_auth(request, key: str = None) -> bool:
-    """Key veya session ile yetki kontrolü."""
-    if hasattr(request, 'session') and request.session.get('is_logged_in'):
-        return True
-    expected = get_api_key()
-    if expected and key == expected:
-        return True
-    return False
+    """Panel oturumu veya X-JIR-Local-Key. Query ?key= kabul edilmez."""
+    from jir_core.dashboard_auth import require_panel_api
+    return require_panel_api(request) is None
 
 
 def check_panel_auth(request, key: str = None) -> bool:
-    """Mail sunucusu paneli işlemleri — süper yönetici veya API anahtarı."""
-    from jir_core.dashboard_auth import session_has_panel_access
+    """Mail sunucusu paneli işlemleri — süper yönetici oturumu veya servis anahtarı."""
+    from jir_core.dashboard_auth import require_panel_api
+    return require_panel_api(request) is None
 
-    if hasattr(request, 'session') and request.session.get('is_logged_in'):
-        return session_has_panel_access(request)
-    return check_auth(request, key)
+
+def check_self_or_panel(request, email: str, key: str = None) -> bool:
+    from jir_core.dashboard_auth import require_self_or_panel
+    return require_self_or_panel(request, email) is None
 
 
 @router.get("/list-accounts", summary="Tüm Mail Hesaplarını Listele")
@@ -228,7 +222,7 @@ def update_role(request, email: str, data: RoleUpdateSchema, key: str = None):
 
 @router.patch("/update-settings/{email}", summary="Hesap Email Ayarlarını Güncelle")
 def update_email_settings(request, email: str, key: str = None, data: EmailSettingsSchema = None):
-    if not check_auth(request, key):
+    if not check_self_or_panel(request, email, key):
         return {"status": "error", "message": "Yetkisiz erişim!"}
 
     try:
@@ -262,7 +256,7 @@ def update_email_settings(request, email: str, key: str = None, data: EmailSetti
 
 @router.get("/account-settings/{email}", summary="Hesap Email Ayarlarını Getir")
 def get_email_settings(request, email: str, key: str = None):
-    if not check_auth(request, key):
+    if not check_self_or_panel(request, email, key):
         return {"status": "error", "message": "Yetkisiz erişim!"}
 
     try:
@@ -287,7 +281,7 @@ def get_email_settings(request, email: str, key: str = None):
 
 @router.patch("/update-account/{email}", summary="Hesap Güncelle")
 def update_account(request, email: str, key: str = None, data: AccountUpdateSchema = None):
-    if not check_auth(request, key):
+    if not check_self_or_panel(request, email, key):
         return {"status": "error", "message": "Yetkisiz erişim!"}
 
     try:
@@ -341,7 +335,7 @@ def delete_account(request, email: str, key: str = None):
 
 @router.get("/account-details/{email}", summary="Hesap Detayları")
 def get_account_details(request, email: str, key: str = None):
-    if not check_auth(request, key):
+    if not check_self_or_panel(request, email, key):
         return {"status": "error", "message": "Yetkisiz erişim!"}
 
     try:
@@ -372,8 +366,13 @@ def get_account_details(request, email: str, key: str = None):
 
 
 @router.post("/create-account", summary="Yeni Mail Hesabı Oluştur")
-def create_mail_account(request, data: MailAccountSchema):
+def create_mail_account(request, data: MailAccountSchema, key: str = None):
+    if not check_panel_auth(request, key):
+        return {"status": "error", "message": "Yetkiniz yok. Süper yönetici yetkisi gerekir."}
+
     config = SystemConfig.objects.first()
+    if not config:
+        return {"status": "error", "message": "Sistem yapılandırması bulunamadı."}
     current_count = MailAccount.objects.count()
 
     if current_count >= config.max_accounts:
@@ -434,6 +433,47 @@ def generate_dns_records(
         return {"status": "error", "message": "Domain bulunamadı."}
     except Exception as e:
         return {"status": "error", "message": f"Error: {str(e)}"}
+
+
+class DnsApplyBody(Schema):
+    server_ip: Optional[str] = None
+    credentials: Optional[dict] = None
+    provider: Optional[str] = None
+
+
+@router.post("/apply-dns/{domain}", summary="DNS kayıtlarını provider’a uygula")
+def apply_dns_records(request, domain: str, data: DnsApplyBody = None, key: str = None):
+    """Kayıtlı veya istekteki Cloudflare/Route53/Namecheap bilgisiyle zone’a yazar."""
+    if not check_panel_auth(request, key):
+        return {"status": "error", "message": "Yetkiniz yok. Süper yönetici yetkisi gerekir."}
+
+    data = data or DnsApplyBody()
+    try:
+        from dns_providers.records import apply_mail_dns, detect_public_ip
+
+        domain_obj = MailDomain.objects.get(name=domain)
+        provider = (data.provider or domain_obj.dns_provider or 'manual').lower()
+        credentials = data.credentials if data.credentials is not None else (domain_obj.dns_credentials or {})
+        if provider == 'manual':
+            return {
+                "status": "error",
+                "message": "Otomatik uygulama için Cloudflare / Route53 / Namecheap seçin.",
+            }
+
+        mail_host = getattr(settings, 'MAIL_SERVER_HOSTNAME', None) or f'mail.{domain_obj.name}'
+        outcome = apply_mail_dns(
+            domain_obj.name,
+            provider_name=provider,
+            credentials=credentials,
+            server_ip=(data.server_ip or detect_public_ip() or ''),
+            mail_hostname=mail_host,
+            domain_obj=domain_obj,
+        )
+        return {"status": "success" if outcome.get("success") or outcome.get("partial") else "error", **outcome}
+    except MailDomain.DoesNotExist:
+        return {"status": "error", "message": "Domain bulunamadı."}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
 
 
 @router.get("/list-domains", summary="Domain Listesi")

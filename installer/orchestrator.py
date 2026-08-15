@@ -671,52 +671,79 @@ def _run_migrations(recorder: StepRecorder, *, subprocess_database_url: str | No
 
 
 def _apply_dns_records(config: dict, recorder: StepRecorder) -> None:
-    """DNS provider üzerinden kayıtları otomatik ekle. Manuel ise sadece logla."""
+    """DNS provider üzerinden mail için tüm kayıtları otomatik ekle/güncelle."""
     recorder.start()
     try:
-        from dns_providers import get_provider, DNSRecord
-        from core.models import MailDomain
+        from dns_providers.records import apply_mail_dns, detect_public_ip
 
         provider_name = config.get('dns_provider', 'manual')
         credentials = config.get('dns_credentials', {}) or {}
         domain_name = config['domain']
+        mail_host = config.get('mail_hostname', f'mail.{domain_name}')
+        server_ip = (
+            config.get('server_ip')
+            or config.get('public_ip')
+            or detect_public_ip()
+            or ''
+        )
 
-        provider = get_provider(provider_name, credentials)
-        if provider_name == 'manual' or not provider.is_configured():
-            recorder.log(f'Provider: {provider_name} (manuel). Kayıtlar dashboard\'da gösterilecek.')
+        if (provider_name or 'manual').lower() == 'manual':
+            recorder.log('Provider: manual. MX/SPF/DKIM/DMARC kayıtları panoda gösterilecek.')
+            recorder.log('Cloudflare/Route53 seçerseniz kurulumda otomatik yazılır.')
             recorder.finish(success=True)
             return
 
-        domain_obj = MailDomain.objects.filter(name=domain_name).first()
-        if domain_obj and not domain_obj.dkim_enabled:
-            domain_obj.generate_dkim_keys()
-            recorder.log('DKIM anahtar çifti üretildi.')
+        if not server_ip:
+            recorder.log(
+                'UYARI: Public IP bulunamadı. A (mail) kaydı atlanabilir. '
+                'SERVER_PUBLIC_IP ortam değişkeni ile sabitleyin.'
+            )
+        else:
+            recorder.log(f'Mail A kaydı IP: {server_ip}')
 
-        mail_host = config.get('mail_hostname', f'mail.{domain_name}')
-        records = [
-            DNSRecord(name='mail', type='A', content='SUNUCU_IP'),
-            DNSRecord(name='@', type='MX', content=mail_host, priority=10),
-            DNSRecord(name='@', type='TXT', content='v=spf1 mx a -all'),
-            DNSRecord(name='_dmarc', type='TXT',
-                      content=f'v=DMARC1; p=quarantine; rua=mailto:dmarc@{domain_name}'),
-        ]
+        recorder.log(f'{provider_name}: MX, SPF, DKIM, DMARC, A (+ autoconfig) yazılıyor...')
+        outcome = apply_mail_dns(
+            domain_name,
+            provider_name=provider_name,
+            credentials=credentials,
+            server_ip=server_ip or '',
+            mail_hostname=mail_host,
+        )
 
-        for r in records:
-            outcome = provider.create_record(domain_name, r)
-            if outcome.get('success'):
-                recorder.log(f'OK   {r.type} {r.name} -> {r.content[:60]}')
+        if outcome.get('skipped'):
+            recorder.log(outcome.get('message') or 'DNS atlandı')
+            recorder.finish(success=True)
+            return
+
+        for item in outcome.get('results') or []:
+            rec = item.get('record') or {}
+            res = item.get('result') or {}
+            label = f'{rec.get("type")} {rec.get("name")}'
+            content = str(rec.get('content') or '')[:80]
+            if res.get('success'):
+                action = res.get('action') or 'ok'
+                recorder.log(f'OK [{action}] {label} -> {content}')
             else:
-                recorder.log(f'SKIP {r.type} {r.name}: {outcome.get("message", "")}')
+                recorder.log(f'FAIL {label}: {res.get("message", "")}')
 
-        if domain_obj:
-            domain_obj.dns_provider = provider_name
-            domain_obj.dns_credentials = credentials
-            domain_obj.save(update_fields=['dns_provider', 'dns_credentials'])
-
-        recorder.finish(success=True)
+        created = int(outcome.get('created') or 0)
+        total = int(outcome.get('total') or 0)
+        if outcome.get('success'):
+            recorder.log(f'Tüm DNS kayıtları uygulandı ({created}/{total}).')
+            recorder.finish(success=True)
+        elif outcome.get('partial'):
+            recorder.log(f'Kısmi başarı: {created}/{total} kayıt. Eksikleri Domains → DNS senkron ile tekrar uygulayın.')
+            recorder.finish(success=True, message=f'{created}/{total} DNS kaydı')
+        else:
+            recorder.log(
+                'DNS uygulanamadı — token/zone yetkilerini kontrol edin. '
+                'Kurulum devam eder; Domains sayfasından tekrar uygulayabilirsiniz.'
+            )
+            recorder.finish(success=True, message='DNS apply failed — retry from panel')
     except Exception as exc:
         recorder.log(f'HATA: {exc}')
-        recorder.finish(success=False, message=str(exc))
+        recorder.log('Kurulum devam ediyor; DNS’i panelden tekrar uygulayabilirsiniz.')
+        recorder.finish(success=True, message=str(exc))
 
 
 def _request_tls_certificate(config: dict, recorder: StepRecorder) -> None:

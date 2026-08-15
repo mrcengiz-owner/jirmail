@@ -56,6 +56,7 @@ function webmailLoginForm() {
                 const csrfToken = (document.querySelector('meta[name="csrf-token"]') || {}).content || '';
                 const res = await fetch('/login-success/', {
                     method: 'POST',
+                    credentials: 'same-origin',
                     headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
                     body: JSON.stringify({ email: this.email, password: this.password })
                 });

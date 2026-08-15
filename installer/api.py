@@ -18,7 +18,6 @@ import threading
 from typing import Any, Dict, Optional
 
 from django.http import HttpRequest, JsonResponse
-from django.views.decorators.csrf import csrf_exempt
 from ninja import Router, Schema
 from pydantic import Field
 
@@ -39,9 +38,18 @@ from .profiles import (
     validate_manual_db_connection,
 )
 from .sse import sse_response
+from jir_core.dashboard_auth import require_installer_access
 
 
 router = Router()
+
+
+def _guard_install(request, *, allow_panel_when_installed: bool = False):
+    """Kurulum sonrası mutasyonları kapat / panel ile sınırla."""
+    return require_installer_access(
+        request, allow_panel_when_installed=allow_panel_when_installed
+    )
+
 
 
 class DbManualSchema(Schema):
@@ -95,6 +103,10 @@ class TestDbSchema(Schema):
 @router.get('/bootstrap', summary='Kurulum sihirbazı ortam bilgisi')
 def installer_bootstrap(request: HttpRequest):
     """Docker / DATABASE_URL yetenekleri, önerilen profil ve UI mod listesi."""
+    denied = _guard_install(request, allow_panel_when_installed=True)
+    if denied:
+        return denied
+
     cap = probe_capabilities()
     url = os.getenv('DATABASE_URL', '').strip()
     out: Dict[str, Any] = {
@@ -156,9 +168,12 @@ class BootstrapStackSchema(Schema):
 
 
 @router.post('/bootstrap-stack', summary='Tek sunucu — stack + mail TLS (sihirbaz başlangıcı)')
-@csrf_exempt
 def bootstrap_stack(request: HttpRequest, data: BootstrapStackSchema):
     """Sayfa açılışında: dizinleri bul, Docker konteynerlerini oluştur, TLS doğrula."""
+    denied = _guard_install(request, allow_panel_when_installed=False)
+    if denied:
+        return denied
+
     dom = (data.domain or '').strip()
     cfg = {
         'domain': dom,
@@ -175,6 +190,9 @@ def bootstrap_stack(request: HttpRequest, data: BootstrapStackSchema):
 
 @router.get('/bootstrap-stack/status', summary='Bootstrap iş durumu')
 def bootstrap_stack_status(request: HttpRequest):
+    denied = _guard_install(request, allow_panel_when_installed=True)
+    if denied:
+        return denied
     snap = bootstrap_state_snapshot()
     if snap.get('status') == 'done' and snap.get('result'):
         return snap['result']
@@ -182,8 +200,10 @@ def bootstrap_stack_status(request: HttpRequest):
 
 
 @router.post('/test-db', summary='PostgreSQL bağlantı testi')
-@csrf_exempt
 def test_db_connection(request: HttpRequest, data: TestDbSchema):
+    denied = _guard_install(request, allow_panel_when_installed=False)
+    if denied:
+        return denied
     try:
         import psycopg2
 
@@ -207,6 +227,10 @@ def test_db_connection(request: HttpRequest, data: TestDbSchema):
 @router.get('/mail-stack-status', summary='Mail servisleri durumu (sihirbaz)')
 def mail_stack_status(request: HttpRequest, domain: str = '', install_profile: str = ''):
     """SMTP/IMAP kontrolü, Docker konteyner durumu ve otomatik kurulum uygunluğu."""
+    denied = _guard_install(request, allow_panel_when_installed=True)
+    if denied:
+        return denied
+
     from installer.compose_mode import is_compose_stack
 
     default_profile = 'compose_stack' if is_compose_stack() else 'docker_stack'
@@ -304,9 +328,12 @@ class MailAutoSetupSchema(Schema):
 
 
 @router.post('/fix-postfix-routing', summary='Gmail routing onarımı (pgsql map doğrudan yaz)')
-@csrf_exempt
 def fix_postfix_routing_api(request: HttpRequest):
     """Dış alıcılar Dovecot'a düşüyorsa pgsql map dosyalarını doğrudan yazar."""
+    denied = _guard_install(request, allow_panel_when_installed=True)
+    if denied:
+        return denied
+
     from management.repair_auth import require_repair_caller
 
     denied = require_repair_caller(request)
@@ -318,9 +345,12 @@ def fix_postfix_routing_api(request: HttpRequest):
 
 
 @router.post('/heal-mail-stack', summary='Compose stack — Postfix onarım (sihirbaz)')
-@csrf_exempt
 def heal_mail_stack_api(request: HttpRequest, data: MailAutoSetupSchema):
     """Postfix çalışmıyorsa init script + start/restart dener."""
+    denied = _guard_install(request, allow_panel_when_installed=True)
+    if denied:
+        return denied
+
     from management.repair_auth import require_repair_caller
 
     denied = require_repair_caller(request)
@@ -342,8 +372,10 @@ class MailStackProvisionSchema(Schema):
 
 
 @router.post('/mail-stack-provision', summary='Postfix+Dovecot kur (Docker)')
-@csrf_exempt
 def mail_stack_provision(request: HttpRequest, data: MailStackProvisionSchema):
+    denied = _guard_install(request, allow_panel_when_installed=True)
+    if denied:
+        return denied
     dom = (data.domain or '').strip()
     mh = (data.mail_hostname or '').strip() or (f'mail.{dom}' if dom else '')
     cfg = {
@@ -360,9 +392,12 @@ def mail_stack_provision(request: HttpRequest, data: MailStackProvisionSchema):
 
 
 @router.post('/mail-auto-setup', summary='Mail stack + panel ağı (sihirbaz, otomatik)')
-@csrf_exempt
 def mail_auto_setup(request: HttpRequest, data: MailAutoSetupSchema):
     """Postfix/Dovecot kur, paneli jir_network'e bağla, TCP doğrula."""
+    denied = _guard_install(request, allow_panel_when_installed=True)
+    if denied:
+        return denied
+
     from installer.compose_mode import is_compose_stack
 
     dom = (data.domain or '').strip()
@@ -386,9 +421,12 @@ def mail_auto_setup(request: HttpRequest, data: MailAutoSetupSchema):
 
 
 @router.post('/start', summary='Kurulumu başlat')
-@csrf_exempt
 def start_install(request: HttpRequest, data: StartInstallSchema):
     """Yeni bir InstallationRun yaratıp orchestrator'u arkaplan thread'inde çalıştırır."""
+    denied = _guard_install(request, allow_panel_when_installed=False)
+    if denied:
+        return denied
+
     if InstallationRun.objects.filter(status__in=['running', 'pending']).exists():
         active = InstallationRun.objects.filter(status__in=['running', 'pending']).first()
         return {
@@ -470,6 +508,10 @@ def start_install(request: HttpRequest, data: StartInstallSchema):
 @router.get('/status', summary='Aktif kurulumun durumu')
 def install_status(request: HttpRequest, run_id: Optional[str] = None):
     """SSE bağlantısı kuramayan istemciler için polling fallback."""
+    denied = _guard_install(request, allow_panel_when_installed=True)
+    if denied:
+        return denied
+
     if run_id:
         run = InstallationRun.objects.filter(run_id=run_id).first()
     else:
@@ -520,38 +562,21 @@ class DNSRecordsQuery(Schema):
 
 def _recommended_records(domain: str, server_ip: str) -> list[dict]:
     """Mail için önerilen DNS kayıtlarını üretir."""
-    from core.models import MailDomain
+    from dns_providers.records import build_mail_dns_records, records_as_dicts
 
-    mail_host = f'mail.{domain}'
-    records = [
-        {'name': 'mail', 'type': 'A', 'content': server_ip or 'SUNUCU_IP', 'ttl': 3600,
-         'description': 'Mail sunucusu A kaydı'},
-        {'name': '@', 'type': 'MX', 'content': mail_host, 'priority': 10, 'ttl': 3600,
-         'description': 'MX kaydı — mail server adresi'},
-        {'name': '@', 'type': 'TXT', 'content': 'v=spf1 mx a -all', 'ttl': 3600,
-         'description': 'SPF — sadece MX/A kayıtları gönderim yapabilir'},
-        {'name': '_dmarc', 'type': 'TXT', 'content': f'v=DMARC1; p=quarantine; rua=mailto:dmarc@{domain}',
-         'ttl': 3600, 'description': 'DMARC politikası'},
-    ]
-
-    md = MailDomain.objects.filter(name=domain).first()
-    if md and md.dkim_record:
-        record_text = md.dkim_record.split('IN TXT', 1)[-1].strip().strip('"')
-        selector = md.dkim_record.split('._domainkey', 1)[0].strip()
-        records.append({
-            'name': f'{selector}._domainkey',
-            'type': 'TXT',
-            'content': record_text,
-            'ttl': 3600,
-            'description': 'DKIM public key',
-        })
-
-    return records
+    records = build_mail_dns_records(domain, server_ip=server_ip or '')
+    return records_as_dicts(records)
 
 
 @router.get('/dns-records', summary='Önerilen DNS kayıtları')
 def dns_records(request: HttpRequest, domain: str, server_ip: str = ''):
-    return {'domain': domain, 'records': _recommended_records(domain, server_ip)}
+    denied = _guard_install(request, allow_panel_when_installed=True)
+    if denied:
+        return denied
+    from dns_providers.records import detect_public_ip
+
+    ip = server_ip or detect_public_ip() or ''
+    return {'domain': domain, 'server_ip': ip, 'records': _recommended_records(domain, ip)}
 
 
 class DNSApplySchema(Schema):
@@ -559,40 +584,27 @@ class DNSApplySchema(Schema):
     provider: str = 'manual'
     credentials: Dict[str, Any] = Field(default_factory=dict)
     server_ip: str = ''
+    mail_hostname: str = ''
 
 
 @router.post('/dns-apply', summary='DNS kayıtlarını otomatik uygula')
-@csrf_exempt
 def dns_apply(request: HttpRequest, data: DNSApplySchema):
-    from dns_providers import get_provider, DNSRecord
+    denied = _guard_install(request, allow_panel_when_installed=True)
+    if denied:
+        return denied
+    from dns_providers.records import apply_mail_dns, detect_public_ip
 
+    ip = data.server_ip or detect_public_ip() or ''
     try:
-        provider = get_provider(data.provider, data.credentials)
+        return apply_mail_dns(
+            data.domain,
+            provider_name=data.provider,
+            credentials=data.credentials,
+            server_ip=ip,
+            mail_hostname=data.mail_hostname or '',
+        )
     except Exception as exc:
         return {'success': False, 'message': str(exc)}
-
-    if not provider.is_configured():
-        return {'success': False, 'message': f'{data.provider} için kimlik bilgileri eksik'}
-
-    results: list[dict] = []
-    for rec in _recommended_records(data.domain, data.server_ip):
-        dns_rec = DNSRecord(
-            name=rec['name'],
-            type=rec['type'],
-            content=rec['content'],
-            ttl=rec.get('ttl', 3600),
-            priority=rec.get('priority'),
-        )
-        outcome = provider.create_record(data.domain, dns_rec)
-        results.append({'record': rec, 'result': outcome})
-
-    success_count = sum(1 for r in results if r['result'].get('success'))
-    return {
-        'success': success_count > 0,
-        'total': len(results),
-        'created': success_count,
-        'results': results,
-    }
 
 
 class TLSRequestSchema(Schema):
@@ -602,8 +614,10 @@ class TLSRequestSchema(Schema):
 
 
 @router.post('/tls-request', summary='Let\'s Encrypt sertifikası iste')
-@csrf_exempt
 def tls_request(request: HttpRequest, data: TLSRequestSchema):
+    denied = _guard_install(request, allow_panel_when_installed=True)
+    if denied:
+        return denied
     try:
         from tls.certbot_manager import request_certificate
         from core.models import MailDomain

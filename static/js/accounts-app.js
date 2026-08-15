@@ -25,8 +25,7 @@
 
     function accountsAppFactory() {
         return {
-            JIR_KEY: window.JIR_KEY || '',
-            accounts: parseJsonScript('accounts-bootstrap', []),
+                        accounts: parseJsonScript('accounts-bootstrap', []),
             roleChoices: parseJsonScript('role-choices', defaultRoles),
             domains: window.DOMAINS || [],
             showAddModal: false,
@@ -61,7 +60,7 @@
 
             refreshAccounts: function() {
                 var self = this;
-                return fetch('/api/core/list-accounts?key=' + encodeURIComponent(self.JIR_KEY))
+                return fetch('/api/core/list-accounts', { credentials: 'same-origin' })
                     .then(function(r) { return r.json(); })
                     .then(function(data) {
                         if (data.status === 'success') self.accounts = data.accounts || [];
@@ -125,7 +124,6 @@
                 this.roleSaving = true;
                 this.roleSaveError = '';
                 var url = '/api/core/update-role/' + encodeURIComponent(this.editAccount.email);
-                if (self.JIR_KEY) url += '?key=' + encodeURIComponent(self.JIR_KEY);
                 fetch(url, {
                     method: 'PATCH',
                     headers: {
@@ -213,8 +211,9 @@
 
             toggleAccount: function(acc) {
                 var self = this;
-                fetch('/api/core/toggle-account/' + encodeURIComponent(acc.email) + '?key=' + encodeURIComponent(self.JIR_KEY), {
+                fetch('/api/core/toggle-account/' + encodeURIComponent(acc.email), {
                     method: 'PATCH',
+                    credentials: 'same-origin',
                     headers: { 'X-CSRFToken': window.getCsrfToken ? window.getCsrfToken() : '' }
                 })
                     .then(function(r) { return r.json(); })
@@ -238,8 +237,9 @@
                 }
                 if (!confirm(acc.email + ' hesabı silinsin mi?')) return;
                 var self = this;
-                fetch('/api/core/delete-account/' + encodeURIComponent(acc.email) + '?key=' + encodeURIComponent(self.JIR_KEY), {
+                fetch('/api/core/delete-account/' + encodeURIComponent(acc.email), {
                     method: 'DELETE',
+                    credentials: 'same-origin',
                     headers: { 'X-CSRFToken': window.getCsrfToken ? window.getCsrfToken() : '' }
                 })
                     .then(function(r) { return r.json(); })

@@ -9,13 +9,22 @@ import dotenv
 from pathlib import Path
 import os
 import socket
+from django.core.exceptions import ImproperlyConfigured
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 dotenv.load_dotenv(BASE_DIR / '.env')
 
-SECRET_KEY = os.getenv('SECRET_KEY', 'django-insecure-r%36n))g&hrl-di8^5$ni9(j5y@ovwju!(1q)ql*^%#9emwh_w')
-
 DEBUG = os.getenv('DEBUG', 'False').lower() in ('true', '1', 'yes')
+
+_secret = (os.getenv('SECRET_KEY') or '').strip()
+if not _secret:
+    if DEBUG:
+        _secret = 'django-insecure-dev-only-do-not-use-in-production'
+    else:
+        raise ImproperlyConfigured(
+            'SECRET_KEY ortam değişkeni zorunludur (production).'
+        )
+SECRET_KEY = _secret
 
 # ─── Dynamic Service Discovery ────────────────────────────────────────────────
 # Docker içinde /.dockerenv dosyası bulunur; servis adları hostname olarak çözülür
@@ -68,7 +77,12 @@ def _resolve_mail_service_host(service_key: str, docker_default: str) -> str:
 
 # ──────────────────────────────────────────────────────────────────────────────
 
-ALLOWED_HOSTS = ['*']
+ALLOWED_HOSTS = [
+    h.strip()
+    for h in (os.getenv('ALLOWED_HOSTS', '*') or '*').split(',')
+    if h.strip()
+] or ['*']
+# Üretimde ALLOWED_HOSTS=mail.ornek.com şeklinde daraltın; '*' yalnızca Traefik/PaaS uyumu için varsayılan.
 
 
 def _origin_from_url(url: str) -> str | None:
@@ -217,6 +231,9 @@ CSRF_TRUSTED_ORIGINS = _TRUSTED_ORIGINS
 # Traefik / Dokploy arkasında HTTPS
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 USE_X_FORWARDED_HOST = True
+SECURE_CONTENT_TYPE_NOSNIFF = True
+SECURE_REFERRER_POLICY = 'same-origin'
+X_FRAME_OPTIONS = 'DENY'
 
 if DEBUG:
     CSRF_COOKIE_SECURE = False
@@ -224,6 +241,24 @@ if DEBUG:
 else:
     CSRF_COOKIE_SECURE = True
     SESSION_COOKIE_SECURE = True
+    # HSTS: genelde Traefik/CDN yönetir; açıkça istenirse açın
+    SECURE_HSTS_SECONDS = int(os.getenv('SECURE_HSTS_SECONDS', '0') or 0)
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = os.getenv('SECURE_HSTS_INCLUDE_SUBDOMAINS', 'false').lower() in (
+        '1', 'true', 'yes',
+    )
+    SECURE_HSTS_PRELOAD = False
+
+# Üretimde düz SMTP/IMAP (MAIL_TLS_MODE=off) yalnızca bilinçli opt-in
+# Image build (collectstatic) sırasında atlanır.
+if (
+    not DEBUG
+    and (os.getenv('SECRET_KEY') or '') != 'build-collectstatic-only'
+    and os.getenv('MAIL_TLS_MODE', 'e2e').strip().lower() == 'off'
+):
+    if os.getenv('ALLOW_INSECURE_MAIL_TLS', '').lower() not in ('1', 'true', 'yes'):
+        raise ImproperlyConfigured(
+            'MAIL_TLS_MODE=off production’da yasak. Geçici olarak ALLOW_INSECURE_MAIL_TLS=1 kullanın.'
+        )
 
 ROOT_URLCONF = 'config.urls'
 
@@ -382,6 +417,31 @@ BACKUP_DIR = get_jir_path('backup')
 CELERY_BROKER_URL = os.getenv('CELERY_BROKER_URL', f'redis://{REDIS_HOST}:6379/0')
 CELERY_RESULT_BACKEND = os.getenv('CELERY_RESULT_BACKEND', f'redis://{REDIS_HOST}:6379/0')
 
+# Login throttle / kısa ömürlü cache — Redis varsa paylaşılır (çok worker)
+_cache_redis = (CELERY_BROKER_URL or '').strip()
+if _cache_redis.startswith('redis://'):
+    # Aynı Redis, ayrı DB index (broker …/0 ise cache …/1)
+    _base = _cache_redis.rstrip('/')
+    if _base.endswith('/0'):
+        _cache_loc = _base[:-2] + '/1'
+    elif _base[-1:].isdigit() and '/' in _base:
+        _cache_loc = _base.rsplit('/', 1)[0] + '/1'
+    else:
+        _cache_loc = _base + '/1'
+    CACHES = {
+        'default': {
+            'BACKEND': 'django.core.cache.backends.redis.RedisCache',
+            'LOCATION': _cache_loc,
+        }
+    }
+else:
+    CACHES = {
+        'default': {
+            'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+            'LOCATION': 'jir-mail-throttle',
+        }
+    }
+
 IMAP_HOST = _resolve_mail_service_host('dovecot', 'jir_dovecot')
 IMAP_PORT = int(os.getenv('IMAP_PORT', '993'))
 # Mail uçtan uca TLS: panel ↔ Postfix/Dovecot (dahili PKI). Kapatmak için yalnızca MAIL_TLS_MODE=off
@@ -411,12 +471,21 @@ JIR_CONTAINER_DJANGO = os.getenv('JIR_CONTAINER_DJANGO', 'jir_django')
 JIR_CONTAINER_CELERY = os.getenv('JIR_CONTAINER_CELERY', 'jir_celery')
 JIR_CONTAINER_CELERY_BEAT = os.getenv('JIR_CONTAINER_CELERY_BEAT', 'jir_celery_beat')
 
-SESSION_COOKIE_AGE = int(os.getenv('SESSION_COOKIE_AGE', '86400'))
+SESSION_COOKIE_AGE = int(os.getenv('SESSION_COOKIE_AGE', '28800'))  # 8 saat
 SESSION_COOKIE_HTTPONLY = True
 SESSION_COOKIE_SAMESITE = os.getenv('SESSION_COOKIE_SAMESITE', 'Lax')
-SESSION_EXPIRE_AT_BROWSER_CLOSE = False
+SESSION_EXPIRE_AT_BROWSER_CLOSE = os.getenv('SESSION_EXPIRE_AT_BROWSER_CLOSE', 'false').lower() in (
+    '1', 'true', 'yes',
+)
 SESSION_SAVE_EVERY_REQUEST = True
+# IMAP/SMTP için session’daki şifreli parola ömrü (saniye); dolunca webmail yeniden giriş ister
+MAIL_PASSWORD_SESSION_TTL = int(os.getenv('MAIL_PASSWORD_SESSION_TTL', '14400'))  # 4 saat
 CSRF_COOKIE_HTTPONLY = False
 CSRF_COOKIE_SAMESITE = os.getenv('CSRF_COOKIE_SAMESITE', 'Lax')
 SESSION_COOKIE_DOMAIN = os.getenv('SESSION_COOKIE_DOMAIN', '') or None
 CSRF_COOKIE_DOMAIN = os.getenv('CSRF_COOKIE_DOMAIN', '') or None
+# Django admin — varsayılan kapalı; ENABLE_DJANGO_ADMIN=1 ile açılır
+ENABLE_DJANGO_ADMIN = (
+    DEBUG
+    or os.getenv('ENABLE_DJANGO_ADMIN', '').lower() in ('1', 'true', 'yes')
+)

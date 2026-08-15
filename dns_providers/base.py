@@ -52,6 +52,10 @@ class DNSProvider(ABC):
         """Kayıt id'sine göre sil."""
         ...
 
+    def ensure_record(self, zone: str, record: DNSRecord) -> dict:
+        """Varsayılan: create_record. Provider upsert destekliyorsa override eder."""
+        return self.create_record(zone, record)
+
     def verify_record(self, zone: str, record: DNSRecord) -> dict:
         """Kayıt gerçekten DNS'te yayılmış mı kontrol et (dnspython ile)."""
         try:

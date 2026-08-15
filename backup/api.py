@@ -1,4 +1,6 @@
 from ninja import Router, Schema
+from ninja.errors import HttpError
+from jir_core.dashboard_auth import require_panel_api, safe_extract_tar
 from django.conf import settings
 from core.models import Backup, MailAccount, MailDomain
 from datetime import datetime, timedelta
@@ -9,6 +11,13 @@ import json
 import shutil
 
 router = Router()
+
+
+def _require_panel(request):
+    denied = require_panel_api(request)
+    if denied:
+        raise HttpError(403, denied.get('message', 'Yetkisiz'))
+
 
 
 class BackupConfigSchema(Schema):
@@ -151,6 +160,7 @@ def create_config_backup(backup_dir):
 
 @router.post("/create-backup", summary="Yedekleme Oluştur")
 def create_backup(request, data: BackupConfigSchema):
+    _require_panel(request)
     try:
         backup_dir = get_backup_directory()
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
@@ -293,6 +303,7 @@ def create_backup_logic(backup_type='full', include_emails=False, include_config
 
 @router.get("/list-backups", response={200: list[BackupListSchema]}, summary="Yedekleri Listele")
 def list_backups(request):
+    _require_panel(request)
     backups = Backup.objects.all()[:50]
     return [
         {
@@ -313,6 +324,7 @@ def list_backups(request):
 
 @router.post("/restore-backup", summary="Yedekten Geri Yükle")
 def restore_backup(request, data: RestoreConfigSchema):
+    _require_panel(request)
     try:
         backup = Backup.objects.get(id=data.backup_id)
         if backup.status != 'completed':
@@ -329,7 +341,7 @@ def restore_backup(request, data: RestoreConfigSchema):
 
         try:
             with tarfile.open(archive_path, 'r:gz') as tar:
-                tar.extractall(restore_dir)
+                safe_extract_tar(tar, restore_dir)
         except Exception as e:
             return {"status": "error", "message": f"Arşiv açma hatası: {str(e)}"}
 
@@ -365,7 +377,7 @@ def restore_backup(request, data: RestoreConfigSchema):
             mail_root = getattr(settings, 'POSTFIX_MAIL_ROOT', '/var/mail/vhosts')
             if os.path.exists(emails_tar):
                 with tarfile.open(emails_tar, 'r:gz') as tar:
-                    tar.extractall(mail_root)
+                    safe_extract_tar(tar, mail_root)
                 results['emails'] = 'restored'
 
         shutil.rmtree(restore_dir)
@@ -384,6 +396,7 @@ def restore_backup(request, data: RestoreConfigSchema):
 
 @router.delete("/delete-backup/{backup_id}", summary="Yedek Sil")
 def delete_backup(request, backup_id: int):
+    _require_panel(request)
     try:
         backup = Backup.objects.get(id=backup_id)
         if backup.file_path and os.path.exists(backup.file_path):
@@ -398,6 +411,7 @@ def delete_backup(request, backup_id: int):
 
 @router.post("/schedule-backup", summary="Otomatik Yedekleme Planla")
 def schedule_backup(request, data: BackupConfigSchema):
+    _require_panel(request)
     try:
         backup = Backup.objects.create(
             name=f"Auto_Backup_{datetime.now().strftime('%Y%m%d_%H%M%S')}",

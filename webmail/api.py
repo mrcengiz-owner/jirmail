@@ -119,9 +119,11 @@ def _message_to_api(m: MailMessageCache, account: MailAccount, folder: str) -> d
 
 
 def _get_account_and_password(request: HttpRequest):
-    """Session'dan giriş yapan mail hesabını ve şifresini al."""
+    """Session'dan giriş yapan mail hesabını ve (şifreli) parolasını al."""
+    from jir_core.session_secrets import get_mail_password
+
     account_id = request.session.get('account_id')
-    password = request.session.get('mail_password', '')
+    password = get_mail_password(request.session)
     if not account_id or not password:
         return None, ''
     return (

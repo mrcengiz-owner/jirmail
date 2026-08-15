@@ -42,6 +42,10 @@ class Route53Provider(DNSProvider):
         raise RuntimeError(f'Hosted zone bulunamadı: {zone}')
 
     def create_record(self, zone: str, record: DNSRecord) -> dict:
+        return self.ensure_record(zone, record)
+
+    def ensure_record(self, zone: str, record: DNSRecord) -> dict:
+        """Route53 UPSERT."""
         try:
             client = self._get_client()
             zone_id = self._get_hosted_zone_id(zone)

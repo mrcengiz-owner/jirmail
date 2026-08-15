@@ -54,7 +54,6 @@ def well_known(request, path=''):
 
 
 urlpatterns = [
-    path('admin/', admin.site.urls),
     path('api/', api.urls, name='api'),
     path('api/installer/stream/<str:run_id>', install_stream, name='installer_stream'),
     path('api/mail/stream', mail_stream, name='mail_stream'),
@@ -80,6 +79,9 @@ urlpatterns = [
     path('.well-known/<path:path>', well_known),
     path('', root_redirect, name='root'),
 ]
+
+if getattr(settings, 'ENABLE_DJANGO_ADMIN', False):
+    urlpatterns.insert(0, path('admin/', admin.site.urls))
 
 if settings.DEBUG:
     urlpatterns += static(settings.STATIC_URL, document_root=settings.STATICFILES_DIRS[0])

@@ -1,48 +1,31 @@
 """Onarım API yetkilendirme — installer endpoint kısıtlaması."""
 from __future__ import annotations
 
-from django.conf import settings
 from django.http import HttpRequest
+
+from jir_core.dashboard_auth import (
+    get_configured_local_key,
+    request_has_service_key,
+    session_has_panel_access,
+    system_is_installed,
+)
 
 
 def resolve_jir_local_key() -> str:
-    try:
-        from saas.models import SystemConfig
-
-        config = SystemConfig.objects.first()
-        if config and config.jir_local_key:
-            return str(config.jir_local_key).strip()
-    except Exception:
-        pass
-    return (getattr(settings, 'JIR_LOCAL_KEY', '') or '').strip()
+    return get_configured_local_key() or ''
 
 
 def session_has_repair_access(request: HttpRequest) -> bool:
-    from jir_core.dashboard_auth import session_has_panel_access
-
     return bool(request.session.get('is_logged_in')) and session_has_panel_access(request)
 
 
 def request_has_local_key(request: HttpRequest) -> bool:
-    expected = resolve_jir_local_key()
-    if not expected:
-        return False
-    supplied = (
-        (request.headers.get('X-JIR-Local-Key') or '')
-        or (request.headers.get('X-Jir-Local-Key') or '')
-        or (request.GET.get('key') or '')
-    ).strip()
-    return bool(supplied) and supplied == expected
+    """Yalnızca X-JIR-Local-Key header (query ?key= kabul edilmez)."""
+    return request_has_service_key(request)
 
 
 def is_setup_phase() -> bool:
-    try:
-        from saas.models import SystemConfig
-
-        config = SystemConfig.objects.first()
-        return not (config and config.is_installed)
-    except Exception:
-        return True
+    return not system_is_installed()
 
 
 def deny_repair_response(message: str = 'Yetkisiz erişim.') -> dict:
@@ -50,7 +33,7 @@ def deny_repair_response(message: str = 'Yetkisiz erişim.') -> dict:
 
 
 def require_repair_caller(request: HttpRequest) -> dict | None:
-    """Panel oturumu, kurulum aşaması veya geçerli JIR_LOCAL_KEY."""
+    """Panel oturumu, kurulum aşaması veya geçerli X-JIR-Local-Key."""
     if session_has_repair_access(request):
         return None
     if is_setup_phase():

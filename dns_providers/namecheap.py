@@ -46,20 +46,21 @@ class NamecheapProvider(DNSProvider):
         return parts[0], '.'.join(parts[1:])
 
     def create_record(self, zone: str, record: DNSRecord) -> dict:
+        return self.ensure_record(zone, record)
+
+    def ensure_record(self, zone: str, record: DNSRecord) -> dict:
+        """Aynı name+type varsa güncelle, yoksa ekle (setHosts upsert)."""
         try:
             sld, tld = self._split_domain(zone)
             host = record.name if record.name and record.name != '@' else '@'
 
-            # Namecheap'te tüm hostları tek istekte göndermek gerek. Önce mevcut listeyi al, sonra üzerine ekle.
             params = {
                 'Command': 'namecheap.domains.dns.getHosts',
                 'SLD': sld,
                 'TLD': tld,
             }
             existing_root = self._request(params)
-            ns = {'nc': 'http://api.namecheap.com/xml.response'}
             hosts = []
-            i = 1
             for h in existing_root.iter('{http://api.namecheap.com/xml.response}host'):
                 hosts.append({
                     'name': h.attrib.get('Name'),
@@ -69,13 +70,21 @@ class NamecheapProvider(DNSProvider):
                     'ttl': h.attrib.get('TTL', '3600'),
                 })
 
-            hosts.append({
+            replaced = False
+            new_host = {
                 'name': host,
                 'type': record.type,
                 'address': record.content,
                 'mx_pref': str(record.priority or 10) if record.type == 'MX' else '10',
                 'ttl': str(record.ttl),
-            })
+            }
+            for i, h in enumerate(hosts):
+                if (h.get('name') or '@').lower() == host.lower() and (h.get('type') or '').upper() == record.type.upper():
+                    hosts[i] = new_host
+                    replaced = True
+                    break
+            if not replaced:
+                hosts.append(new_host)
 
             set_params: dict[str, str] = {
                 'Command': 'namecheap.domains.dns.setHosts',
@@ -92,7 +101,11 @@ class NamecheapProvider(DNSProvider):
             root = self._request(set_params)
             status = root.attrib.get('Status', 'ERROR')
             if status == 'OK':
-                return {'success': True, 'message': 'Kayıt eklendi'}
+                return {
+                    'success': True,
+                    'message': 'Kayıt güncellendi' if replaced else 'Kayıt eklendi',
+                    'action': 'updated' if replaced else 'created',
+                }
             return {'success': False, 'message': f'Namecheap hatası: {status}'}
         except Exception as exc:
             return {'success': False, 'message': str(exc)}

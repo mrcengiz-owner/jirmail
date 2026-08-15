@@ -152,6 +152,7 @@ function loginForm() {
                 const csrfToken = (document.querySelector('meta[name="csrf-token"]') || {}).content || '';
                 const res = await fetch('/login-success/', {
                     method: 'POST',
+                    credentials: 'same-origin',
                     headers: {
                         'Content-Type': 'application/json',
                         'X-CSRFToken': csrfToken

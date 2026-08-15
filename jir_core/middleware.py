@@ -5,18 +5,20 @@ class JirInstallMiddleware:
     def __call__(self, request):
         try:
             from saas.models import SystemConfig
+            from jir_core.dashboard_auth import get_configured_local_key
+
             config = SystemConfig.objects.first()
             if config:
                 request.jir_installed = config.is_installed
-                request.jir_local_key = config.jir_local_key if config.jir_local_key else 'JirCode_Alpha_2026_Secure_Key_v1'
+                request.jir_local_key = get_configured_local_key()
                 request.instance_id = str(config.instance_id) if config.instance_id else None
             else:
                 request.jir_installed = False
-                request.jir_local_key = 'JirCode_Alpha_2026_Secure_Key_v1'
+                request.jir_local_key = get_configured_local_key()
                 request.instance_id = None
         except Exception:
             request.jir_installed = False
-            request.jir_local_key = 'JirCode_Alpha_2026_Secure_Key_v1'
+            request.jir_local_key = None
             request.instance_id = None
 
         is_logged_in = request.session.get('is_logged_in', False)
@@ -32,10 +34,13 @@ class JirInstallMiddleware:
 
         path = request.path
 
-        # JSON API: oturum çerezi ile CSRF — Ninja POST istekleri 403/HTML önleme
-        if path.startswith('/api/mail/') and request.method in ('POST', 'PUT', 'PATCH', 'DELETE'):
-            request._dont_enforce_csrf_checks = True
-        if path.startswith('/api/installer/') and request.method in ('POST', 'PUT', 'PATCH', 'DELETE'):
+        # Webmail API CSRF: istemci X-CSRFToken gönderir (static/js/webmail/core.js).
+        # Installer: yalnızca kurulum tamamlanmadan CSRF gevşetilir.
+        if (
+            path.startswith('/api/installer/')
+            and request.method in ('POST', 'PUT', 'PATCH', 'DELETE')
+            and not getattr(request, 'jir_installed', False)
+        ):
             request._dont_enforce_csrf_checks = True
 
         if not is_logged_in:

@@ -17,6 +17,8 @@ from __future__ import annotations
 
 from django.http import HttpRequest
 from ninja import Router
+from ninja.errors import HttpError
+from jir_core.dashboard_auth import is_allowed_log_container, require_panel_api
 
 from . import postfix_inspector
 from .dnsbl_checker import check_ip
@@ -27,59 +29,79 @@ from .reputation import compute_stats
 router = Router()
 
 
+def _require_panel(request: HttpRequest):
+    denied = require_panel_api(request)
+    if denied:
+        raise HttpError(403, denied.get('message', 'Yetkisiz'))
+
+
+
 @router.get('/queue', summary='Postfix mail queue')
 def list_queue(request: HttpRequest):
+    _require_panel(request)
     return {'success': True, 'entries': postfix_inspector.list_queue()}
 
 
 @router.get('/queue/count', summary='Queue sayısı')
 def queue_count(request: HttpRequest):
+    _require_panel(request)
     return {'success': True, 'count': postfix_inspector.get_queue_count()}
 
 
 @router.delete('/queue/{queue_id}', summary='Kuyruktan sil')
 def delete_queue_entry(request: HttpRequest, queue_id: str):
+    _require_panel(request)
     return postfix_inspector.delete_message(queue_id)
 
 
 @router.post('/queue/flush', summary='Kuyruğu flush et')
 def flush_queue(request: HttpRequest):
+    _require_panel(request)
     return postfix_inspector.flush_queue()
 
 
 @router.post('/queue/delete-all', summary='Tüm kuyruğu sil')
 def delete_all_queue(request: HttpRequest):
+    _require_panel(request)
     return postfix_inspector.delete_all()
 
 
 @router.get('/queue/{queue_id}/view', summary='Mesaj içeriği')
 def view_queue_entry(request: HttpRequest, queue_id: str):
+    _require_panel(request)
     return postfix_inspector.view_message(queue_id)
 
 
 @router.post('/queue/{queue_id}/hold', summary='Hold')
 def hold_queue_entry(request: HttpRequest, queue_id: str):
+    _require_panel(request)
     return postfix_inspector.hold_message(queue_id)
 
 
 @router.post('/queue/{queue_id}/release', summary='Hold\'dan çıkar')
 def release_queue_entry(request: HttpRequest, queue_id: str):
+    _require_panel(request)
     return postfix_inspector.release_message(queue_id)
 
 
 @router.get('/dnsbl/{ip}', summary='IP DNSBL kontrol')
 def dnsbl_check(request: HttpRequest, ip: str):
+    _require_panel(request)
     return check_ip(ip)
 
 
 @router.get('/reputation', summary='Mail reputation istatistik')
 def reputation(request: HttpRequest, window_hours: int = 24):
+    _require_panel(request)
     return {'success': True, **compute_stats(window_hours=window_hours)}
 
 
 def logs_stream(request: HttpRequest):
     """SSE — mail log canlı yayını."""
+    _require_panel(request)
     container = request.GET.get('container', 'jir_postfix')
+    if not is_allowed_log_container(container):
+        raise HttpError(400, 'İzin verilmeyen container')
     try:
         lines = int(request.GET.get('lines', '100'))
     except ValueError:

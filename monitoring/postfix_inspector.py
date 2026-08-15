@@ -92,9 +92,22 @@ def flush_queue() -> dict:
     return {'success': code == 0, 'output': output[:2000]}
 
 
+_QUEUE_ID_RE = re.compile(r'^[A-F0-9]+$', re.IGNORECASE)
+
+
+def _validate_queue_id(queue_id: str) -> str | None:
+    qid = (queue_id or '').strip()
+    if not qid or not _QUEUE_ID_RE.match(qid):
+        return None
+    return qid.upper()
+
+
 def delete_message(queue_id: str) -> dict:
     """Belirli queue ID'sini sil."""
-    code, output = _exec(['postsuper', '-d', queue_id])
+    qid = _validate_queue_id(queue_id)
+    if not qid:
+        return {'success': False, 'output': 'Geçersiz queue id'}
+    code, output = _exec(['postsuper', '-d', qid])
     return {'success': code == 0, 'output': output[:2000]}
 
 
@@ -105,15 +118,24 @@ def delete_all() -> dict:
 
 def view_message(queue_id: str) -> dict:
     """Tek bir mailin içeriğini incele (postcat)."""
-    code, output = _exec(['postcat', '-q', queue_id])
+    qid = _validate_queue_id(queue_id)
+    if not qid:
+        return {'success': False, 'content': 'Geçersiz queue id'}
+    code, output = _exec(['postcat', '-q', qid])
     return {'success': code == 0, 'content': output[:20000]}
 
 
 def hold_message(queue_id: str) -> dict:
-    code, output = _exec(['postsuper', '-h', queue_id])
+    qid = _validate_queue_id(queue_id)
+    if not qid:
+        return {'success': False, 'output': 'Geçersiz queue id'}
+    code, output = _exec(['postsuper', '-h', qid])
     return {'success': code == 0, 'output': output[:2000]}
 
 
 def release_message(queue_id: str) -> dict:
-    code, output = _exec(['postsuper', '-H', queue_id])
+    qid = _validate_queue_id(queue_id)
+    if not qid:
+        return {'success': False, 'output': 'Geçersiz queue id'}
+    code, output = _exec(['postsuper', '-H', qid])
     return {'success': code == 0, 'output': output[:2000]}

@@ -86,7 +86,7 @@ class MailDomain(models.Model):
         self.dkim_private_key = private_key
         self.dkim_public_key = public_key
         self.dkim_record = f"{selector}._domainkey.{self.name} IN TXT \"v=DKIM1; k=rsa; p={public_key_dns}\""
-        self.spf_record = f"v=spf1 mx a -all"
+        self.spf_record = f"v=spf1 mx a:mail.{self.name} -all"
         self.dmarc_record = f"v=DMARC1; p=quarantine; rua=mailto:dmarc@{self.name}"
         self.dkim_enabled = True
         self.verification_status = 'pending'

@@ -386,7 +386,10 @@
             <!-- 6: DNS -->
             <div x-show="step === 6" x-transition.opacity>
                 <h2 class="text-lg sm:text-xl font-semibold text-white mb-1">DNS sağlayıcı</h2>
-                <p class="text-slate-500 text-sm mb-5">MX, SPF, DKIM, DMARC yönetimi</p>
+                <p class="text-slate-500 text-sm mb-5">
+                    Cloudflare / Route53 / Namecheap seçerseniz kurulumda
+                    <span class="text-slate-300">A, MX, SPF, DKIM, DMARC</span> ve istemci CNAME kayıtları zone’a otomatik yazılır.
+                </p>
 
                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-4">
                     <template x-for="opt in dnsProviders" :key="opt.value">
@@ -402,6 +405,10 @@
                 <div x-show="dnsProvider === 'cloudflare'" class="space-y-3">
                     <label class="label">API Token</label>
                     <input type="password" x-model="dnsCredentials.api_token" placeholder="Cloudflare API token" class="input">
+                    <p class="text-xs text-slate-500">
+                        Token yetkileri: <span class="text-slate-400">Zone → Zone:Read</span> ve
+                        <span class="text-slate-400">DNS → Edit</span>. Proxy (turuncu bulut) mail kayıtlarında kapatılır.
+                    </p>
                 </div>
                 <div x-show="dnsProvider === 'route53'" class="space-y-3">
                     <label class="label">AWS Access Key ID</label>
@@ -623,9 +630,9 @@ function setupWizard() {
         dnsCredentials: {},
         dnsProviders: [
             { value: 'manual', label: 'Manuel', hint: 'Kayıtları sonra kopyalarsınız' },
-            { value: 'cloudflare', label: 'Cloudflare', hint: 'API token' },
-            { value: 'route53', label: 'AWS Route53', hint: 'IAM' },
-            { value: 'namecheap', label: 'Namecheap', hint: 'API key' },
+            { value: 'cloudflare', label: 'Cloudflare', hint: 'A/MX/SPF/DKIM/DMARC otomatik' },
+            { value: 'route53', label: 'AWS Route53', hint: 'UPSERT ile otomatik' },
+            { value: 'namecheap', label: 'Namecheap', hint: 'API + IP whitelist' },
         ],
 
         runId: '',

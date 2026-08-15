@@ -213,8 +213,7 @@
         Alpine.data('masterPanel', function() {
             return {
                 activeTab: 'dashboard',
-                JIR_KEY: window.JIR_KEY || '',
-                specs: {
+                                specs: {
                     cpu_percent: 0,
                     ram_percent: 0,
                     ram_used_gb: 0,
@@ -283,7 +282,7 @@
 
                 fetchAccounts: function() {
                     var self = this;
-                    fetch('/api/core/list-accounts?key=' + this.JIR_KEY)
+                    fetch('/api/core/list-accounts', { credentials: 'same-origin' })
                         .then(function(res) { return res.json(); })
                         .then(function(data) {
                             if (data.status === 'success') self.accounts = data.accounts || [];
@@ -293,7 +292,7 @@
 
                 fetchDomains: function() {
                     var self = this;
-                    fetch('/api/core/list-domains?key=' + this.JIR_KEY)
+                    fetch('/api/core/list-domains', { credentials: 'same-origin' })
                         .then(function(res) { return res.json(); })
                         .then(function(data) {
                             if (data.status === 'success') self.domains = data.domains || [];
@@ -311,7 +310,7 @@
 
                 fetchLogs: function() {
                     var self = this;
-                    var url = '/api/management/logs?key=' + this.JIR_KEY + '&lines=50';
+                    var url = '/api/management/logs?lines=50';
                     if (this.logFilter) url += '&filter_type=' + this.logFilter;
                     fetch(url)
                         .then(function(res) { return res.json(); })
@@ -348,7 +347,7 @@
 
                 toggleAccount: function(email) {
                     var self = this;
-                    fetch('/api/core/toggle-account/' + encodeURIComponent(email) + '?key=' + this.JIR_KEY, { method: 'PATCH' })
+                    fetch('/api/core/toggle-account/' + encodeURIComponent(email), { method: 'PATCH', credentials: 'same-origin', headers: { 'X-CSRFToken': window.getCsrfToken ? window.getCsrfToken() : '' } })
                         .then(function(res) { return res.json(); })
                         .then(function() { self.fetchAccounts(); })
                         .catch(function(e) { console.error('Toggle account error:', e); });
@@ -357,7 +356,7 @@
                 deleteAccount: function(account) {
                     var self = this;
                     if (!confirm('Delete account ' + account.email + '?')) return;
-                    fetch('/api/core/delete-account/' + encodeURIComponent(account.email) + '?key=' + this.JIR_KEY, { method: 'DELETE' })
+                    fetch('/api/core/delete-account/' + encodeURIComponent(account.email), { method: 'DELETE', credentials: 'same-origin', headers: { 'X-CSRFToken': window.getCsrfToken ? window.getCsrfToken() : '' } })
                         .then(function(res) { return res.json(); })
                         .then(function() {
                             self.fetchAccounts();
@@ -572,8 +571,7 @@
                 }
             }
             return {
-                JIR_KEY: window.JIR_KEY || '',
-                domains: parseJsonScript('domains-bootstrap', []),
+                                domains: parseJsonScript('domains-bootstrap', []),
                 dnsProviderChoices: parseJsonScript('dns-provider-choices', []),
                 mailHostname: typeof window.MAIL_SERVER_HOSTNAME === 'string' ? window.MAIL_SERVER_HOSTNAME : '',
                 showAddModal: false,
@@ -595,7 +593,6 @@
 
                 coreQuery: function(extraPairs) {
                     var parts = [];
-                    if (this.JIR_KEY) parts.push('key=' + encodeURIComponent(this.JIR_KEY));
                     if (extraPairs && typeof extraPairs === 'object') {
                         Object.keys(extraPairs).forEach(function(k) {
                             if (extraPairs[k] !== undefined && extraPairs[k] !== null) {
@@ -754,24 +751,48 @@
                 syncDns: function(d) {
                     var self = this;
                     self.loading = true;
-                    fetch(self.apiUrl('/generate-dns-records/' + encodeURIComponent(d.name)), {
+                    var provider = (d.dns_provider || 'manual').toLowerCase();
+                    var gen = fetch(self.apiUrl('/generate-dns-records/' + encodeURIComponent(d.name)), {
                         method: 'POST',
+                        credentials: 'same-origin',
                         headers: { 'X-CSRFToken': window.getCsrfToken() }
-                    })
-                        .then(function(r) { return r.json(); })
-                        .then(function(data) {
+                    }).then(function(r) { return r.json(); });
+
+                    gen.then(function(data) {
+                        if (data.status !== 'success') {
                             self.loading = false;
-                            if (data.status === 'success') {
-                                window.showToast('DNS kayıtları senkronize edildi', 'success');
-                                self.refreshDomains();
-                            } else {
-                                window.showToast(data.message || 'İşlem başarısız', 'error');
-                            }
-                        })
-                        .catch(function() {
+                            window.showToast(data.message || 'DNS üretilemedi', 'error');
+                            return null;
+                        }
+                        if (provider === 'manual') {
                             self.loading = false;
-                            window.showToast('Bağlantı hatası', 'error');
-                        });
+                            window.showToast('DNS kayıtları hazır — manuel sağlayıcıda panodan kopyalayın', 'success');
+                            self.refreshDomains();
+                            return null;
+                        }
+                        return fetch(self.apiUrl('/apply-dns/' + encodeURIComponent(d.name)), {
+                            method: 'POST',
+                            credentials: 'same-origin',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'X-CSRFToken': window.getCsrfToken()
+                            },
+                            body: JSON.stringify({})
+                        }).then(function(r) { return r.json(); });
+                    }).then(function(applyData) {
+                        if (!applyData) return;
+                        self.loading = false;
+                        if (applyData.status === 'success' || applyData.success || applyData.partial) {
+                            var msg = 'DNS zone güncellendi (' + (applyData.created || 0) + '/' + (applyData.total || 0) + ')';
+                            window.showToast(msg, 'success');
+                            self.refreshDomains();
+                        } else {
+                            window.showToast(applyData.message || 'DNS uygulanamadı', 'error');
+                        }
+                    }).catch(function() {
+                        self.loading = false;
+                        window.showToast('Bağlantı hatası', 'error');
+                    });
                 },
 
                 openDnsModal: function(d) {
@@ -1027,8 +1048,7 @@
 
                 fetchLogs: function() {
                     var self = this;
-                    var key = window.JIR_KEY || '';
-                    fetch('/api/management/logs?key=' + encodeURIComponent(key) + '&lines=100')
+                    fetch('/api/management/logs?lines=100', { credentials: 'same-origin' })
                         .then(function(res) { return res.json(); })
                         .then(function(data) { self.logs = data || []; })
                         .catch(function(e) { console.error(e); });

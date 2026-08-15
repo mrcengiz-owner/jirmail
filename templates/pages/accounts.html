@@ -4,10 +4,6 @@
 {% block title %}Hesaplar — JîrCode Mail{% endblock %}
 
 {% block extra_head %}
-<script>
-    window.JIR_KEY = "{{ JIR_LOCAL_KEY|escapejs }}";
-    window.DOMAINS = {{ domains_list|safe }};
-</script>
 <style>
     .accounts-page .btn-permission {
         display: inline-flex;
@@ -115,6 +111,14 @@
 {% block content %}
 {{ accounts_bootstrap|json_script:"accounts-bootstrap" }}
 {{ role_choices_json|json_script:"role-choices" }}
+{{ domains_json|json_script:"domains-bootstrap" }}
+<script>
+(function () {
+    var el = document.getElementById('domains-bootstrap');
+    try { window.DOMAINS = el ? JSON.parse(el.textContent) : []; }
+    catch (e) { window.DOMAINS = []; }
+})();
+</script>
 
 <div class="page accounts-page" x-data="accountsApp()" x-init="init()">
 

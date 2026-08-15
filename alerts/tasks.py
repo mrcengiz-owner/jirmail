@@ -278,9 +278,17 @@ def check_domain_dns(self, domain_name: str):
         except Exception as e:
             errors.append(f"DMARC: {str(e)}")
 
-        # DKIM kontrolü (mail._domainkey.domain TXT kaydı)
+        # DKIM kontrolü — selector MailDomain.dkim_record'dan (mail-xxxx._domainkey)
         try:
-            dkim_records = resolver.resolve(f'mail._domainkey.{domain_name}', 'TXT')
+            from dns_providers.records import parse_dkim_dns
+
+            dkim_parts = parse_dkim_dns(domain)
+            dkim_name = None
+            if dkim_parts:
+                dkim_name = f'{dkim_parts[0]}.{domain_name}'
+            else:
+                dkim_name = f'mail._domainkey.{domain_name}'
+            dkim_records = resolver.resolve(dkim_name, 'TXT')
             for record in dkim_records:
                 txt = record.to_text().strip('"')
                 if 'v=DKIM1' in txt or 'p=' in txt:
@@ -289,8 +297,8 @@ def check_domain_dns(self, domain_name: str):
         except Exception as e:
             errors.append(f"DKIM: {str(e)}")
 
-        # Genel durum: MX + SPF varsa "verified", yoksa "failed"
-        all_ok = results["mx"] and results["spf"]
+        # Genel durum: MX + SPF + DKIM + DMARC
+        all_ok = results["mx"] and results["spf"] and results["dmarc"] and results["dkim"]
         domain.verification_status = 'verified' if all_ok else 'failed'
         if all_ok:
             domain.verified_at = timezone.now()

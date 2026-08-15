@@ -1,4 +1,6 @@
 from ninja import Router, Schema
+from ninja.errors import HttpError
+from jir_core.dashboard_auth import require_panel_api
 from django.conf import settings
 from saas.models import Alert, AlertThreshold
 from core.models import MailAccount
@@ -8,6 +10,13 @@ import subprocess
 import os
 
 router = Router()
+
+
+def _require_panel(request):
+    denied = require_panel_api(request)
+    if denied:
+        raise HttpError(403, denied.get('message', 'Yetkisiz'))
+
 
 
 class AlertSchema(Schema):
@@ -180,6 +189,7 @@ def evaluate_thresholds(metrics):
 
 @router.get("/metrics", response={200: SystemMetricsSchema}, summary="Sistem Metrikleri")
 def get_system_metrics(request):
+    _require_panel(request)
     disk = check_disk_usage()
     memory = check_memory_usage()
     cpu = check_cpu_usage()
@@ -218,6 +228,7 @@ def get_system_metrics(request):
 
 @router.get("/alerts", response={200: list[AlertSchema]}, summary="Uyarıları Getir")
 def get_alerts(request, severity: str = None, category: str = None, unread_only: bool = False):
+    _require_panel(request)
     queryset = Alert.objects.all()
 
     if severity:
@@ -247,6 +258,7 @@ def get_alerts(request, severity: str = None, category: str = None, unread_only:
 
 @router.post("/alerts/{alert_id}/read", summary="Uyarıyı Okundu İşaretle")
 def mark_alert_read(request, alert_id: int):
+    _require_panel(request)
     try:
         alert = Alert.objects.get(id=alert_id)
         alert.is_read = True
@@ -258,6 +270,7 @@ def mark_alert_read(request, alert_id: int):
 
 @router.post("/alerts/{alert_id}/resolve", summary="Uyarıyı Çöz")
 def resolve_alert(request, alert_id: int):
+    _require_panel(request)
     try:
         alert = Alert.objects.get(id=alert_id)
         alert.is_resolved = True
@@ -270,6 +283,7 @@ def resolve_alert(request, alert_id: int):
 
 @router.post("/alerts/resolve-all", summary="Tüm Uyarıları Çöz")
 def resolve_all_alerts(request):
+    _require_panel(request)
     Alert.objects.filter(is_resolved=False).update(
         is_resolved=True,
         resolved_at=datetime.now()
@@ -279,12 +293,14 @@ def resolve_all_alerts(request):
 
 @router.post("/mark-all-read", summary="Tüm Uyarıları Okundu İşaretle")
 def mark_all_read(request):
+    _require_panel(request)
     Alert.objects.filter(is_read=False).update(is_read=True)
     return {"status": "success", "message": "Tüm uyarılar okundu işaretlendi"}
 
 
 @router.get("/thresholds", response={200: list[AlertThresholdSchema]}, summary="Uyarı Eşiklerini Getir")
 def get_thresholds(request):
+    _require_panel(request)
     thresholds = AlertThreshold.objects.all()
     return [
         {
@@ -302,6 +318,7 @@ def get_thresholds(request):
 
 @router.post("/thresholds", summary="Uyarı Eşiği Oluştur")
 def create_threshold(request, data: AlertThresholdSchema):
+    _require_panel(request)
     try:
         threshold = AlertThreshold.objects.create(
             name=data.name,
@@ -318,6 +335,7 @@ def create_threshold(request, data: AlertThresholdSchema):
 
 @router.put("/thresholds/{threshold_id}", summary="Uyarı Eşiği Güncelle")
 def update_threshold(request, threshold_id: int, data: AlertThresholdSchema):
+    _require_panel(request)
     try:
         threshold = AlertThreshold.objects.get(id=threshold_id)
         threshold.name = data.name
@@ -336,6 +354,7 @@ def update_threshold(request, threshold_id: int, data: AlertThresholdSchema):
 
 @router.delete("/thresholds/{threshold_id}", summary="Uyarı Eşiği Sil")
 def delete_threshold(request, threshold_id: int):
+    _require_panel(request)
     try:
         threshold = AlertThreshold.objects.get(id=threshold_id)
         threshold.delete()
@@ -350,6 +369,7 @@ def delete_threshold(request, threshold_id: int):
 
 @router.post("/dns-check/{domain_name}", summary="Domain DNS Kontrolü Başlat")
 def trigger_dns_check(request, domain_name: str):
+    _require_panel(request)
     """
     Belirtilen domain için DNS kontrolünü Celery task olarak başlatır.
     Sonuç asenkron olarak MailDomain.verification_status'a yazılır.
@@ -375,6 +395,7 @@ def trigger_dns_check(request, domain_name: str):
 
 @router.post("/dns-check-all", summary="Tüm Domainlerin DNS Kontrolü")
 def trigger_all_dns_checks(request):
+    _require_panel(request)
     """Tüm aktif domainlerin DNS kontrolünü başlatır."""
     try:
         from alerts.tasks import check_all_domains_dns
@@ -390,6 +411,7 @@ def trigger_all_dns_checks(request):
 
 @router.get("/dns-status", summary="Tüm Domainlerin DNS Durumu")
 def get_dns_status(request):
+    _require_panel(request)
     """Tüm domainlerin mevcut DNS doğrulama durumunu döndürür."""
     from core.models import MailDomain
     domains = MailDomain.objects.filter(is_active=True).values(
