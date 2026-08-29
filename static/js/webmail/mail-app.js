@@ -1,9 +1,10 @@
 /**
- * Jîr-Mail Webmail — Proton tarzı SPA (Alpine.js + Fetch API)
+ * Jîr-Mail Webmail v3 — Alpine.js SPA
  */
 document.addEventListener('alpine:init', function() {
     var FOLDER_MAP = {
         inbox: 'INBOX',
+        spam: 'Junk',
         sent: 'Sent',
         drafts: 'Drafts',
         archive: 'Archive',
@@ -12,6 +13,7 @@ document.addEventListener('alpine:init', function() {
     };
     var FOLDER_TITLES = {
         inbox: 'Gelen kutusu',
+        spam: 'Spam',
         sent: 'Gönderilen',
         drafts: 'Taslaklar',
         archive: 'Arşiv',
@@ -27,12 +29,14 @@ document.addEventListener('alpine:init', function() {
         return {
             folderNav: [
                 { id: 'inbox', label: 'Gelen kutusu', ms: 'inbox' },
+                { id: 'spam', label: 'Spam', ms: 'report' },
                 { id: 'sent', label: 'Gönderilen', ms: 'send' },
                 { id: 'drafts', label: 'Taslaklar', ms: 'draft' },
                 { id: 'archive', label: 'Arşiv', ms: 'archive' },
                 { id: 'starred', label: 'Yıldızlı', ms: 'star' },
                 { id: 'trash', label: 'Çöp kutusu', ms: 'delete' }
             ],
+            spamUnread: 0,
             currentFolder: 'inbox',
             mobileView: 'list',
             sidebarOpen: false,
@@ -97,6 +101,7 @@ document.addEventListener('alpine:init', function() {
                 }
                 self.loadQuota();
                 self.fetchMails();
+                self.loadSpamUnread();
                 self.syncAllFoldersBackground();
                 self.$watch('currentFolder', function() {
                     self.page = 1;
@@ -148,7 +153,68 @@ document.addEventListener('alpine:init', function() {
 
             emptyFolderMessage: function() {
                 if (this.searchQuery) return 'Aramanızla eşleşen mesaj yok.';
+                if (this.currentFolder === 'spam') return 'Spam klasörü boş — harika!';
+                if (this.currentFolder === 'trash') return 'Çöp kutusu boş.';
                 return 'Bu klasörde mesaj yok.';
+            },
+
+            canMarkSpam: function() {
+                return ['inbox', 'sent', 'archive', 'starred'].indexOf(this.currentFolder) >= 0;
+            },
+
+            loadSpamUnread: function() {
+                var self = this;
+                WmApi.json('/api/mail/messages?folder=' + encodeURIComponent(FOLDER_MAP.spam) + '&page=1&page_size=1')
+                    .then(function(r) {
+                        if (!r.data || !r.data.success) return;
+                        WmApi.json('/api/mail/messages?folder=' + encodeURIComponent(FOLDER_MAP.spam) + '&page=1&page_size=50')
+                            .then(function(r2) {
+                                if (r2.data && r2.data.success) {
+                                    self.spamUnread = (r2.data.messages || []).filter(function(m) {
+                                        return !m.is_seen;
+                                    }).length;
+                                }
+                            });
+                    });
+            },
+
+            reportSpam: function(mail) {
+                if (!mail || mail.uid <= 0) return;
+                this._moveBulkAction([mail.uid], 'spam');
+            },
+
+            notSpam: function(mail) {
+                if (!mail || mail.uid <= 0) return;
+                this._moveBulkAction([mail.uid], 'not_spam');
+            },
+
+            _moveBulkAction: function(uids, action) {
+                var self = this;
+                WmApi.json('/api/mail/messages/bulk', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        folder: self.imapFolder(),
+                        uids: uids,
+                        action: action
+                    })
+                }).then(function(r) {
+                    if (r.data && r.data.success) {
+                        var msg = action === 'spam' ? 'Spam klasörüne taşındı' : 'Gelen kutusuna taşındı';
+                        showToast(msg, 'success');
+                        self.mails = self.mails.filter(function(m) {
+                            return uids.indexOf(m.uid) < 0;
+                        });
+                        if (self.selectedMail && uids.indexOf(self.selectedMail.uid) >= 0) {
+                            self.selectedMail = null;
+                            self.mobileView = 'list';
+                        }
+                        self.clearSelection();
+                        self.loadSpamUnread();
+                    } else {
+                        showToast((r.data && r.data.message) || 'İşlem başarısız', 'error');
+                    }
+                });
             },
 
             quotaLabel: function() {
@@ -232,6 +298,9 @@ document.addEventListener('alpine:init', function() {
                     self.mails = list;
                     if (self.currentFolder === 'inbox') {
                         self.unreadCount = list.filter(function(m) { return m.unread; }).length;
+                    }
+                    if (self.currentFolder === 'spam') {
+                        self.spamUnread = list.filter(function(m) { return m.unread; }).length;
                     }
                     self.clearSelection();
                     var folderKey = self.currentFolder + ':' + self.imapFolder();
@@ -480,6 +549,7 @@ document.addEventListener('alpine:init', function() {
                 var uids = self.selectedIds.filter(function(u) { return u > 0; });
                 if (!uids.length) return;
                 if (action === 'delete' && !confirm(uids.length + ' mesaj silinsin mi?')) return;
+                if (action === 'spam' && !confirm(uids.length + ' mesaj spam olarak işaretlensin mi?')) return;
                 WmApi.json('/api/mail/messages/bulk', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -491,7 +561,7 @@ document.addEventListener('alpine:init', function() {
                 }).then(function(r) {
                     if (r.data.success) {
                         showToast('İşlem tamamlandı', 'success');
-                        if (action === 'delete') {
+                        if (action === 'delete' || action === 'spam' || action === 'not_spam') {
                             self.mails = self.mails.filter(function(m) {
                                 return uids.indexOf(m.uid) < 0;
                             });
@@ -501,10 +571,12 @@ document.addEventListener('alpine:init', function() {
                             });
                         }
                         self.clearSelection();
-                        if (self.selectedMail && uids.indexOf(self.selectedMail.uid) >= 0 && action === 'delete') {
+                        if (self.selectedMail && uids.indexOf(self.selectedMail.uid) >= 0 &&
+                            (action === 'delete' || action === 'spam' || action === 'not_spam')) {
                             self.selectedMail = null;
                             self.mobileView = 'list';
                         }
+                        self.loadSpamUnread();
                     } else {
                         showToast(r.data.message || 'Hata', 'error');
                     }

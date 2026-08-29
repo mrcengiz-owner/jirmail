@@ -131,11 +131,22 @@ def _parse_envelope_to_meta(envelope, raw_size: int, flags: list) -> dict:
 # UI klasör adı → IMAP'ta olası isimler
 FOLDER_ALIASES = {
     'inbox': ['INBOX'],
+    'spam': ['Junk', 'Spam', 'Junk E-mail', 'INBOX.Junk', 'INBOX.Spam', '.Junk', '.Spam'],
+    'junk': ['Junk', 'Spam', 'Junk E-mail', 'INBOX.Junk', 'INBOX.Spam', '.Junk', '.Spam'],
     'sent': ['Sent', 'Sent Messages', 'INBOX.Sent', '.Sent'],
     'drafts': ['Drafts', 'INBOX.Drafts', '.Drafts'],
     'trash': ['Trash', 'INBOX.Trash', '.Trash', 'Deleted Messages'],
     'archive': ['Archive', 'INBOX.Archive', '.Archive', 'Archives'],
 }
+
+
+def is_spam_folder_name(folder_name: str) -> bool:
+    """IMAP klasör adı spam/junk mı?"""
+    raw = (folder_name or '').strip().lower()
+    if not raw:
+        return False
+    tail = raw.split('/')[-1].replace('.', '')
+    return tail in ('junk', 'spam', 'junk e-mail', 'junk email') or 'junk' in tail or tail.endswith('spam')
 
 
 def list_imap_folder_names(account, password: str) -> list[str]:
@@ -205,7 +216,7 @@ def sync_folder_metadata(account, password: str, folder_name: str = 'INBOX', *, 
             should_block_inbound,
         )
 
-        is_inbound = folder_name.upper() == 'INBOX'
+        is_inbound = folder_name.upper() == 'INBOX' or is_spam_folder_name(folder_name)
         account_email = account.email
 
         fetched = 0
@@ -275,7 +286,7 @@ def sync_standard_folders(account, password: str, *, limit: int = 200) -> dict:
     seen = set()
     results = []
     errors = []
-    for ui_key in ('inbox', 'sent', 'drafts', 'trash', 'archive'):
+    for ui_key in ('inbox', 'spam', 'sent', 'drafts', 'trash', 'archive'):
         try:
             seed = FOLDER_ALIASES[ui_key][0]
             imap_name = resolve_imap_folder(account, password, seed)
@@ -333,7 +344,7 @@ def fetch_message_body(account, password: str, folder_name: str, uid: int) -> di
 
         from .sender import sender_info_from_message
 
-        is_inbound = folder_name.upper() == 'INBOX'
+        is_inbound = folder_name.upper() == 'INBOX' or is_spam_folder_name(folder_name)
         sender = sender_info_from_message(msg, account.email, is_inbound=is_inbound)
 
         return {

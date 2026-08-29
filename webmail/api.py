@@ -9,7 +9,7 @@ Endpoint'ler:
     POST   /api/mail/messages/{uid}/move           klasöre taşı
     DELETE /api/mail/messages/{uid}                sil
     POST   /api/mail/sync                          manuel folder sync
-    POST   /api/mail/sync-all                      INBOX + Sent + Drafts + Trash sync
+    POST   /api/mail/sync-all                      INBOX + Spam + Sent + Drafts + Trash sync
     GET    /api/mail/stream                        SSE yeni mail push
 """
 from typing import Optional
@@ -85,8 +85,12 @@ def _outbound_as_messages(account, *, limit: int = 50) -> list[dict]:
 
 
 def _folder_is_inbound(folder: str) -> bool:
-    key = (folder or 'INBOX').strip().upper()
-    return key in ('INBOX',) or key.endswith('/INBOX')
+    from webmail.imap_client import is_spam_folder_name
+
+    key = (folder or 'INBOX').strip()
+    if key.upper() == 'INBOX' or key.upper().endswith('/INBOX'):
+        return True
+    return is_spam_folder_name(key)
 
 
 def _message_to_api(m: MailMessageCache, account: MailAccount, folder: str) -> dict:
@@ -450,7 +454,7 @@ def move(request: HttpRequest, uid: int, data: MoveSchema):
 class BulkActionSchema(Schema):
     folder: str = 'INBOX'
     uids: list[int]
-    action: str  # seen | unseen | delete | star | unstar
+    action: str  # seen | unseen | delete | star | unstar | spam | not_spam
 
 
 @router.post('/messages/bulk', summary='Toplu işlem')
@@ -489,6 +493,16 @@ def bulk_messages(request: HttpRequest, data: BulkActionSchema):
                     MailMessageCache.objects.filter(folder=folder_obj, uid=uid).update(is_flagged=False)
             elif data.action == 'delete':
                 delete_message(account, password, imap_folder, uid)
+                if folder_obj:
+                    MailMessageCache.objects.filter(folder=folder_obj, uid=uid).update(is_deleted=True)
+            elif data.action == 'spam':
+                target = resolve_imap_folder(account, password, 'Junk')
+                move_message(account, password, imap_folder, uid, target)
+                if folder_obj:
+                    MailMessageCache.objects.filter(folder=folder_obj, uid=uid).update(is_deleted=True)
+            elif data.action == 'not_spam':
+                target = resolve_imap_folder(account, password, 'INBOX')
+                move_message(account, password, imap_folder, uid, target)
                 if folder_obj:
                     MailMessageCache.objects.filter(folder=folder_obj, uid=uid).update(is_deleted=True)
             else:

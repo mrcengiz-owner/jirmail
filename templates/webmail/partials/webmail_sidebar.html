@@ -1,9 +1,5 @@
 {% comment %}
-Webmail ortak sidebar — ProtonMail tarzı tek tablo formatı.
-TÜM webmail sayfalarında include edilir (inbox, settings, client_setup).
-Aktiflik request'ten okunur; Alpine bağımlılıkları (unreadCount, quota,
-avatarColor, initials) sadece inbox sayfasında geçerli, diğerlerinde
-sessizce yok sayılır.
+Webmail sidebar v3 — klasörler + spam kutusu
 {% endcomment %}
 {% with current_url=request.resolver_match.url_name folder=request.GET.folder|default:'inbox' %}
 <aside class="wm-sidebar-ds"
@@ -20,7 +16,6 @@ sessizce yok sayılır.
     </span>
   </a>
 
-  {% comment %} Compose: inbox sayfasındaysa Alpine modal'ı açar, diğer sayfalarda inbox'a ?compose=1 ile gider (mail-app.js init'te yakalar). {% endcomment %}
   {% if current_url == 'inbox' %}
   <button type="button" @click="openCompose(); sidebarOpen = false" class="wm-sb-compose">
     <span class="material-symbols-outlined wm-material-icon-fill">edit</span>
@@ -34,71 +29,79 @@ sessizce yok sayılır.
   {% endif %}
 
   <div class="wm-sb-scroll">
-    <p class="wm-sb-section__title">Klasörler</p>
+    <p class="wm-sb-section__title">Posta</p>
     <nav class="wm-sb-list" aria-label="Klasörler">
 
+      {% if current_url == 'inbox' %}
+      <template x-for="item in folderNav" :key="item.id">
+        <button type="button"
+                class="wm-sb-row"
+                :class="[
+                  currentFolder === item.id && 'is-active',
+                  item.id === 'spam' && 'is-spam'
+                ]"
+                @click="setFolder(item.id)">
+          <span class="material-symbols-outlined wm-sb-row__icon"
+                :class="currentFolder === item.id ? 'wm-material-icon-fill' : 'wm-material-icon'"
+                x-text="item.ms"></span>
+          <span class="wm-sb-row__label" x-text="item.label"></span>
+          <span x-show="item.id === 'inbox' && unreadCount > 0"
+                class="wm-sb-row__badge" x-text="unreadCount"></span>
+          <span x-show="item.id === 'spam' && spamUnread > 0"
+                class="wm-sb-row__badge" x-text="spamUnread"></span>
+        </button>
+      </template>
+      {% else %}
       <a href="{% url 'webmail:inbox' %}"
-         class="wm-sb-row {% if current_url == 'inbox' and folder == 'inbox' %}is-active{% endif %}">
-        <span class="material-symbols-outlined wm-sb-row__icon
-              {% if current_url == 'inbox' and folder == 'inbox' %}wm-material-icon-fill{% else %}wm-material-icon{% endif %}">inbox</span>
+         class="wm-sb-row {% if folder == 'inbox' %}is-active{% endif %}">
+        <span class="material-symbols-outlined wm-sb-row__icon wm-material-icon">inbox</span>
         <span class="wm-sb-row__label">Gelen kutusu</span>
-        {% if current_url == 'inbox' %}
-        <span x-show="unreadCount > 0" class="wm-sb-row__badge" x-text="unreadCount"></span>
-        {% endif %}
       </a>
-
+      <a href="{% url 'webmail:inbox' %}?folder=spam"
+         class="wm-sb-row is-spam {% if folder == 'spam' %}is-active{% endif %}">
+        <span class="material-symbols-outlined wm-sb-row__icon wm-material-icon">report</span>
+        <span class="wm-sb-row__label">Spam</span>
+      </a>
       <a href="{% url 'webmail:inbox' %}?folder=sent"
-         class="wm-sb-row {% if current_url == 'inbox' and folder == 'sent' %}is-active{% endif %}">
-        <span class="material-symbols-outlined wm-sb-row__icon
-              {% if current_url == 'inbox' and folder == 'sent' %}wm-material-icon-fill{% else %}wm-material-icon{% endif %}">send</span>
+         class="wm-sb-row {% if folder == 'sent' %}is-active{% endif %}">
+        <span class="material-symbols-outlined wm-sb-row__icon wm-material-icon">send</span>
         <span class="wm-sb-row__label">Gönderilen</span>
       </a>
-
       <a href="{% url 'webmail:inbox' %}?folder=drafts"
-         class="wm-sb-row {% if current_url == 'inbox' and folder == 'drafts' %}is-active{% endif %}">
-        <span class="material-symbols-outlined wm-sb-row__icon
-              {% if current_url == 'inbox' and folder == 'drafts' %}wm-material-icon-fill{% else %}wm-material-icon{% endif %}">draft</span>
+         class="wm-sb-row {% if folder == 'drafts' %}is-active{% endif %}">
+        <span class="material-symbols-outlined wm-sb-row__icon wm-material-icon">draft</span>
         <span class="wm-sb-row__label">Taslaklar</span>
       </a>
-
       <a href="{% url 'webmail:inbox' %}?folder=archive"
-         class="wm-sb-row {% if current_url == 'inbox' and folder == 'archive' %}is-active{% endif %}">
-        <span class="material-symbols-outlined wm-sb-row__icon
-              {% if current_url == 'inbox' and folder == 'archive' %}wm-material-icon-fill{% else %}wm-material-icon{% endif %}">archive</span>
+         class="wm-sb-row {% if folder == 'archive' %}is-active{% endif %}">
+        <span class="material-symbols-outlined wm-sb-row__icon wm-material-icon">archive</span>
         <span class="wm-sb-row__label">Arşiv</span>
       </a>
-
       <a href="{% url 'webmail:inbox' %}?folder=starred"
-         class="wm-sb-row {% if current_url == 'inbox' and folder == 'starred' %}is-active{% endif %}">
-        <span class="material-symbols-outlined wm-sb-row__icon
-              {% if current_url == 'inbox' and folder == 'starred' %}wm-material-icon-fill{% else %}wm-material-icon{% endif %}">star</span>
+         class="wm-sb-row {% if folder == 'starred' %}is-active{% endif %}">
+        <span class="material-symbols-outlined wm-sb-row__icon wm-material-icon">star</span>
         <span class="wm-sb-row__label">Yıldızlı</span>
       </a>
-
       <a href="{% url 'webmail:inbox' %}?folder=trash"
-         class="wm-sb-row {% if current_url == 'inbox' and folder == 'trash' %}is-active{% endif %}">
-        <span class="material-symbols-outlined wm-sb-row__icon
-              {% if current_url == 'inbox' and folder == 'trash' %}wm-material-icon-fill{% else %}wm-material-icon{% endif %}">delete</span>
+         class="wm-sb-row {% if folder == 'trash' %}is-active{% endif %}">
+        <span class="material-symbols-outlined wm-sb-row__icon wm-material-icon">delete</span>
         <span class="wm-sb-row__label">Çöp kutusu</span>
       </a>
+      {% endif %}
     </nav>
 
     <p class="wm-sb-section__title">Araçlar</p>
     <nav class="wm-sb-list" aria-label="Araçlar">
       <a href="{% url 'webmail:client_setup' %}"
          class="wm-sb-row {% if current_url == 'client_setup' %}is-active{% endif %}">
-        <span class="material-symbols-outlined wm-sb-row__icon
-              {% if current_url == 'client_setup' %}wm-material-icon-fill{% else %}wm-material-icon{% endif %}">phonelink_setup</span>
-        <span class="wm-sb-row__label">Cihazda kurulum</span>
+        <span class="material-symbols-outlined wm-sb-row__icon wm-material-icon">phonelink_setup</span>
+        <span class="wm-sb-row__label">Cihaz kurulumu</span>
       </a>
-
       <a href="{% url 'webmail:settings' %}"
          class="wm-sb-row {% if current_url == 'settings' %}is-active{% endif %}">
-        <span class="material-symbols-outlined wm-sb-row__icon
-              {% if current_url == 'settings' %}wm-material-icon-fill{% else %}wm-material-icon{% endif %}">settings</span>
+        <span class="material-symbols-outlined wm-sb-row__icon wm-material-icon">settings</span>
         <span class="wm-sb-row__label">Ayarlar</span>
       </a>
-
       <form method="post" action="{% url 'webmail:logout' %}" class="wm-sb-form">
         {% csrf_token %}
         <button type="submit" class="wm-sb-row wm-sb-row--danger">
@@ -127,11 +130,11 @@ sessizce yok sayılır.
     {% if email %}
     <div class="wm-sb-row wm-sb-row--account" role="group" aria-label="Hesap">
       {% if current_url == 'inbox' %}
-        <span class="wm-sb-row__avatar"
-              :style="'background:' + avatarColor(userEmail)"
-              x-text="initials(userEmail)"></span>
+      <span class="wm-sb-row__avatar"
+            :style="'background:' + avatarColor(userEmail)"
+            x-text="initials(userEmail)"></span>
       {% else %}
-        <span class="wm-sb-row__avatar" style="background: var(--jm-brand-500);">{{ email|slice:":2"|upper }}</span>
+      <span class="wm-sb-row__avatar" style="background: var(--wm-brand);">{{ email|slice:":2"|upper }}</span>
       {% endif %}
       <span class="wm-sb-row__label">{{ email }}</span>
     </div>
