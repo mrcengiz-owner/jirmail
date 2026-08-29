@@ -472,9 +472,30 @@ html:not(.dark) .wm-tb-light-icon { display: none; }
   display: flex;
   justify-content: space-between;
   gap: 8px;
-  align-items: baseline;
+  align-items: center;
   margin-bottom: 2px;
 }
+.wm-mail-row__actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+.wm-mail-row__star {
+  border: none;
+  background: transparent;
+  padding: 2px;
+  cursor: pointer;
+  color: var(--wm-faint);
+  opacity: 0;
+  transition: opacity 0.15s, color 0.15s;
+  display: inline-flex;
+  line-height: 1;
+}
+.wm-mail-row:hover .wm-mail-row__star,
+.wm-mail-row__star.is-active { opacity: 1; }
+.wm-mail-row__star.is-active { color: var(--wm-spam); }
+.wm-mail-row__star .material-symbols-outlined { font-size: 16px; }
 .wm-mail-row__from {
   font-size: 13px;
   font-weight: 600;
@@ -700,6 +721,8 @@ html:not(.dark) .wm-tb-light-icon { display: none; }
   border-color: color-mix(in srgb, var(--wm-brand) 35%, var(--wm-border));
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
 }
+.wm-read-att--clickable { cursor: pointer; }
+.wm-read-att--clickable:active { transform: scale(0.99); }
 .wm-read-att__icon {
   width: 40px;
   height: 40px;
@@ -840,6 +863,27 @@ html.dark .wm-mail-body-frame { box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.
   border: none;
   border-top: 1px solid rgba(15, 18, 35, 0.1);
   margin: 1.5em 0;
+}
+
+.wm-compose-file {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border-radius: 8px;
+  border: 1px solid var(--wm-border);
+  background: var(--wm-surface);
+  font-size: 12px;
+  color: var(--wm-text);
+}
+.wm-compose-file button {
+  border: none;
+  background: transparent;
+  color: var(--wm-muted);
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  padding: 0 2px;
 }
 
 .wm-read-footer {

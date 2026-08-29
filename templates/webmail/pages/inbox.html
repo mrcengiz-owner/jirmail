@@ -64,6 +64,8 @@
           Tümü
         </label>
         <button type="button" class="wm-inbox-btn" @click="bulkAction('seen')" :disabled="!hasSelection">Okundu</button>
+        <button type="button" class="wm-inbox-btn" @click="bulkAction('unseen')" :disabled="!hasSelection">Okunmadı</button>
+        <button type="button" class="wm-inbox-btn" x-show="canArchive()" @click="bulkAction('archive')" :disabled="!hasSelection">Arşivle</button>
         <button type="button" class="wm-inbox-btn wm-inbox-btn--danger" @click="bulkAction('delete')" :disabled="!hasSelection">Sil</button>
         <button type="button" class="wm-inbox-btn" x-show="canMarkSpam()" @click="bulkAction('spam')" :disabled="!hasSelection">Spam</button>
         <button type="button" class="wm-inbox-btn" x-show="currentFolder === 'spam'" @click="bulkAction('not_spam')" :disabled="!hasSelection">Gelen kutusuna</button>
@@ -91,7 +93,14 @@
           <div class="wm-mail-row__body">
             <div class="wm-mail-row__top">
               <span class="wm-mail-row__from" x-text="displayFrom(mail)"></span>
-              <span class="wm-mail-row__date" x-text="formatDate(mail.date)"></span>
+              <div class="wm-mail-row__actions">
+                <button type="button" class="wm-mail-row__star"
+                        :class="mail.starred && 'is-active'"
+                        @click.stop="toggleStar(mail)" title="Yıldız">
+                  <span class="material-symbols-outlined" :class="mail.starred && 'wm-material-icon-fill'">star</span>
+                </button>
+                <span class="wm-mail-row__date" x-text="formatDate(mail.date)"></span>
+              </div>
             </div>
             <div class="wm-mail-row__subject" x-text="mail.subject"></div>
             <div class="wm-mail-row__preview" x-text="mail.preview || (mail.ai_meta && mail.ai_meta.summary) || ''"></div>
@@ -136,7 +145,7 @@
           <button type="button" class="wm-read-toolbar__btn" x-show="currentFolder === 'spam'" title="Gelen kutusuna taşı" @click="notSpam(selectedMail)">
             <span class="material-symbols-outlined">move_to_inbox</span>
           </button>
-          <button type="button" class="wm-read-toolbar__btn" title="Arşivle" @click="archiveMail(selectedMail)">
+          <button type="button" class="wm-read-toolbar__btn" x-show="canArchive()" title="Arşivle" @click="archiveMail(selectedMail)">
             <span class="material-symbols-outlined">archive</span>
           </button>
           <div class="wm-read-toolbar__move" x-show="customFolders.length" @click.outside="moveFolderOpen = false">
@@ -230,7 +239,10 @@
                 </div>
                 <div class="wm-read-attachments__grid">
                   <template x-for="(att, ai) in (selectedMail.attachments || [])" :key="ai">
-                    <div class="wm-read-att" :class="'wm-read-att--' + attachmentKind(att.filename)">
+                    <div class="wm-read-att wm-read-att--clickable"
+                         :class="'wm-read-att--' + attachmentKind(att.filename)"
+                         @click="downloadAttachment(att, ai)"
+                         title="İndir">
                       <span class="wm-read-att__icon material-symbols-outlined" x-text="attachmentIcon(att.filename)"></span>
                       <div class="wm-read-att__meta">
                         <span class="wm-read-att__name" x-text="att.filename"></span>
@@ -442,7 +454,7 @@
 {% endblock %}
 
 {% block extra_scripts %}
-<script src="{% url 'webmail:asset' asset_path='js/webmail/mail-app.js' %}?v=20260830f"></script>
+<script src="{% url 'webmail:asset' asset_path='js/webmail/mail-app.js' %}?v=20260830g"></script>
 {% endblock %}
 
 {% block shell_overlay %}
@@ -487,7 +499,16 @@
       </div>
     </div>
 
-    <footer class="border-t px-4 py-3 flex flex-col sm:flex-row justify-between gap-3 shrink-0" style="border-color:var(--wm-border);background:var(--wm-surface-2);">
+    <footer class="border-t px-4 py-3 flex flex-col gap-3 shrink-0" style="border-color:var(--wm-border);background:var(--wm-surface-2);">
+      <div class="flex flex-wrap gap-2" x-show="composeFiles && composeFiles.length">
+        <template x-for="(file, fi) in (composeFiles || [])" :key="fi">
+          <span class="wm-compose-file">
+            <span x-text="file.name"></span>
+            <button type="button" @click="removeComposeFile(fi)">×</button>
+          </span>
+        </template>
+      </div>
+      <div class="flex flex-col sm:flex-row justify-between gap-3">
       <label class="wm-inbox-btn inline-flex items-center gap-2 cursor-pointer">
         <span class="material-symbols-outlined text-[18px]">attach_file</span>
         Dosya ekle
@@ -499,6 +520,7 @@
         <button type="button" class="wm-sb-compose" style="margin:0;width:auto;" @click="sendMail()">
           <span>Gönder</span>
         </button>
+      </div>
       </div>
     </footer>
   </div>

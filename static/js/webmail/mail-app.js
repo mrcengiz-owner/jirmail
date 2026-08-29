@@ -310,6 +310,15 @@ document.addEventListener('alpine:init', function() {
                 return ['inbox', 'sent', 'archive', 'starred'].indexOf(this.currentFolder) >= 0;
             },
 
+            canArchive: function() {
+                return ['inbox', 'spam', 'starred'].indexOf(this.currentFolder) >= 0 ||
+                    (this.currentFolder && this.currentFolder.indexOf('custom:') === 0);
+            },
+
+            isTrashFolder: function() {
+                return this.currentFolder === 'trash';
+            },
+
             loadSpamUnread: function() {
                 var self = this;
                 WmApi.json('/api/mail/messages?folder=' + encodeURIComponent(FOLDER_MAP.spam) + '&page=1&page_size=1')
@@ -417,8 +426,13 @@ document.addEventListener('alpine:init', function() {
                 var self = this;
                 var seq = ++self._fetchSeq;
                 self.loadingMails = true;
-                var url = '/api/mail/messages?folder=' + encodeURIComponent(self.imapFolder()) +
-                    '&page=' + self.page + '&page_size=' + self.pageSize;
+                var url;
+                if (self.currentFolder === 'starred') {
+                    url = '/api/mail/messages?flagged=1&page=' + self.page + '&page_size=' + self.pageSize;
+                } else {
+                    url = '/api/mail/messages?folder=' + encodeURIComponent(self.imapFolder()) +
+                        '&page=' + self.page + '&page_size=' + self.pageSize;
+                }
                 if (self.searchQuery) {
                     url += '&q=' + encodeURIComponent(self.searchQuery);
                 }
@@ -448,9 +462,6 @@ document.addEventListener('alpine:init', function() {
                             ai_meta: m.ai_meta || {}
                         };
                     });
-                    if (self.currentFolder === 'starred') {
-                        list = list.filter(function(m) { return m.starred; });
-                    }
                     self.mails = list;
                     if (self.currentFolder === 'inbox') {
                         self.unreadCount = list.filter(function(m) { return m.unread; }).length;
@@ -504,6 +515,10 @@ document.addEventListener('alpine:init', function() {
 
             selectMail: function(mail) {
                 var self = this;
+                if (self.currentFolder === 'drafts' && mail.uid > 0) {
+                    self.openDraftInCompose(mail);
+                    return;
+                }
                 self.selectedMail = mail;
                 self.composeOpen = false;
                 self.mobileView = 'detail';
@@ -536,6 +551,65 @@ document.addEventListener('alpine:init', function() {
             goBack: function() {
                 this.mobileView = 'list';
                 this.selectedMail = null;
+            },
+
+            ensureMailBody: function(mail) {
+                var self = this;
+                return new Promise(function(resolve) {
+                    if (!mail || mail.uid <= 0) {
+                        resolve('');
+                        return;
+                    }
+                    if (mail.bodyLoaded && mail.body) {
+                        var tmp = document.createElement('div');
+                        tmp.innerHTML = mail.body || '';
+                        resolve((tmp.innerText || tmp.textContent || '').trim());
+                        return;
+                    }
+                    WmApi.json('/api/mail/messages/' + mail.uid + '/body?folder=' +
+                        encodeURIComponent(self.imapFolder()))
+                        .then(function(r) {
+                            if (r.data && r.data.success) {
+                                mail.body = r.data.html || '<pre>' + self.escapeHtml(r.data.plain || '') + '</pre>';
+                                mail.attachments = r.data.attachments || [];
+                                mail.bodyLoaded = true;
+                                var tmp = document.createElement('div');
+                                tmp.innerHTML = mail.body || '';
+                                resolve((tmp.innerText || tmp.textContent || r.data.plain || '').trim());
+                            } else {
+                                resolve('');
+                            }
+                        }).catch(function() { resolve(''); });
+                });
+            },
+
+            openDraftInCompose: function(mail) {
+                var self = this;
+                self.ensureMailBody(mail).then(function(plain) {
+                    self.composeTo = '';
+                    self.composeCc = '';
+                    self.composeSubject = mail.subject || '';
+                    self.draftUid = mail.uid;
+                    self.openCompose();
+                    self.$nextTick(function() {
+                        if (self.quill) {
+                            if (mail.body && mail.body.indexOf('<') >= 0) {
+                                self.quill.clipboard.dangerouslyPasteHTML(mail.body);
+                            } else {
+                                self.quill.setText(plain || '');
+                            }
+                        }
+                    });
+                });
+            },
+
+            downloadAttachment: function(att, index) {
+                var self = this;
+                if (!self.selectedMail || self.selectedMail.uid <= 0) return;
+                var idx = (att && att.index != null) ? att.index : index;
+                var url = '/api/mail/messages/' + self.selectedMail.uid + '/attachments/' + idx +
+                    '?folder=' + encodeURIComponent(self.imapFolder());
+                window.open(url, '_blank');
             },
 
             sanitizeHtml: function(html) {
@@ -664,6 +738,9 @@ document.addEventListener('alpine:init', function() {
                 }).then(function(r) {
                     self.draftSaving = false;
                     if (r.data.success) {
+                        if (r.data.draft_uid) {
+                            self.draftUid = r.data.draft_uid;
+                        }
                         var now = new Date();
                         self.draftSavedAt = now.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
                         if (showToastOnSuccess) showToast('Taslak kaydedildi', 'success');
@@ -704,7 +781,12 @@ document.addEventListener('alpine:init', function() {
                 var self = this;
                 var uids = self.selectedIds.filter(function(u) { return u > 0; });
                 if (!uids.length) return;
-                if (action === 'delete' && !confirm(uids.length + ' mesaj silinsin mi?')) return;
+                if (action === 'delete') {
+                    var msg = self.isTrashFolder()
+                        ? uids.length + ' mesaj kalıcı olarak silinsin mi?'
+                        : uids.length + ' mesaj çöp kutusuna taşınsın mı?';
+                    if (!confirm(msg)) return;
+                }
                 if (action === 'spam' && !confirm(uids.length + ' mesaj spam olarak işaretlensin mi?')) return;
                 WmApi.json('/api/mail/messages/bulk', {
                     method: 'POST',
@@ -717,7 +799,7 @@ document.addEventListener('alpine:init', function() {
                 }).then(function(r) {
                     if (r.data.success) {
                         showToast('İşlem tamamlandı', 'success');
-                        if (action === 'delete' || action === 'spam' || action === 'not_spam') {
+                        if (action === 'delete' || action === 'spam' || action === 'not_spam' || action === 'archive') {
                             self.mails = self.mails.filter(function(m) {
                                 return uids.indexOf(m.uid) < 0;
                             });
@@ -725,10 +807,14 @@ document.addEventListener('alpine:init', function() {
                             self.mails.forEach(function(m) {
                                 if (uids.indexOf(m.uid) >= 0) m.unread = false;
                             });
+                        } else if (action === 'unseen') {
+                            self.mails.forEach(function(m) {
+                                if (uids.indexOf(m.uid) >= 0) m.unread = true;
+                            });
                         }
                         self.clearSelection();
                         if (self.selectedMail && uids.indexOf(self.selectedMail.uid) >= 0 &&
-                            (action === 'delete' || action === 'spam' || action === 'not_spam')) {
+                            (action === 'delete' || action === 'spam' || action === 'not_spam' || action === 'archive')) {
                             self.selectedMail = null;
                             self.mobileView = 'list';
                         }
@@ -771,12 +857,15 @@ document.addEventListener('alpine:init', function() {
             deleteMail: function(mail) {
                 if (!mail || !mail.uid) return;
                 var self = this;
-                if (!confirm('Bu mesaj silinsin mi?')) return;
+                var msg = self.isTrashFolder()
+                    ? 'Bu mesaj kalıcı olarak silinsin mi?'
+                    : 'Bu mesaj çöp kutusuna taşınsın mı?';
+                if (!confirm(msg)) return;
                 WmApi.json('/api/mail/messages/' + mail.uid + '?folder=' +
                     encodeURIComponent(self.imapFolder()), { method: 'DELETE' })
                     .then(function(r) {
                         if (r.data.success) {
-                            showToast('Mesaj silindi', 'success');
+                            showToast(self.isTrashFolder() ? 'Mesaj silindi' : 'Çöp kutusuna taşındı', 'success');
                             self.mails = self.mails.filter(function(m) { return m.uid !== mail.uid; });
                             self.selectedMail = null;
                             self.mobileView = 'list';
@@ -787,7 +876,14 @@ document.addEventListener('alpine:init', function() {
             },
 
             onFiles: function(ev) {
-                this.composeFiles = Array.from(ev.target.files || []);
+                var incoming = Array.from(ev.target.files || []);
+                this.composeFiles = (this.composeFiles || []).concat(incoming);
+                if (ev.target) ev.target.value = '';
+            },
+
+            removeComposeFile: function(index) {
+                if (!this.composeFiles) return;
+                this.composeFiles.splice(index, 1);
             },
 
             sendMail: function() {
@@ -1230,6 +1326,15 @@ document.addEventListener('alpine:init', function() {
             sendAiReplyNow: function() {
                 var self = this;
                 var draft = self.aiReplyDraft;
+                if (!draft && self.selectedMail && self.selectedMail.ai_meta && self.selectedMail.ai_meta.reply_draft) {
+                    var addr = self.selectedMail.from_addr || self.selectedMail.from || '';
+                    var match = addr.match(/<([^>]+)>/) || [null, addr];
+                    draft = {
+                        to: match[1] || addr,
+                        subject: 'Re: ' + (self.selectedMail.subject || '').replace(/^Re:\s*/i, ''),
+                        body: self.selectedMail.ai_meta.reply_draft
+                    };
+                }
                 if (!draft || !draft.to) {
                     showToast('Gönderilecek yanıt yok', 'warning');
                     return;
@@ -1270,8 +1375,32 @@ document.addEventListener('alpine:init', function() {
                 var mail = self.mails.find(function(m) { return m.uid === item.uid; });
                 if (mail) {
                     self.selectMail(mail);
+                    self.generateAiReply('');
+                    return;
                 }
-                self.generateAiReply('');
+                if (item.uid) {
+                    self.setFolder('inbox');
+                    self.$nextTick(function() {
+                        WmApi.json('/api/mail/messages?folder=INBOX&page=1&page_size=100').then(function(r) {
+                            if (r.data && r.data.success) {
+                                var hit = (r.data.messages || []).find(function(m) { return m.uid === item.uid; });
+                                if (hit) {
+                                    self.selectMail({
+                                        uid: hit.uid,
+                                        subject: hit.subject,
+                                        from: hit.from,
+                                        from_addr: hit.from_addr,
+                                        unread: !hit.is_seen,
+                                        starred: hit.is_flagged,
+                                        bodyLoaded: false,
+                                        body: ''
+                                    });
+                                }
+                            }
+                            self.generateAiReply('');
+                        });
+                    });
+                }
             },
 
             loadAiStatus: function() {
@@ -1520,25 +1649,29 @@ document.addEventListener('alpine:init', function() {
                 }
                 self.aiPanelOpen = true;
                 self.aiLoading = true;
-                var plain = (self.selectedMail.body || '').replace(/<[^>]+>/g, ' ').slice(0, 8000);
-                WmApi.json('/api/mail/ai/analyze', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        message: 'Bu maili analiz et',
-                        context_subject: self.selectedMail.subject || '',
-                        context_from: self.selectedMail.from_addr || self.selectedMail.from || '',
-                        context_body: plain
-                    })
-                }).then(function(r) {
-                    self.aiLoading = false;
-                    var d = r.data || {};
-                    self.aiMessages.push({
-                        role: 'assistant',
-                        text: d.reply || d.message || 'Analiz tamamlandı.'
+                self.ensureMailBody(self.selectedMail).then(function(plain) {
+                    WmApi.json('/api/mail/ai/analyze', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            message: 'Bu maili analiz et',
+                            context_subject: self.selectedMail.subject || '',
+                            context_from: self.selectedMail.from_addr || self.selectedMail.from || '',
+                            context_body: plain.slice(0, 8000),
+                            selected_uid: self.selectedMail.uid || 0,
+                            selected_folder: self.imapFolder()
+                        })
+                    }).then(function(r) {
+                        self.aiLoading = false;
+                        var d = r.data || {};
+                        self.aiMessages.push({
+                            role: 'assistant',
+                            text: d.reply || d.message || 'Analiz tamamlandı.',
+                            intent: 'analyze'
+                        });
+                    }).catch(function() {
+                        self.aiLoading = false;
                     });
-                }).catch(function() {
-                    self.aiLoading = false;
                 });
             },
 

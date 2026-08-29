@@ -15,13 +15,20 @@ Endpoint'ler:
 from typing import Optional
 
 from django.db import models
-from django.http import HttpRequest
+from django.http import HttpRequest, HttpResponse
 from ninja import Router, Schema
 
 from core.models import MailAccount
 from .imap_client import (
-    delete_message, fetch_message_body, move_message, resolve_imap_folder, set_flag,
-    sync_folder_metadata, sync_standard_folders,
+    delete_message,
+    fetch_attachment_by_index,
+    fetch_message_body,
+    move_message,
+    resolve_imap_folder,
+    set_flag,
+    sync_folder_metadata,
+    sync_standard_folders,
+    trash_or_delete_message,
 )
 from .models import MailFolder, MailMessageCache, MailOutboundLog
 from .sender import purge_blocked_inbound_cache, sender_info_from_cache_row, should_block_inbound
@@ -254,10 +261,48 @@ def _find_folder_row(account, folder: str):
 
 
 @router.get('/messages', summary='Mesaj listesi (metadata, sayfalı)')
-def list_messages(request: HttpRequest, folder: str = 'INBOX', page: int = 1, page_size: int = 50, q: str = ''):
+def list_messages(
+    request: HttpRequest,
+    folder: str = 'INBOX',
+    page: int = 1,
+    page_size: int = 50,
+    q: str = '',
+    flagged: int = 0,
+):
     account, password = _get_account_and_password(request)
     if not account:
         return {'success': False, 'message': 'Oturum yok'}
+
+    if flagged:
+        qs = MailMessageCache.objects.filter(
+            folder__account=account,
+            is_deleted=False,
+            is_flagged=True,
+        ).select_related('folder').order_by('-date', '-uid')
+        if q:
+            qs = qs.filter(
+                models.Q(subject__icontains=q)
+                | models.Q(from_addr__icontains=q)
+                | models.Q(from_name__icontains=q)
+                | models.Q(snippet__icontains=q)
+            )
+        total = qs.count()
+        page = max(1, page)
+        page_size = min(max(1, page_size), 200)
+        start = (page - 1) * page_size
+        rows = qs[start:start + page_size]
+        messages = [
+            _message_to_api(m, account, m.folder.name if m.folder else folder)
+            for m in rows
+        ]
+        return {
+            'success': True,
+            'folder': 'starred',
+            'page': page,
+            'page_size': page_size,
+            'total': total,
+            'messages': messages,
+        }
 
     folder_obj = _find_folder_row(account, folder)
     if password and folder_obj is None and not q and page == 1:
@@ -370,6 +415,28 @@ def message_body(request: HttpRequest, uid: int, folder: str = 'INBOX'):
         except Exception:
             pass
         return out
+    except Exception as exc:
+        return {'success': False, 'message': str(exc)}
+
+
+@router.get('/messages/{uid}/attachments/{index}', summary='Ek dosya indir')
+def download_attachment(request: HttpRequest, uid: int, index: int, folder: str = 'INBOX'):
+    account, password = _get_account_and_password(request)
+    if not account:
+        return {'success': False, 'message': 'Oturum yok'}
+    if uid < 0:
+        return {'success': False, 'message': 'Ek indirilemez'}
+
+    try:
+        imap_folder = resolve_imap_folder(account, password, folder)
+        att = fetch_attachment_by_index(account, password, imap_folder, uid, index)
+        filename = att.get('filename') or 'attachment'
+        mime = att.get('mime_type') or 'application/octet-stream'
+        data = att.get('data') or b''
+        resp = HttpResponse(data, content_type=mime)
+        resp['Content-Disposition'] = f'attachment; filename="{filename}"'
+        resp['Content-Length'] = str(len(data))
+        return resp
     except Exception as exc:
         return {'success': False, 'message': str(exc)}
 
@@ -595,7 +662,12 @@ def bulk_messages(request: HttpRequest, data: BulkActionSchema):
                 if folder_obj:
                     MailMessageCache.objects.filter(folder=folder_obj, uid=uid).update(is_flagged=False)
             elif data.action == 'delete':
-                delete_message(account, password, imap_folder, uid)
+                result = trash_or_delete_message(account, password, imap_folder, uid)
+                if folder_obj:
+                    MailMessageCache.objects.filter(folder=folder_obj, uid=uid).update(is_deleted=True)
+            elif data.action == 'archive':
+                target = resolve_imap_folder(account, password, 'Archive')
+                move_message(account, password, imap_folder, uid, target)
                 if folder_obj:
                     MailMessageCache.objects.filter(folder=folder_obj, uid=uid).update(is_deleted=True)
             elif data.action == 'spam':
@@ -655,9 +727,14 @@ def save_draft(request: HttpRequest, data: SaveDraftSchema):
             body_text=data.body_text,
             body_html=data.body_html,
         )
-        folder = append_message_to_drafts(account, password, raw)
+        folder, draft_uid = append_message_to_drafts(account, password, raw)
         sync_folder_metadata(account, password, folder, limit=50)
-        return {'success': True, 'message': 'Taslak kaydedildi', 'folder': folder}
+        return {
+            'success': True,
+            'message': 'Taslak kaydedildi',
+            'folder': folder,
+            'draft_uid': draft_uid,
+        }
     except Exception as exc:
         return {'success': False, 'message': str(exc)}
 
@@ -747,11 +824,12 @@ def delete(request: HttpRequest, uid: int, folder: str = 'INBOX'):
         return {'success': False, 'message': 'Oturum yok'}
 
     try:
-        delete_message(account, password, folder, uid)
-        folder_obj = MailFolder.objects.filter(account=account, name=folder).first()
+        imap_folder = resolve_imap_folder(account, password, folder)
+        result = trash_or_delete_message(account, password, imap_folder, uid)
+        folder_obj = MailFolder.objects.filter(account=account, name=imap_folder).first()
         if folder_obj:
             MailMessageCache.objects.filter(folder=folder_obj, uid=uid).update(is_deleted=True)
-        return {'success': True}
+        return {'success': True, 'action': result}
     except Exception as exc:
         return {'success': False, 'message': str(exc)}
 
@@ -1307,16 +1385,33 @@ def outbound_status(request: HttpRequest, outbound_id: int):
 
 @router.post('/ai/analyze', summary='Seçili maili AI ile analiz et')
 def ai_analyze(request: HttpRequest, data: AiChatSchema):
-    account, _ = _get_account_and_password(request)
+    account, password = _get_account_and_password(request)
     if not account:
         return {'success': False, 'message': 'Oturum yok'}
     from webmail.ai.service import ai_analyze_message
 
+    body_text = data.context_body or ''
+    subject = data.context_subject
+    from_addr = data.context_from
+    if (not body_text.strip()) and data.selected_uid and password:
+        try:
+            imap_folder = resolve_imap_folder(account, password, data.selected_folder or 'INBOX')
+            result = fetch_message_body(account, password, imap_folder, data.selected_uid)
+            body_text = result.get('plain') or ''
+            if not body_text and result.get('html'):
+                import re
+                body_text = re.sub(r'<[^>]+>', ' ', result.get('html') or '')
+            sender = result.get('sender') or {}
+            subject = subject or result.get('subject') or ''
+            from_addr = from_addr or sender.get('from_email') or sender.get('from_name') or ''
+        except Exception:
+            pass
+
     return ai_analyze_message(
         account,
-        subject=data.context_subject,
-        from_addr=data.context_from,
-        body_text=data.context_body or data.message,
+        subject=subject,
+        from_addr=from_addr,
+        body_text=body_text or data.message,
     )
 
 

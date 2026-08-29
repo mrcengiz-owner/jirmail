@@ -405,6 +405,7 @@ def fetch_message_body(account, password: str, folder_name: str, uid: int) -> di
                 filename = _decode_header(part.get_filename() or 'attachment')
                 payload = part.get_payload(decode=True) or b''
                 attachments.append({
+                    'index': len(attachments),
                     'filename': filename,
                     'mime_type': ctype,
                     'size': len(payload),
@@ -510,12 +511,63 @@ def build_mime_draft(
     return msg.as_bytes()
 
 
-def append_message_to_drafts(account, password: str, raw_message: bytes) -> str:
-    """Taslağı IMAP Drafts klasörüne ekle."""
+def fetch_attachment_by_index(
+    account,
+    password: str,
+    folder_name: str,
+    uid: int,
+    index: int,
+) -> dict:
+    """Mesajın index'inci ek dosyasını getir."""
+    with imap_connection(account, password) as client:
+        client.select_folder(folder_name)
+        data = client.fetch([uid], ['RFC822'])
+        raw = data.get(uid, {}).get(b'RFC822')
+        if not raw:
+            raise ValueError('Mesaj bulunamadı')
+
+        msg = email.message_from_bytes(raw)
+        att_index = 0
+        for part in msg.walk():
+            disposition = (part.get('Content-Disposition') or '').lower()
+            if 'attachment' not in disposition and not part.get_filename():
+                continue
+            if att_index == index:
+                filename = _decode_header(part.get_filename() or 'attachment')
+                payload = part.get_payload(decode=True) or b''
+                return {
+                    'filename': filename,
+                    'mime_type': part.get_content_type() or 'application/octet-stream',
+                    'data': payload,
+                }
+            att_index += 1
+    raise ValueError('Ek dosya bulunamadı')
+
+
+def is_trash_folder_name(name: str) -> bool:
+    low = (name or '').lower()
+    for alias in FOLDER_ALIASES.get('trash', []):
+        if low == alias.lower() or low.endswith('/' + alias.lower()):
+            return True
+    return low in ('trash', 'deleted messages', 'deleted', 'bin')
+
+
+def trash_or_delete_message(account, password: str, folder_name: str, uid: int) -> str:
+    """Trash dışındaysa çöp kutusuna taşı; trash'teyse kalıcı sil."""
+    if is_trash_folder_name(folder_name):
+        delete_message(account, password, folder_name, uid)
+        return 'deleted'
+    target = resolve_imap_folder(account, password, 'Trash')
+    move_message(account, password, folder_name, uid, target)
+    return 'trashed'
+
+
+def append_message_to_drafts(account, password: str, raw_message: bytes) -> tuple[str, int]:
+    """Taslağı IMAP Drafts klasörüne ekle; (folder, uid) döner."""
     folder = resolve_imap_folder(account, password, 'Drafts')
     with imap_connection(account, password) as client:
-        client.append(folder, raw_message, [b'\\Draft'], None)
-    return folder
+        uid = client.append(folder, raw_message, [b'\\Draft'], None)
+    return folder, int(uid or 0)
 
 
 def remove_draft_message(account, password: str, uid: int) -> None:
