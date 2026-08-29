@@ -670,6 +670,9 @@
                             if (data.status === 'success') {
                                 self.closeAddModal();
                                 window.showToast(data.message || 'Domain eklendi', 'success');
+                                if (data.dns && data.dns.applied && !data.dns.success && !data.dns.partial) {
+                                    window.showToast(data.dns.message || 'DNS uygulanamadı', 'warning');
+                                }
                                 self.refreshDomains();
                             } else {
                                 window.showToast(data.message || 'Eklenemedi', 'error');

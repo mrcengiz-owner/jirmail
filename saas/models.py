@@ -57,6 +57,17 @@ class SystemConfig(models.Model):
         help_text='Örn. {"postfix":"stack-postfix-abc","dovecot":"stack-dovecot-xyz"}',
     )
 
+    dns_provider = models.CharField(
+        max_length=20,
+        default='manual',
+        help_text='Kurulumda seçilen DNS sağlayıcı (cloudflare, route53, …)',
+    )
+    dns_credentials = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text='Kurulumda girilen provider API token/anahtarları',
+    )
+
     updated_at = models.DateTimeField(auto_now=True)
 
     def get_database_config(self):

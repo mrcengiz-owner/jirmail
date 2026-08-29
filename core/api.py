@@ -450,17 +450,23 @@ def apply_dns_records(request, domain: str, data: DnsApplyBody = None, key: str 
     data = data or DnsApplyBody()
     try:
         from dns_providers.records import apply_mail_dns, detect_public_ip
+        from dns_providers.system_dns import credentials_configured, get_system_dns_config, resolve_mail_hostname
 
         domain_obj = MailDomain.objects.get(name=domain)
         provider = (data.provider or domain_obj.dns_provider or 'manual').lower()
         credentials = data.credentials if data.credentials is not None else (domain_obj.dns_credentials or {})
+        if provider == 'manual' or not credentials_configured(provider, credentials):
+            sys_provider, sys_creds = get_system_dns_config()
+            if sys_provider != 'manual' and credentials_configured(sys_provider, sys_creds):
+                provider = sys_provider
+                credentials = sys_creds
         if provider == 'manual':
             return {
                 "status": "error",
                 "message": "Otomatik uygulama için Cloudflare / Route53 / Namecheap seçin.",
             }
 
-        mail_host = getattr(settings, 'MAIL_SERVER_HOSTNAME', None) or f'mail.{domain_obj.name}'
+        mail_host = getattr(settings, 'MAIL_SERVER_HOSTNAME', None) or resolve_mail_hostname(domain_obj.name)
         outcome = apply_mail_dns(
             domain_obj.name,
             provider_name=provider,
@@ -577,14 +583,30 @@ def add_domain(request, data: AddDomainSchema, key: str = None):
             is_active=data.is_active
         )
 
+        from dns_providers.system_dns import auto_apply_domain_dns
+
+        dns_outcome = auto_apply_domain_dns(domain)
+        domain.refresh_from_db()
+
+        message = 'Domain eklendi'
+        if dns_outcome.get('applied') and dns_outcome.get('success'):
+            message = dns_outcome.get('message') or 'Domain eklendi — DNS kayıtları otomatik uygulandı'
+        elif dns_outcome.get('applied') and dns_outcome.get('partial'):
+            message = dns_outcome.get('message') or 'Domain eklendi — DNS kısmen uygulandı'
+        elif dns_outcome.get('applied') and not dns_outcome.get('success'):
+            message = f"Domain eklendi — DNS uygulanamadı: {dns_outcome.get('message', 'bilinmeyen hata')}"
+
         return {
             "status": "success",
-            "message": "Domain eklendi",
+            "message": message,
             "domain": {
                 "id": domain.id,
                 "name": domain.name,
-                "is_active": domain.is_active
-            }
+                "is_active": domain.is_active,
+                "dns_provider": domain.dns_provider,
+                "verification_status": domain.verification_status,
+            },
+            "dns": dns_outcome,
         }
     except Exception as e:
         return {"status": "error", "message": f"Hata: {str(e)}"}

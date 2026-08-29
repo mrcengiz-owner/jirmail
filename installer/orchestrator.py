@@ -956,6 +956,8 @@ def _create_admin_account(config: dict, recorder: StepRecorder) -> None:
             merged = dict(config_obj.docker_container_map or {})
             merged.update({str(k): str(v) for k, v in dmap.items() if k and v})
             config_obj.docker_container_map = merged
+        config_obj.dns_provider = (config.get('dns_provider') or 'manual').lower()
+        config_obj.dns_credentials = dict(config.get('dns_credentials') or {})
         config_obj.save()
         recorder.log('SystemConfig kaydedildi (is_installed=True).')
         recorder.finish(success=True)

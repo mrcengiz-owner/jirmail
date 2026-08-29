@@ -9,6 +9,12 @@ from .cloudflare import CloudflareProvider
 from .route53 import Route53Provider
 from .namecheap import NamecheapProvider
 from .records import apply_mail_dns, build_mail_dns_records, detect_public_ip
+from .system_dns import (
+    auto_apply_domain_dns,
+    get_system_dns_config,
+    persist_system_dns_config,
+    resolve_mail_hostname,
+)
 
 
 PROVIDER_REGISTRY: dict[str, type[DNSProvider]] = {
@@ -35,4 +41,8 @@ __all__ = [
     'apply_mail_dns',
     'build_mail_dns_records',
     'detect_public_ip',
+    'auto_apply_domain_dns',
+    'get_system_dns_config',
+    'persist_system_dns_config',
+    'resolve_mail_hostname',
 ]
