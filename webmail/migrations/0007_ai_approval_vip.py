@@ -51,7 +51,7 @@ class Migration(migrations.Migration):
                     db_index=True,
                     default='pending',
                     max_length=16,
-                ),
+                )),
                 ('created_at', models.DateTimeField(auto_now_add=True, db_index=True)),
                 ('resolved_at', models.DateTimeField(blank=True, null=True)),
                 ('account', models.ForeignKey(
