@@ -754,7 +754,6 @@
                 syncDns: function(d) {
                     var self = this;
                     self.loading = true;
-                    var provider = (d.dns_provider || 'manual').toLowerCase();
                     var gen = fetch(self.apiUrl('/generate-dns-records/' + encodeURIComponent(d.name)), {
                         method: 'POST',
                         credentials: 'same-origin',
@@ -765,12 +764,6 @@
                         if (data.status !== 'success') {
                             self.loading = false;
                             window.showToast(data.message || 'DNS üretilemedi', 'error');
-                            return null;
-                        }
-                        if (provider === 'manual') {
-                            self.loading = false;
-                            window.showToast('DNS kayıtları hazır — manuel sağlayıcıda panodan kopyalayın', 'success');
-                            self.refreshDomains();
                             return null;
                         }
                         return fetch(self.apiUrl('/apply-dns/' + encodeURIComponent(d.name)), {
@@ -785,8 +778,18 @@
                     }).then(function(applyData) {
                         if (!applyData) return;
                         self.loading = false;
+                        if (applyData.skipped) {
+                            window.showToast(
+                                applyData.message || 'Manuel DNS — kayıtları panodan kopyalayın',
+                                'success'
+                            );
+                            self.refreshDomains();
+                            return;
+                        }
                         if (applyData.status === 'success' || applyData.success || applyData.partial) {
-                            var msg = 'DNS zone güncellendi (' + (applyData.created || 0) + '/' + (applyData.total || 0) + ')';
+                            var msg = applyData.message || (
+                                'DNS zone güncellendi (' + (applyData.created || 0) + '/' + (applyData.total || 0) + ')'
+                            );
                             window.showToast(msg, 'success');
                             self.refreshDomains();
                         } else {

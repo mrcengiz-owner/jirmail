@@ -48,6 +48,8 @@ class SystemSettingsUpdateSchema(Schema):
     postfix_vmail_path: str | None = None
     dovecot_passdb_path: str | None = None
     backup_dir: str | None = None
+    dns_provider: str | None = None
+    dns_credentials: dict | None = None
 
 
 class FactoryResetSchema(Schema):
@@ -1017,6 +1019,12 @@ def get_system_settings(request):
     resolved = {sk: merged_container_name(sk) for sk in SERVICE_KEYS}
     stored = read_stored_container_map()
 
+    dns_creds = getattr(config, 'dns_credentials', None) or {}
+    token = (dns_creds.get('api_token') or dns_creds.get('api_key') or '').strip()
+    token_hint = ''
+    if token:
+        token_hint = token[:4] + '…' + token[-4:] if len(token) > 10 else '***'
+
     return {
         "status": "ok",
         "is_installed": bool(config.is_installed),
@@ -1028,6 +1036,9 @@ def get_system_settings(request):
         "postfix_vmail_path": config.postfix_vmail_path or "",
         "dovecot_passdb_path": config.dovecot_passdb_path or "",
         "backup_dir": config.backup_dir or "",
+        "dns_provider": getattr(config, 'dns_provider', 'manual') or 'manual',
+        "dns_credentials_configured": bool(token),
+        "dns_token_hint": token_hint,
         "database_visible": {
             "engine": config.db_engine or "",
             "host": config.db_host or "",
@@ -1081,6 +1092,21 @@ def update_system_settings(request, data: SystemSettingsUpdateSchema):
     if data.backup_dir is not None:
         config.backup_dir = (data.backup_dir or '').strip()[:500]
         fields.append('backup_dir')
+
+    if data.dns_provider is not None:
+        provider = (data.dns_provider or 'manual').strip().lower()
+        allowed = {'manual', 'cloudflare', 'route53', 'namecheap'}
+        if provider not in allowed:
+            return {"status": "error", "message": "Geçersiz DNS sağlayıcı"}
+        config.dns_provider = provider
+        fields.append('dns_provider')
+
+    if data.dns_credentials is not None:
+        incoming = dict(data.dns_credentials or {})
+        existing = dict(getattr(config, 'dns_credentials', None) or {})
+        merged = {**existing, **{k: v for k, v in incoming.items() if v not in (None, '')}}
+        config.dns_credentials = merged
+        fields.append('dns_credentials')
 
     if not fields:
         return {"status": "error", "message": "Güncellenecek alan yok."}

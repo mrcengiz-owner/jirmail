@@ -196,6 +196,26 @@ def records_as_dicts(records: list[DNSRecord]) -> list[dict[str, Any]]:
     return out
 
 
+def summarize_dns_results(results: list[dict]) -> str:
+    """Başarısız kayıtlardan okunabilir hata özeti üret."""
+    failures: list[str] = []
+    for item in results or []:
+        res = item.get('result') or {}
+        if res.get('success'):
+            continue
+        rec = item.get('record') or {}
+        label = f"{rec.get('type', '?')} {rec.get('name', '?')}"
+        msg = (res.get('message') or 'bilinmeyen hata').strip()
+        if len(msg) > 180:
+            msg = msg[:177] + '...'
+        failures.append(f'{label}: {msg}')
+    if not failures:
+        return 'DNS uygulanamadı'
+    if len(failures) == 1:
+        return failures[0]
+    return failures[0] + f' (+{len(failures) - 1} kayıt daha)'
+
+
 def apply_mail_dns(
     domain: str,
     *,
@@ -226,6 +246,23 @@ def apply_mail_dns(
             'results': [],
         }
 
+    # Cloudflare: token/zone erişimini erken doğrula
+    if (provider_name or '').lower() == 'cloudflare':
+        verify = getattr(provider, 'verify_mail_domain', None)
+        if callable(verify):
+            check = verify(domain)
+            if not check.get('success'):
+                return {
+                    'success': False,
+                    'skipped': False,
+                    'partial': False,
+                    'total': 0,
+                    'created': 0,
+                    'results': [],
+                    'message': check.get('message') or 'Cloudflare zone/token hatası',
+                    'records': [],
+                }
+
     records = build_mail_dns_records(
         domain,
         server_ip=server_ip,
@@ -243,6 +280,7 @@ def apply_mail_dns(
     domain_obj.save(update_fields=['dns_provider', 'dns_credentials', 'spf_record', 'dmarc_record', 'dkim_record'])
 
     ok = sum(1 for r in results if r['result'].get('success'))
+    summary = summarize_dns_results(results)
     return {
         'success': ok == len(results) and len(results) > 0,
         'partial': 0 < ok < len(results),
@@ -251,4 +289,5 @@ def apply_mail_dns(
         'results': results,
         'records': records_as_dicts(records),
         'server_ip': detect_public_ip(preferred=server_ip),
+        'message': summary if ok < len(results) else 'Tüm DNS kayıtları uygulandı',
     }

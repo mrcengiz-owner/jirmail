@@ -28,12 +28,27 @@ def resolve_mail_hostname(domain_name: str = '') -> str:
 def credentials_configured(provider_name: str, credentials: dict | None) -> bool:
     """Provider için minimum credential alanları dolu mu?"""
     from . import get_provider
+    from .cloudflare import normalize_cloudflare_credentials
+
+    provider_name = (provider_name or 'manual').lower()
+    creds = dict(credentials or {})
+    if provider_name == 'cloudflare':
+        creds = normalize_cloudflare_credentials(creds)
 
     try:
-        provider = get_provider(provider_name, credentials or {})
+        provider = get_provider(provider_name, creds)
         return provider.is_configured()
     except Exception:
         return False
+
+
+def normalize_provider_credentials(provider_name: str, credentials: dict | None) -> dict:
+    provider_name = (provider_name or 'manual').lower()
+    creds = dict(credentials or {})
+    if provider_name == 'cloudflare':
+        from .cloudflare import normalize_cloudflare_credentials
+        return normalize_cloudflare_credentials(creds)
+    return creds
 
 
 def persist_system_dns_config(provider_name: str, credentials: dict | None) -> None:
@@ -41,7 +56,7 @@ def persist_system_dns_config(provider_name: str, credentials: dict | None) -> N
     from saas.models import SystemConfig
 
     provider_name = (provider_name or 'manual').lower()
-    credentials = dict(credentials or {})
+    credentials = normalize_provider_credentials(provider_name, credentials)
     cfg = SystemConfig.objects.first()
     if not cfg:
         return
@@ -76,19 +91,12 @@ def _fallback_from_domain() -> tuple[str, dict] | None:
     try:
         from core.models import MailDomain
 
-        domain = (
-            MailDomain.objects.exclude(dns_provider='manual')
-            .exclude(dns_credentials={})
-            .order_by('created_at')
-            .first()
-        )
-        if not domain:
-            return None
-        provider = (domain.dns_provider or 'manual').lower()
-        credentials = domain.dns_credentials or {}
-        if provider == 'manual' or not credentials_configured(provider, credentials):
-            return None
-        return provider, credentials
+        for domain in MailDomain.objects.exclude(dns_provider='manual').order_by('created_at'):
+            provider = (domain.dns_provider or 'manual').lower()
+            credentials = normalize_provider_credentials(provider, domain.dns_credentials or {})
+            if credentials_configured(provider, credentials):
+                return provider, credentials
+        return None
     except Exception as exc:
         logger.debug('domain DNS fallback: %s', exc)
         return None
@@ -104,8 +112,8 @@ def get_system_dns_config(*, persist_fallback: bool = True) -> tuple[str, dict]:
 
     cfg = SystemConfig.objects.first()
     if cfg:
-        provider = (cfg.dns_provider or 'manual').lower()
-        credentials = dict(cfg.dns_credentials or {})
+        provider = (getattr(cfg, 'dns_provider', None) or 'manual').lower()
+        credentials = normalize_provider_credentials(provider, getattr(cfg, 'dns_credentials', None) or {})
         if provider != 'manual' and credentials_configured(provider, credentials):
             return provider, credentials
 
@@ -133,7 +141,7 @@ def auto_apply_domain_dns(
 
     Manuel sağlayıcıda veya credential yoksa yalnızca DKIM/SPF/DMARC model alanları doldurulur.
     """
-    from dns_providers.records import apply_mail_dns, detect_public_ip
+    from dns_providers.records import apply_mail_dns, detect_public_ip, summarize_dns_results
 
     if not domain_obj.dkim_private_key or not domain_obj.dkim_record:
         domain_obj.generate_dkim_keys()
@@ -152,6 +160,8 @@ def auto_apply_domain_dns(
 
     if creds is None:
         creds = domain_obj.dns_credentials or {}
+
+    creds = normalize_provider_credentials(provider, creds)
 
     if not credentials_configured(provider, creds):
         return {
@@ -193,6 +203,6 @@ def auto_apply_domain_dns(
             f'DNS kısmen uygulandı ({outcome.get("created", 0)}/{outcome.get("total", 0)})'
         )
     elif not outcome.get('skipped'):
-        outcome['message'] = outcome.get('message') or 'DNS uygulanamadı'
+        outcome['message'] = outcome.get('message') or summarize_dns_results(outcome.get('results') or [])
 
     return outcome

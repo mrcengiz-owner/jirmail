@@ -450,11 +450,17 @@ def apply_dns_records(request, domain: str, data: DnsApplyBody = None, key: str 
     data = data or DnsApplyBody()
     try:
         from dns_providers.records import apply_mail_dns, detect_public_ip
-        from dns_providers.system_dns import credentials_configured, get_system_dns_config, resolve_mail_hostname
+        from dns_providers.system_dns import (
+            credentials_configured,
+            get_system_dns_config,
+            normalize_provider_credentials,
+            resolve_mail_hostname,
+        )
 
         domain_obj = MailDomain.objects.get(name=domain)
         provider = (data.provider or domain_obj.dns_provider or 'manual').lower()
         credentials = data.credentials if data.credentials is not None else (domain_obj.dns_credentials or {})
+        credentials = normalize_provider_credentials(provider, credentials)
         if provider == 'manual' or not credentials_configured(provider, credentials):
             sys_provider, sys_creds = get_system_dns_config()
             if sys_provider != 'manual' and credentials_configured(sys_provider, sys_creds):
@@ -463,7 +469,13 @@ def apply_dns_records(request, domain: str, data: DnsApplyBody = None, key: str 
         if provider == 'manual':
             return {
                 "status": "error",
-                "message": "Otomatik uygulama için Cloudflare / Route53 / Namecheap seçin.",
+                "message": "Otomatik uygulama için Cloudflare / Route53 / Namecheap seçin. "
+                "Ayarlar → DNS bölümünden API token kaydedin veya kurulumda Cloudflare seçin.",
+            }
+        if not credentials_configured(provider, credentials):
+            return {
+                "status": "error",
+                "message": f"{provider} API bilgisi bulunamadı. Ayarlar sayfasından token girin.",
             }
 
         mail_host = getattr(settings, 'MAIL_SERVER_HOSTNAME', None) or resolve_mail_hostname(domain_obj.name)
@@ -475,7 +487,12 @@ def apply_dns_records(request, domain: str, data: DnsApplyBody = None, key: str 
             mail_hostname=mail_host,
             domain_obj=domain_obj,
         )
-        return {"status": "success" if outcome.get("success") or outcome.get("partial") else "error", **outcome}
+        ok = outcome.get("success") or outcome.get("partial")
+        return {
+            "status": "success" if ok else "error",
+            "message": outcome.get("message") or ("DNS uygulandı" if ok else "DNS uygulanamadı"),
+            **outcome,
+        }
     except MailDomain.DoesNotExist:
         return {"status": "error", "message": "Domain bulunamadı."}
     except Exception as e:
@@ -678,6 +695,56 @@ def get_domain_details(request, domain: str, key: str = None):
         }
     except MailDomain.DoesNotExist:
         return {"status": "error", "message": "Domain bulunamadı."}
+
+
+@router.get("/dns-diagnose/{domain}", summary="DNS sağlayıcı tanılama (FULL)")
+def dns_diagnose(request, domain: str, key: str = None):
+    if not check_panel_auth(request, key):
+        return {"status": "error", "message": "Yetkiniz yok. Süper yönetici yetkisi gerekir."}
+
+    try:
+        from dns_providers.records import detect_public_ip
+        from dns_providers.system_dns import credentials_configured, get_system_dns_config, resolve_mail_hostname
+
+        domain_obj = MailDomain.objects.get(name=domain)
+        sys_provider, sys_creds = get_system_dns_config(persist_fallback=True)
+        provider = (domain_obj.dns_provider or sys_provider or 'manual').lower()
+        credentials = domain_obj.dns_credentials or sys_creds or {}
+        if provider == 'manual' and sys_provider != 'manual':
+            provider = sys_provider
+            credentials = sys_creds
+
+        diag = {
+            "domain": domain_obj.name,
+            "provider": provider,
+            "credentials_configured": credentials_configured(provider, credentials),
+            "system_provider": sys_provider,
+            "system_credentials_configured": credentials_configured(sys_provider, sys_creds),
+            "mail_hostname": resolve_mail_hostname(domain_obj.name),
+            "server_ip": detect_public_ip() or '',
+        }
+
+        if provider == 'cloudflare' and credentials_configured('cloudflare', credentials):
+            from dns_providers import get_provider
+            cf = get_provider('cloudflare', credentials)
+            verify = getattr(cf, 'verify_mail_domain', None)
+            if callable(verify):
+                diag["cloudflare"] = verify(domain_obj.name)
+
+        if diag["credentials_configured"]:
+            diag["status"] = "ok" if diag.get("cloudflare", {}).get("success", True) else "warning"
+        else:
+            diag["status"] = "error"
+            diag["message"] = (
+                "Cloudflare API token kayıtlı değil. "
+                "Kurulum sihirbazında Cloudflare seçip token girin veya Ayarlar → DNS alanından ekleyin."
+            )
+
+        return {"status": "success", "diagnostics": diag}
+    except MailDomain.DoesNotExist:
+        return {"status": "error", "message": "Domain bulunamadı."}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
 
 
 @router.delete("/delete-domain/{domain}", summary="Domain Sil")

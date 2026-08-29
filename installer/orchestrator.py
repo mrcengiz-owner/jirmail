@@ -715,6 +715,9 @@ def _apply_dns_records(config: dict, recorder: StepRecorder) -> None:
             recorder.finish(success=True)
             return
 
+        from dns_providers.system_dns import persist_system_dns_config
+        persist_system_dns_config(provider_name, credentials)
+
         for item in outcome.get('results') or []:
             rec = item.get('record') or {}
             res = item.get('result') or {}

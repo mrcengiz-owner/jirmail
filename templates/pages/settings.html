@@ -47,6 +47,12 @@
             factoryResetBusy: false,
             factoryResetError: '',
             factoryResetPhrase: 'SIFIRDAN KUR',
+            dns: {
+                provider: 'manual',
+                api_token: '',
+                token_hint: '',
+                configured: false,
+            },
             async runFactoryReset() {
                 if (this.factoryResetConfirm.trim().toUpperCase() !== this.factoryResetPhrase) {
                     this.factoryResetError = 'Onay metni hatalı. Tam olarak SIFIRDAN KUR yazın.';
@@ -133,6 +139,10 @@
                     this.paths.dovecot_passdb_path = data.dovecot_passdb_path || '';
                     this.paths.backup_dir = data.backup_dir || '';
                     this.database_visible = Object.assign(this.database_visible, data.database_visible || {});
+                    this.dns.provider = data.dns_provider || 'manual';
+                    this.dns.configured = !!data.dns_credentials_configured;
+                    this.dns.token_hint = data.dns_token_hint || '';
+                    this.dns.api_token = '';
                     await this.loadDeploy();
                 } catch (e) {
                     this.error = e.message || 'Ağ hatası';
@@ -162,6 +172,10 @@
                             postfix_vmail_path: this.paths.postfix_vmail_path,
                             dovecot_passdb_path: this.paths.dovecot_passdb_path,
                             backup_dir: this.paths.backup_dir,
+                            dns_provider: this.dns.provider,
+                            dns_credentials: this.dns.api_token
+                                ? { api_token: this.dns.api_token.trim() }
+                                : undefined,
                         }),
                     });
                     const data = await res.json();
@@ -296,6 +310,36 @@
                 <div><dt class="text-[10px] font-bold uppercase text-slate-500">Kullanıcı</dt><dd class="text-slate-300 mt-0.5 font-mono text-xs" x-text="database_visible.user || '—'"></dd></div>
                 <div><dt class="text-[10px] font-bold uppercase text-slate-500">Parola</dt><dd class="text-slate-300 mt-0.5" x-text="database_visible.password_configured ? 'Tanımlı (gizli)' : 'Boş / bilinmiyor'"></dd></div>
             </dl>
+        </section>
+
+        <!-- DNS otomasyonu -->
+        <section class="bento-card p-4 sm:p-5 border border-slate-800/80">
+            <h2 class="text-sm font-semibold text-white mb-1">DNS otomasyonu (Cloudflare)</h2>
+            <p class="text-xs text-slate-500 mb-4">
+                Domain eklerken veya DNS senkronunda kullanılır. Token yetkileri:
+                <span class="text-slate-400">Zone:Read</span> + <span class="text-slate-400">DNS:Edit</span>.
+                Domain Cloudflare hesabınızda zone olarak ekli olmalı.
+            </p>
+            <div class="space-y-3">
+                <div>
+                    <label class="label text-xs">Sağlayıcı</label>
+                    <select class="input text-sm" x-model="dns.provider">
+                        <option value="manual">Manuel</option>
+                        <option value="cloudflare">Cloudflare</option>
+                        <option value="route53">AWS Route53</option>
+                        <option value="namecheap">Namecheap</option>
+                    </select>
+                </div>
+                <div x-show="dns.provider === 'cloudflare'">
+                    <label class="label text-xs">Cloudflare API Token</label>
+                    <input type="password" class="input font-mono text-sm" x-model="dns.api_token"
+                           placeholder="Yeni token (boş bırakırsanız mevcut korunur)">
+                    <p class="text-xs text-slate-500 mt-1">
+                        <span x-show="dns.configured">Kayıtlı token: <span class="font-mono text-primary-300" x-text="dns.token_hint || '***'"></span></span>
+                        <span x-show="!dns.configured" class="text-warning-400">Henüz token kaydedilmemiş — domain DNS otomasyonu çalışmaz.</span>
+                    </p>
+                </div>
+            </div>
         </section>
 
         <!-- Docker konteyner adları -->
