@@ -91,6 +91,9 @@ def triage_message_content(
     if not cfg:
         return {'success': False, 'message': 'AI kullanılamıyor'}
 
+    if is_vip_sender(account, from_addr):
+        snippet = f'[VIP gönderen] {snippet}'
+
     blob = (
         f"Konu: {subject}\nGönderen: {from_addr}\n"
         f"Önizleme: {snippet}\n"
@@ -111,7 +114,82 @@ def triage_message_content(
         return {'success': False, 'message': str(exc)}
 
     meta = _normalize_triage(_parse_json_object(out['content']))
+    if is_vip_sender(account, from_addr) and meta.get('priority') not in ('urgent', 'high'):
+        meta['priority'] = 'high'
+        meta['vip'] = True
     return {'success': True, 'ai_meta': meta}
+
+
+def is_vip_sender(account, from_addr: str) -> bool:
+    from webmail.models import MailVipSender
+
+    addr = (from_addr or '').strip().lower()
+    if not addr:
+        return False
+    for row in MailVipSender.objects.filter(account=account, enabled=True):
+        pat = (row.pattern or '').strip().lower()
+        if not pat:
+            continue
+        if pat.startswith('@') and addr.endswith(pat):
+            return True
+        if pat in addr or addr == pat:
+            return True
+    return False
+
+
+def _queue_or_apply_action(
+    account,
+    password: str,
+    *,
+    row,
+    action: dict,
+    profile,
+    autopilot: bool,
+    source: str,
+) -> tuple[str, dict | None]:
+    """Returns ('applied'|'queued'|'suggested', detail)."""
+    from webmail.ai.approval import create_pending_action, is_risky_action
+
+    act_type = action.get('action_type') or action.get('action') or ''
+    act_target = action.get('action_target') or ''
+    reason = f"{source}: {act_type}"
+
+    if autopilot and not is_risky_action(act_type):
+        res = execute_imap_action(
+            account,
+            password,
+            folder='INBOX',
+            uid=row.uid,
+            action_type=act_type,
+            action_target=act_target,
+        )
+        if res.get('success'):
+            return 'applied', {'uid': row.uid, 'action': action, 'source': source}
+        return 'suggested', {'uid': row.uid, 'error': res.get('message')}
+
+    # Assist modu veya riskli aksiyon → onay kuyruğu
+    from webmail.models import MailAgentProfile
+
+    if profile.mode == MailAgentProfile.MODE_ASSIST or is_risky_action(act_type):
+        out = create_pending_action(
+            account,
+            uid=row.uid,
+            folder='INBOX',
+            action_type=act_type,
+            action_target=act_target,
+            subject=row.subject or '',
+            from_addr=row.from_addr or '',
+            reason=reason,
+            source=source,
+        )
+        if out.get('success'):
+            return 'queued', {'uid': row.uid, 'action': action, 'pending_id': out.get('id')}
+
+    return 'suggested', {
+        'uid': row.uid,
+        'subject': row.subject,
+        'action': action,
+    }
 
 
 def apply_rules_to_message(account, msg_row) -> dict[str, Any] | None:
@@ -284,6 +362,7 @@ def organize_inbox(account, password: str, *, limit: int = 25, autopilot: bool =
 
     rows = MailMessageCache.objects.filter(folder=inbox, is_deleted=False).order_by('-date')[:limit]
     applied = []
+    queued = []
     suggestions = []
 
     for row in rows:
@@ -291,32 +370,41 @@ def organize_inbox(account, password: str, *, limit: int = 25, autopilot: bool =
         action = rule_hit
         ai = row.ai_meta if isinstance(row.ai_meta, dict) else {}
         if not action:
-            action = _action_from_ai_meta(ai, autopilot)
+            ai_action = _action_from_ai_meta(ai, autopilot)
+            if ai_action:
+                action = ai_action
+            elif ai.get('suggested_action') not in (None, '', 'none') and profile.mode == MailAgentProfile.MODE_ASSIST:
+                sa = ai.get('suggested_action')
+                action = {
+                    'action_type': 'spam' if sa == 'spam' else ('archive' if sa == 'archive' else sa),
+                    'action_target': ai.get('move_to') or '',
+                }
 
-        if action and autopilot:
-            res = execute_imap_action(
-                account,
-                password,
-                folder='INBOX',
-                uid=row.uid,
-                action_type=action.get('action_type') or action.get('action'),
-                action_target=action.get('action_target') or '',
-            )
-            if res.get('success'):
-                applied.append({'uid': row.uid, 'action': action, 'source': 'rule' if rule_hit else 'ai'})
-        elif action or ai.get('suggested_action') not in (None, '', 'none'):
-            suggestions.append({
-                'uid': row.uid,
-                'subject': row.subject,
-                'ai_meta': ai,
-                'rule': rule_hit,
-            })
+        if not action:
+            continue
+
+        kind, detail = _queue_or_apply_action(
+            account,
+            password,
+            row=row,
+            action=action,
+            profile=profile,
+            autopilot=autopilot,
+            source='rule' if rule_hit else 'ai',
+        )
+        if kind == 'applied' and detail:
+            applied.append(detail)
+        elif kind == 'queued' and detail:
+            queued.append(detail)
+        elif kind == 'suggested' and detail:
+            suggestions.append(detail)
 
     profile.last_organize_at = timezone.now()
     profile.save(update_fields=['last_organize_at'])
     return {
         'success': True,
         'applied': applied,
+        'queued': queued,
         'suggestions': suggestions,
         'autopilot': autopilot,
     }

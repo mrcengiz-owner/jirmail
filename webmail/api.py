@@ -818,6 +818,30 @@ class AgentRunSchema(Schema):
     digest: bool = False
 
 
+class ReplyDraftSchema(Schema):
+    folder: str = 'INBOX'
+    uid: int
+    tone: str = 'professional'
+    instruction: str = ''
+    context_subject: str = ''
+    context_from: str = ''
+    context_body: str = ''
+
+
+class ReplySendSchema(Schema):
+    to: str
+    subject: str
+    body_text: str
+    body_html: str = ''
+    uid: int = 0
+    folder: str = 'INBOX'
+
+
+class VipSenderSchema(Schema):
+    pattern: str
+    label: str = ''
+
+
 class AiSettingsSchema(Schema):
     ai_enabled: Optional[bool] = None
     ai_provider: Optional[str] = None
@@ -1451,6 +1475,148 @@ def delete_ai_rule(request: HttpRequest, rule_id: int):
     from webmail.models import MailAiRule
 
     n, _ = MailAiRule.objects.filter(account=account, pk=rule_id).delete()
+    return {'success': n > 0}
+
+
+@router.get('/ai/reply/pending', summary='Yanıt bekleyen mailler')
+def reply_pending_list(request: HttpRequest, limit: int = 20):
+    account, _ = _get_account_and_password(request)
+    if not account:
+        return {'success': False, 'message': 'Oturum yok'}
+    from webmail.ai.reply import list_needs_reply
+
+    return list_needs_reply(account, limit=min(limit, 50))
+
+
+@router.post('/ai/reply/draft', summary='AI yanıt taslağı üret')
+def reply_draft(request: HttpRequest, data: ReplyDraftSchema):
+    account, password = _get_account_and_password(request)
+    if not account:
+        return {'success': False, 'message': 'Oturum yok'}
+    from webmail.ai.reply import generate_reply_draft
+    from webmail.models import MailFolder, MailMessageCache
+
+    out = generate_reply_draft(
+        account,
+        password,
+        folder=data.folder,
+        uid=data.uid,
+        tone=data.tone,
+        instruction=data.instruction,
+        cached_subject=data.context_subject,
+        cached_from=data.context_from,
+        cached_body=data.context_body,
+    )
+    if out.get('success') and data.uid > 0:
+        folder_obj = MailFolder.objects.filter(account=account, name__iexact=data.folder).first()
+        if folder_obj:
+            row = MailMessageCache.objects.filter(folder=folder_obj, uid=data.uid).first()
+            if row:
+                ai = dict(row.ai_meta or {})
+                ai['reply_draft'] = out.get('body') or ''
+                ai['needs_reply'] = True
+                row.ai_meta = ai
+                row.save(update_fields=['ai_meta'])
+    return out
+
+
+@router.post('/ai/reply/send', summary='AI yanıtını arka planda gönder')
+def reply_send(request: HttpRequest, data: ReplySendSchema):
+    account, password = _get_account_and_password(request)
+    if not account:
+        return {'success': False, 'message': 'Oturum yok'}
+    from webmail.ai.reply import send_reply_draft
+
+    return send_reply_draft(
+        account,
+        password,
+        to=data.to,
+        subject=data.subject,
+        body_text=data.body_text,
+        body_html=data.body_html,
+    )
+
+
+@router.get('/ai/agent/stats', summary='AI ajan istatistikleri')
+def agent_stats_api(request: HttpRequest):
+    account, _ = _get_account_and_password(request)
+    if not account:
+        return {'success': False, 'message': 'Oturum yok'}
+    from webmail.ai.approval import agent_stats
+
+    return agent_stats(account)
+
+
+@router.get('/ai/approvals', summary='Onay bekleyen aksiyonlar')
+def list_approvals(request: HttpRequest):
+    account, _ = _get_account_and_password(request)
+    if not account:
+        return {'success': False, 'message': 'Oturum yok'}
+    from webmail.ai.approval import list_pending_actions
+
+    return list_pending_actions(account)
+
+
+@router.post('/ai/approvals/{action_id}/approve', summary='Aksiyonu onayla ve uygula')
+def approve_pending(request: HttpRequest, action_id: int):
+    account, password = _get_account_and_password(request)
+    if not account:
+        return {'success': False, 'message': 'Oturum yok'}
+    from webmail.ai.approval import approve_action
+
+    return approve_action(account, password, action_id)
+
+
+@router.post('/ai/approvals/{action_id}/reject', summary='Aksiyonu reddet')
+def reject_pending(request: HttpRequest, action_id: int):
+    account, _ = _get_account_and_password(request)
+    if not account:
+        return {'success': False, 'message': 'Oturum yok'}
+    from webmail.ai.approval import reject_action
+
+    return reject_action(account, action_id)
+
+
+@router.get('/ai/vip', summary='VIP gönderen listesi')
+def list_vip(request: HttpRequest):
+    account, _ = _get_account_and_password(request)
+    if not account:
+        return {'success': False, 'message': 'Oturum yok'}
+    from webmail.models import MailVipSender
+
+    rows = MailVipSender.objects.filter(account=account, enabled=True).order_by('pattern')
+    return {
+        'success': True,
+        'items': [{'id': r.id, 'pattern': r.pattern, 'label': r.label} for r in rows],
+    }
+
+
+@router.post('/ai/vip', summary='VIP gönderen ekle')
+def add_vip(request: HttpRequest, data: VipSenderSchema):
+    account, _ = _get_account_and_password(request)
+    if not account:
+        return {'success': False, 'message': 'Oturum yok'}
+    from webmail.models import MailVipSender
+
+    pat = (data.pattern or '').strip().lower()
+    if not pat:
+        return {'success': False, 'message': 'Desen gerekli'}
+    row, created = MailVipSender.objects.get_or_create(
+        account=account,
+        pattern=pat,
+        defaults={'label': data.label or ''},
+    )
+    return {'success': True, 'id': row.id, 'created': created}
+
+
+@router.delete('/ai/vip/{vip_id}', summary='VIP gönderen sil')
+def delete_vip(request: HttpRequest, vip_id: int):
+    account, _ = _get_account_and_password(request)
+    if not account:
+        return {'success': False, 'message': 'Oturum yok'}
+    from webmail.models import MailVipSender
+
+    n, _ = MailVipSender.objects.filter(account=account, pk=vip_id).delete()
     return {'success': n > 0}
 
 

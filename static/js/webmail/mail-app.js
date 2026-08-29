@@ -1,5 +1,5 @@
 /**
- * Jîr-Mail Webmail v3 — Alpine.js SPA
+ * Jîr-Mail Webmail v4 — AI-native Alpine.js SPA
  */
 document.addEventListener('alpine:init', function() {
     var FOLDER_MAP = {
@@ -84,6 +84,13 @@ document.addEventListener('alpine:init', function() {
             aiDigest: '',
             aiPanelTab: 'chat',
             agentRunning: false,
+            agentStats: null,
+            pendingApprovals: [],
+            vipSenders: [],
+            vipInput: '',
+            aiReplyDraft: null,
+            aiReplyLoading: false,
+            needsReplyList: [],
             _fetchSeq: 0,
             _syncInFlight: false,
             _streamDebounce: null,
@@ -120,7 +127,10 @@ document.addEventListener('alpine:init', function() {
                 if (self.aiEnabled) {
                     self.loadAiStatus();
                     self.loadAgentProfile();
+                    self.loadAgentStats();
                     self.loadAiRules();
+                    self.loadNeedsReplyList();
+                    self.loadPendingApprovals();
                 }
                 self.syncAllFoldersBackground();
                 self.$watch('currentFolder', function() {
@@ -790,6 +800,108 @@ document.addEventListener('alpine:init', function() {
                 }
                 if (this.aiPanelOpen && this.aiEnabled) {
                     this.loadAgentProfile();
+                    this.loadAgentStats();
+                    this.loadNeedsReplyList();
+                }
+            },
+
+            loadAgentStats: function() {
+                var self = this;
+                WmApi.json('/api/mail/ai/agent/stats').then(function(r) {
+                    if (r.data && r.data.success) {
+                        self.agentStats = r.data;
+                    }
+                });
+            },
+
+            loadPendingApprovals: function() {
+                var self = this;
+                WmApi.json('/api/mail/ai/approvals').then(function(r) {
+                    if (r.data && r.data.success) {
+                        self.pendingApprovals = r.data.items || [];
+                    }
+                });
+            },
+
+            approvePending: function(actionId) {
+                var self = this;
+                WmApi.json('/api/mail/ai/approvals/' + actionId + '/approve', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: '{}'
+                }).then(function(r) {
+                    var d = r.data || {};
+                    showToast(d.message || (d.success ? 'Onaylandı' : 'Hata'), d.success ? 'success' : 'error');
+                    if (d.success) {
+                        self.loadPendingApprovals();
+                        self.loadAgentStats();
+                        self.fetchMails();
+                    }
+                });
+            },
+
+            rejectPending: function(actionId) {
+                var self = this;
+                WmApi.json('/api/mail/ai/approvals/' + actionId + '/reject', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: '{}'
+                }).then(function(r) {
+                    var d = r.data || {};
+                    showToast(d.message || (d.success ? 'Reddedildi' : 'Hata'), d.success ? 'success' : 'warning');
+                    if (d.success) {
+                        self.loadPendingApprovals();
+                        self.loadAgentStats();
+                    }
+                });
+            },
+
+            loadVipSenders: function() {
+                var self = this;
+                WmApi.json('/api/mail/ai/vip').then(function(r) {
+                    if (r.data && r.data.success) {
+                        self.vipSenders = r.data.items || [];
+                    }
+                });
+            },
+
+            addVipSender: function() {
+                var self = this;
+                var pat = (self.vipInput || '').trim();
+                if (!pat) {
+                    showToast('Gönderen deseni girin', 'warning');
+                    return;
+                }
+                WmApi.json('/api/mail/ai/vip', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ pattern: pat, label: '' })
+                }).then(function(r) {
+                    if (r.data && r.data.success) {
+                        self.vipInput = '';
+                        self.loadVipSenders();
+                        showToast('VIP eklendi', 'success');
+                    } else {
+                        showToast((r.data && r.data.message) || 'Eklenemedi', 'error');
+                    }
+                });
+            },
+
+            removeVip: function(vipId) {
+                var self = this;
+                WmApi.json('/api/mail/ai/vip/' + vipId, { method: 'DELETE' }).then(function(r) {
+                    if (r.data && r.data.success) {
+                        self.loadVipSenders();
+                        showToast('VIP kaldırıldı', 'success');
+                    }
+                });
+            },
+
+            onApprovalUpdate: function(payload) {
+                this.loadAgentStats();
+                this.loadPendingApprovals();
+                if (payload && payload.event === 'pending_created') {
+                    showToast('Yeni onay bekleyen aksiyon', 'info');
                 }
             },
 
@@ -907,9 +1019,134 @@ document.addEventListener('alpine:init', function() {
                 showToast('AI ajan döngüsü tamamlandı', 'success');
                 this.fetchMails();
                 this.loadAgentProfile();
+                this.loadAgentStats();
+                this.loadNeedsReplyList();
+                this.loadPendingApprovals();
                 if (payload && payload.steps && payload.steps.digest) {
                     this.aiDigest = payload.steps.digest.digest || this.aiDigest;
                 }
+            },
+
+            loadNeedsReplyList: function() {
+                var self = this;
+                WmApi.json('/api/mail/ai/reply/pending?limit=15').then(function(r) {
+                    if (r.data && r.data.success) {
+                        self.needsReplyList = r.data.items || [];
+                    }
+                });
+            },
+
+            generateAiReply: function(instruction) {
+                var self = this;
+                var mail = self.selectedMail;
+                if (!mail || !mail.uid) {
+                    showToast('Önce bir mail seçin', 'warning');
+                    return;
+                }
+                self.aiReplyLoading = true;
+                var plain = (mail.body || '').replace(/<[^>]+>/g, ' ').slice(0, 8000);
+                WmApi.json('/api/mail/ai/reply/draft', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        folder: self.imapFolder(),
+                        uid: mail.uid,
+                        tone: 'professional',
+                        instruction: instruction || '',
+                        context_subject: mail.subject || '',
+                        context_from: mail.from_addr || mail.from || '',
+                        context_body: plain
+                    })
+                }).then(function(r) {
+                    self.aiReplyLoading = false;
+                    var d = r.data || {};
+                    if (!d.success) {
+                        showToast(d.message || 'Yanıt üretilemedi', 'error');
+                        return;
+                    }
+                    self.aiReplyDraft = d;
+                    if (mail.ai_meta) {
+                        mail.ai_meta.reply_draft = d.body;
+                    } else {
+                        mail.ai_meta = { reply_draft: d.body, needs_reply: true };
+                    }
+                    showToast('AI yanıt taslağı hazır', 'success');
+                }).catch(function() {
+                    self.aiReplyLoading = false;
+                });
+            },
+
+            openReplyDraftInCompose: function() {
+                var self = this;
+                var draft = self.aiReplyDraft;
+                var mail = self.selectedMail;
+                if (!draft && mail && mail.ai_meta && mail.ai_meta.reply_draft) {
+                    draft = {
+                        to: mail.from_addr || mail.from || '',
+                        subject: 'Re: ' + (mail.subject || '').replace(/^Re:\s*/i, ''),
+                        body: mail.ai_meta.reply_draft
+                    };
+                }
+                if (!draft) {
+                    showToast('Önce AI yanıt üretin', 'warning');
+                    return;
+                }
+                self.composeTo = draft.to || '';
+                self.composeSubject = draft.subject || '';
+                self.openCompose();
+                self.$nextTick(function() {
+                    if (self.quill && draft.body) {
+                        var html = draft.body_html || ('<p>' + draft.body.replace(/\n/g, '</p><p>') + '</p>');
+                        self.quill.clipboard.dangerouslyPasteHTML(html);
+                    }
+                });
+            },
+
+            sendAiReplyNow: function() {
+                var self = this;
+                var draft = self.aiReplyDraft;
+                if (!draft || !draft.to) {
+                    showToast('Gönderilecek yanıt yok', 'warning');
+                    return;
+                }
+                if (!window.confirm('Bu yanıt arka planda gönderilsin mi?')) return;
+                WmApi.json('/api/mail/ai/reply/send', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        to: draft.to,
+                        subject: draft.subject,
+                        body_text: draft.body,
+                        body_html: draft.body_html || '',
+                        uid: self.selectedMail ? self.selectedMail.uid : 0,
+                        folder: self.imapFolder()
+                    })
+                }).then(function(r) {
+                    var d = r.data || {};
+                    if (d.success) {
+                        showToast(d.message || 'Yanıt gönderiliyor…', 'success');
+                        if (d.outbound_id) {
+                            self.trackOutbound({
+                                id: d.outbound_id,
+                                to: draft.to,
+                                subject: draft.subject,
+                                status: 'pending'
+                            });
+                        }
+                        self.aiReplyDraft = null;
+                    } else {
+                        showToast(d.message || 'Gönderilemedi', 'error');
+                    }
+                });
+            },
+
+            selectNeedsReplyMail: function(item) {
+                var self = this;
+                var mail = self.mails.find(function(m) { return m.uid === item.uid; });
+                if (mail) {
+                    self.selectMail(mail);
+                }
+                self.generateAiReply('');
             },
 
             loadAiStatus: function() {
@@ -1408,6 +1645,8 @@ document.addEventListener('alpine:init', function() {
                             self.onAiTaskStatus(parsed.payload || {});
                         } else if (parsed.type === 'agent_cycle_complete') {
                             self.onAgentCycleComplete(parsed.payload || {});
+                        } else if (parsed.type === 'approval_update') {
+                            self.onApprovalUpdate(parsed.payload || {});
                         }
                     };
                 } catch (e) { /* ignore */ }

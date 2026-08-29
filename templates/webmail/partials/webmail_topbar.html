@@ -30,7 +30,7 @@ Search input sadece inbox sayfasında render edilir (mailApp state'ine bağlı).
   <div class="wm-tb-actions">
     {% if current_url == 'inbox' %}
     <button type="button" class="wm-tb-iconbtn" x-show="aiEnabled"
-            @click="toggleAiPanel()" title="AI Asistan" aria-label="AI Asistan"
+            @click="toggleAiPanel()" title="AI Hub" aria-label="AI Hub"
             :class="aiPanelOpen && 'is-active'">
       <span class="material-symbols-outlined">smart_toy</span>
     </button>

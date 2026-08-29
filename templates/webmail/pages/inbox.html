@@ -4,6 +4,8 @@
 {% block title %}Webmail — Jîr-Mail{% endblock %}
 
 {% block shell_extra_attrs %}
+  class="wm-v4"
+  :class="aiEnabled && aiPanelOpen && 'wm-ai-docked'"
   x-data="mailApp()"
   x-init="init()"
   data-user-email="{{ email|default:''|escape }}"
@@ -25,6 +27,25 @@
       </template>
     </div>
   </div>
+
+  <div class="wm-agent-bar" x-show="aiEnabled" x-cloak>
+    <span class="wm-agent-bar__pill wm-agent-bar__pill--brand">
+      <span class="material-symbols-outlined" style="font-size:16px;">smart_toy</span>
+      AI Ajan
+    </span>
+    <span class="wm-agent-bar__pill" x-show="agentStats" x-text="(agentStats.needs_reply || 0) + ' yanıt bekliyor'"></span>
+    <button type="button" class="wm-agent-bar__pill wm-agent-bar__pill--warn wm-agent-bar__pill--action"
+            x-show="agentStats && agentStats.pending_approvals > 0"
+            @click="aiPanelTab = 'approval'; aiPanelOpen = true; loadPendingApprovals()"
+            x-text="agentStats.pending_approvals + ' onay bekliyor'"></button>
+    <button type="button" class="wm-agent-bar__pill wm-agent-bar__pill--action" @click="runAgentNow()" :disabled="agentRunning">
+      Tam döngü çalıştır
+    </button>
+    <button type="button" class="wm-agent-bar__pill wm-agent-bar__pill--action" @click="toggleAiPanel()">
+      AI Hub
+    </button>
+  </div>
+
   <div class="wm-inbox-main">
   <div class="wm-inbox">
   <!-- Liste -->
@@ -57,7 +78,10 @@
         <article class="wm-mail-row"
                  :class="{
                    'is-unread': mail.unread,
-                   'is-selected': selectedMail && selectedMail.uid === mail.uid
+                   'is-selected': selectedMail && selectedMail.uid === mail.uid,
+                   'wm-mail-row--pri-urgent': mail.ai_meta && mail.ai_meta.priority === 'urgent',
+                   'wm-mail-row--pri-high': mail.ai_meta && mail.ai_meta.priority === 'high',
+                   'wm-mail-row--pri-low': mail.ai_meta && mail.ai_meta.priority === 'low'
                  }"
                  @click="selectMail(mail)">
           <input type="checkbox" class="wm-mail-row__check"
@@ -119,6 +143,9 @@
           <button type="button" class="wm-read-toolbar__btn" x-show="aiEnabled" title="AI analiz" @click="analyzeSelectedMail()">
             <span class="material-symbols-outlined">smart_toy</span>
           </button>
+          <button type="button" class="wm-read-toolbar__btn" x-show="aiEnabled" title="AI yanıt üret" @click="generateAiReply('')" :disabled="aiReplyLoading">
+            <span class="material-symbols-outlined">auto_fix</span>
+          </button>
           <span class="wm-read-toolbar__sep"></span>
           <button type="button" class="wm-read-toolbar__btn wm-read-toolbar__btn--danger" title="Sil" @click="deleteMail(selectedMail)">
             <span class="material-symbols-outlined">delete</span>
@@ -130,10 +157,27 @@
           <article class="wm-read-article">
             <h1 class="wm-read-subject" x-text="selectedMail.subject"></h1>
 
-            <div x-show="selectedMail.ai_meta && selectedMail.ai_meta.summary" class="wm-ai-read-banner mb-4 rounded-xl border px-4 py-3 text-sm" style="border-color:rgba(91,108,255,0.25);background:rgba(91,108,255,0.06);">
-              <p class="font-semibold mb-1" style="color:var(--wm-brand);">AI özeti</p>
+            <div x-show="selectedMail.ai_meta && selectedMail.ai_meta.summary" class="wm-read-card wm-ai-read-banner">
+              <p class="font-semibold mb-1 flex items-center gap-2" style="color:var(--wm-brand);">
+                <span class="material-symbols-outlined text-[18px]">auto_awesome</span>
+                AI özeti
+              </p>
               <p x-text="selectedMail.ai_meta.summary"></p>
               <p class="text-xs mt-2 opacity-70" x-show="selectedMail.ai_meta.needs_reply">↳ Yanıt önerilir</p>
+            </div>
+
+            <div x-show="aiEnabled && (aiReplyDraft || (selectedMail.ai_meta && selectedMail.ai_meta.reply_draft))" class="wm-read-card wm-ai-reply-banner">
+              <p class="font-semibold mb-2 flex items-center gap-2" style="color:#2e7d32;">
+                <span class="material-symbols-outlined text-[18px]">reply</span>
+                AI yanıt taslağı
+              </p>
+              <p class="whitespace-pre-wrap mb-3" x-text="aiReplyDraft ? aiReplyDraft.body : (selectedMail.ai_meta && selectedMail.ai_meta.reply_draft)"></p>
+              <div class="flex flex-wrap gap-2">
+                <button type="button" class="wm-inbox-btn" @click="openReplyDraftInCompose()">Düzenle</button>
+                <button type="button" class="wm-sb-compose" style="margin:0;width:auto;" @click="sendAiReplyNow()">Gönder</button>
+                <button type="button" class="wm-inbox-btn" @click="generateAiReply('')" :disabled="aiReplyLoading">Yeniden üret</button>
+              </div>
+              <p x-show="aiReplyLoading" class="text-xs mt-2 opacity-60">Yanıt yazılıyor…</p>
             </div>
 
             <div x-show="isBounceMail(selectedMail)" class="wm-bounce-banner mb-6 rounded-xl border px-4 py-3 text-left" style="border-color:rgba(220,61,61,0.3);background:rgba(220,61,61,0.08);">
@@ -195,8 +239,8 @@
   <aside class="wm-ai-panel" :class="aiPanelOpen && 'is-open'" x-show="aiEnabled" x-cloak>
     <header class="wm-ai-panel__head">
       <div>
-        <h3 class="wm-ai-panel__title">AI Posta Asistanı</h3>
-        <p class="wm-ai-panel__sub" x-text="aiAvailable ? 'Aktif — görev verebilirsiniz' : 'API anahtarı gerekli (Ayarlar)'"></p>
+        <h3 class="wm-ai-panel__title">AI Hub</h3>
+        <p class="wm-ai-panel__sub" x-text="aiAvailable ? 'Posta trafiğinizi yönetir' : 'API anahtarı gerekli'"></p>
       </div>
       <button type="button" class="wm-read-toolbar__btn" @click="toggleAiPanel()" title="Kapat">
         <span class="material-symbols-outlined">close</span>
@@ -205,7 +249,11 @@
 
     <div class="wm-ai-panel__tabs">
       <button type="button" :class="aiPanelTab === 'chat' && 'is-active'" @click="aiPanelTab = 'chat'">Sohbet</button>
-      <button type="button" :class="aiPanelTab === 'agent' && 'is-active'" @click="aiPanelTab = 'agent'; loadAgentProfile(); loadAiRules();">Ajan</button>
+      <button type="button" :class="aiPanelTab === 'agent' && 'is-active'" @click="aiPanelTab = 'agent'; loadAgentProfile(); loadAiRules(); loadVipSenders();">Ajan</button>
+      <button type="button" :class="aiPanelTab === 'approval' && 'is-active'" @click="aiPanelTab = 'approval'; loadPendingApprovals();">
+        Onay
+        <span x-show="agentStats && agentStats.pending_approvals" class="wm-ai-tab-badge" x-text="agentStats.pending_approvals"></span>
+      </button>
       <button type="button" :class="aiPanelTab === 'digest' && 'is-active'" @click="aiPanelTab = 'digest'; loadDigest(false);">Özet</button>
     </div>
 
@@ -265,12 +313,53 @@
           </p>
         </div>
       </template>
+      <div class="wm-ai-needs-reply" x-show="needsReplyList.length">
+        <p class="text-xs font-semibold mb-2 px-3 pt-2" style="color:var(--wm-muted);">Yanıt bekleyenler</p>
+        <template x-for="item in needsReplyList" :key="'nr-' + item.uid">
+          <button type="button" class="wm-ai-needs-reply__row" @click="selectNeedsReplyMail(item)">
+            <span class="wm-ai-badge wm-ai-badge--reply" x-show="item.priority === 'urgent'">Acil</span>
+            <span class="block text-sm font-medium truncate" x-text="item.subject"></span>
+            <span class="block text-xs opacity-60 truncate" x-text="item.from_addr"></span>
+          </button>
+        </template>
+      </div>
       <div class="wm-ai-rules" x-show="aiRules.length">
-        <p class="text-xs font-semibold mb-2" style="color:var(--wm-muted);">Posta kuralları</p>
+        <p class="text-xs font-semibold mb-2 px-3" style="color:var(--wm-muted);">Posta kuralları</p>
         <template x-for="rule in aiRules" :key="'rule-' + rule.id">
-          <div class="wm-ai-task-row">
+          <div class="wm-ai-task-row px-3">
             <span x-text="rule.name"></span>
             <span class="opacity-60" x-text="' → ' + rule.action_type"></span>
+          </div>
+        </template>
+      </div>
+      <div class="wm-ai-vip px-3 pb-3">
+        <p class="text-xs font-semibold mb-2" style="color:var(--wm-muted);">VIP gönderenler</p>
+        <template x-for="v in vipSenders" :key="'vip-' + v.id">
+          <div class="text-xs py-1 flex justify-between">
+            <span x-text="v.pattern"></span>
+            <button type="button" class="opacity-50 hover:opacity-100" @click="removeVip(v.id)">×</button>
+          </div>
+        </template>
+        <div class="flex gap-2 mt-2">
+          <input type="text" x-model="vipInput" placeholder="@domain.com veya eposta" class="wm-ai-panel__input flex-1 text-xs py-1">
+          <button type="button" class="wm-inbox-btn" @click="addVipSender()">Ekle</button>
+        </div>
+      </div>
+    </div>
+
+    <div x-show="aiPanelTab === 'approval'" class="wm-ai-panel__tab-body" x-cloak>
+      <p x-show="!pendingApprovals.length" class="wm-inbox-empty text-sm p-4">Onay bekleyen aksiyon yok.</p>
+      <div class="p-3 overflow-y-auto flex-1">
+        <template x-for="item in pendingApprovals" :key="'ap-' + item.id">
+          <div class="wm-ai-card">
+            <p class="text-sm font-semibold truncate" x-text="item.subject || '(konu yok)'"></p>
+            <p class="text-xs opacity-70 truncate" x-text="item.from_addr"></p>
+            <p class="text-xs mt-2" x-text="item.action_type + (item.action_target ? ' → ' + item.action_target : '')"></p>
+            <p class="text-xs mt-1 opacity-60" x-text="item.reason"></p>
+            <div class="wm-ai-card__actions">
+              <button type="button" class="wm-sb-compose" style="margin:0;width:auto;flex:1;" @click="approvePending(item.id)">Onayla</button>
+              <button type="button" class="wm-inbox-btn flex-1" @click="rejectPending(item.id)">Reddet</button>
+            </div>
           </div>
         </template>
       </div>
@@ -289,7 +378,7 @@
 {% endblock %}
 
 {% block extra_scripts %}
-<script src="{% url 'webmail:asset' asset_path='js/webmail/mail-app.js' %}?v=20260829c"></script>
+<script src="{% url 'webmail:asset' asset_path='js/webmail/mail-app.js' %}?v=20260829e"></script>
 {% endblock %}
 
 {% block shell_overlay %}

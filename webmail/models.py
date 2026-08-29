@@ -276,3 +276,53 @@ class MailAiRule(models.Model):
 
     def __str__(self):
         return f'{self.name} → {self.action_type}'
+
+
+class MailVipSender(models.Model):
+    """VIP gönderen — triage önceliği yükseltilir."""
+
+    account = models.ForeignKey(MailAccount, on_delete=models.CASCADE, related_name='vip_senders')
+    pattern = models.CharField(max_length=255, help_text='E-posta veya @domain.com')
+    label = models.CharField(max_length=120, blank=True, default='')
+    enabled = models.BooleanField(default=True, db_index=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['pattern']
+
+    def __str__(self):
+        return self.pattern
+
+
+class MailAiPendingAction(models.Model):
+    """AI / kural önerisi — kullanıcı onayı bekler."""
+
+    STATUS_PENDING = 'pending'
+    STATUS_APPROVED = 'approved'
+    STATUS_REJECTED = 'rejected'
+    STATUS_APPLIED = 'applied'
+    STATUS_CHOICES = [
+        (STATUS_PENDING, 'Beklemede'),
+        (STATUS_APPROVED, 'Onaylandı'),
+        (STATUS_REJECTED, 'Reddedildi'),
+        (STATUS_APPLIED, 'Uygulandı'),
+    ]
+
+    account = models.ForeignKey(MailAccount, on_delete=models.CASCADE, related_name='ai_pending_actions')
+    uid = models.PositiveIntegerField()
+    folder = models.CharField(max_length=255, default='INBOX')
+    action_type = models.CharField(max_length=32)
+    action_target = models.CharField(max_length=255, blank=True, default='')
+    subject = models.CharField(max_length=998, blank=True, default='')
+    from_addr = models.CharField(max_length=500, blank=True, default='')
+    reason = models.TextField(blank=True, default='')
+    source = models.CharField(max_length=16, default='ai')
+    status = models.CharField(max_length=16, choices=STATUS_CHOICES, default=STATUS_PENDING, db_index=True)
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+    resolved_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f'{self.action_type} uid={self.uid} ({self.status})'

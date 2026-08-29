@@ -1,25 +1,29 @@
-/* Jîr-Mail Webmail v3 — sıfırdan arayüz */
+/* Jîr-Mail Webmail v4 — AI-native arayüz */
 :root {
-  --wm-sidebar-w: 248px;
-  --wm-list-w: 380px;
-  --wm-topbar-h: 56px;
-  --wm-brand: #5b6cff;
-  --wm-brand-hover: #4855e6;
-  --wm-brand-soft: rgba(91, 108, 255, 0.12);
+  --wm-sidebar-w: 252px;
+  --wm-list-w: 400px;
+  --wm-ai-w: 380px;
+  --wm-topbar-h: 58px;
+  --wm-brand: #6366f1;
+  --wm-brand-hover: #4f46e5;
+  --wm-brand-soft: rgba(99, 102, 241, 0.12);
+  --wm-brand-glow: rgba(99, 102, 241, 0.35);
   --wm-spam: #e07a00;
   --wm-spam-soft: rgba(224, 122, 0, 0.12);
-  --wm-bg: #eef0f6;
+  --wm-bg: #e8eaf3;
   --wm-surface: #ffffff;
-  --wm-surface-2: #f7f8fc;
-  --wm-border: #e2e5ef;
+  --wm-surface-2: #f4f5fb;
+  --wm-surface-glass: rgba(255, 255, 255, 0.72);
+  --wm-border: #dfe2ec;
   --wm-text: #12141f;
   --wm-muted: #5c637a;
   --wm-faint: #9399ad;
   --wm-danger: #dc3d3d;
   --wm-success: #0d9668;
-  --wm-radius: 12px;
-  --wm-radius-sm: 8px;
-  --wm-shadow: 0 8px 30px rgba(18, 20, 31, 0.08);
+  --wm-radius: 14px;
+  --wm-radius-sm: 10px;
+  --wm-shadow: 0 4px 24px rgba(15, 18, 35, 0.06), 0 1px 3px rgba(15, 18, 35, 0.04);
+  --wm-shadow-lg: 0 20px 50px rgba(15, 18, 35, 0.12);
   --wm-font: 'Inter', system-ui, sans-serif;
 }
 
@@ -896,4 +900,163 @@ html:not(.dark) .wm-tb-light-icon { display: none; }
   white-space: pre-wrap;
   overflow-y: auto;
   flex: 1;
+}
+.wm-ai-reply-banner { text-align: left; }
+.wm-ai-needs-reply {
+  border-top: 1px solid var(--wm-border);
+  max-height: 180px;
+  overflow-y: auto;
+}
+.wm-ai-needs-reply__row {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 8px 12px;
+  border: none;
+  border-bottom: 1px solid var(--wm-border);
+  background: transparent;
+  color: var(--wm-text);
+  cursor: pointer;
+}
+.wm-ai-needs-reply__row:hover { background: var(--wm-surface-2); }
+
+/* ─── v4 AI-native layout ─── */
+.wm-v4 .wm-inbox-wrap {
+  background: var(--wm-bg);
+}
+.wm-agent-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  background: var(--wm-surface-glass);
+  backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--wm-border);
+  flex-shrink: 0;
+  overflow-x: auto;
+}
+.wm-agent-bar__pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  border: 1px solid var(--wm-border);
+  background: var(--wm-surface);
+  color: var(--wm-muted);
+  white-space: nowrap;
+  cursor: default;
+}
+.wm-agent-bar__pill--brand {
+  border-color: rgba(99, 102, 241, 0.35);
+  background: var(--wm-brand-soft);
+  color: var(--wm-brand);
+}
+.wm-agent-bar__pill--warn {
+  border-color: rgba(224, 122, 0, 0.35);
+  background: var(--wm-spam-soft);
+  color: var(--wm-spam);
+}
+.wm-agent-bar__pill--action {
+  cursor: pointer;
+  transition: transform 0.15s, box-shadow 0.15s;
+}
+.wm-agent-bar__pill--action:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--wm-shadow);
+}
+.wm-v4 .wm-inbox-list,
+.wm-v4 .wm-inbox-read {
+  border-radius: var(--wm-radius) 0 0 0;
+  margin: 0;
+  box-shadow: inset -1px 0 0 var(--wm-border);
+}
+.wm-v4 .wm-mail-row {
+  border-left: 3px solid transparent;
+  margin: 0 8px 4px;
+  border-radius: var(--wm-radius-sm);
+  transition: background 0.15s, box-shadow 0.15s;
+}
+.wm-v4 .wm-mail-row:hover {
+  background: var(--wm-surface-2);
+  box-shadow: var(--wm-shadow);
+}
+.wm-v4 .wm-mail-row.is-selected {
+  background: var(--wm-brand-soft);
+  box-shadow: 0 0 0 1px rgba(99, 102, 241, 0.25);
+}
+.wm-v4 .wm-mail-row--pri-urgent { border-left-color: var(--wm-danger); }
+.wm-v4 .wm-mail-row--pri-high { border-left-color: var(--wm-spam); }
+.wm-v4 .wm-mail-row--pri-normal { border-left-color: transparent; }
+.wm-v4 .wm-mail-row--pri-low { border-left-color: var(--wm-faint); }
+.wm-v4 .wm-ai-panel {
+  background: linear-gradient(180deg, var(--wm-surface) 0%, var(--wm-surface-2) 100%);
+  box-shadow: -8px 0 32px rgba(15, 18, 35, 0.06);
+}
+.wm-v4 .wm-ai-panel.is-open {
+  width: min(var(--wm-ai-w), 94vw);
+}
+@media (min-width: 1280px) {
+  .wm-v4.wm-ai-docked .wm-ai-panel {
+    width: var(--wm-ai-w);
+    display: flex !important;
+  }
+  .wm-v4.wm-ai-docked .wm-inbox-main {
+    margin-right: 0;
+  }
+}
+.wm-ai-card {
+  background: var(--wm-surface);
+  border: 1px solid var(--wm-border);
+  border-radius: var(--wm-radius-sm);
+  padding: 12px;
+  margin-bottom: 8px;
+}
+.wm-ai-card__actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+.wm-ai-approval-row {
+  text-align: left;
+  width: 100%;
+  padding: 0;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+}
+.wm-read-card {
+  border-radius: var(--wm-radius);
+  border: 1px solid var(--wm-border);
+  padding: 16px;
+  margin-bottom: 16px;
+  background: var(--wm-surface);
+}
+.wm-v4 .wm-read-empty {
+  background: radial-gradient(ellipse at 50% 30%, var(--wm-brand-soft), transparent 60%);
+}
+.wm-v4 .wm-compose-shell {
+  border-radius: var(--wm-radius);
+  box-shadow: var(--wm-shadow-lg);
+  border: 1px solid var(--wm-border);
+}
+.wm-ai-tab-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  margin-left: 4px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 700;
+  background: var(--wm-spam);
+  color: #fff;
+  vertical-align: middle;
+}
+.wm-ai-panel__tabs button {
+  position: relative;
 }

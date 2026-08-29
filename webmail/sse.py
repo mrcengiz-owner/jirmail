@@ -64,6 +64,13 @@ def publish_agent_event(account_id: int, event_type: str, payload: dict | None =
     })
 
 
+def publish_approval_update(account_id: int, event: str, payload: dict | None = None) -> None:
+    _publish(account_id, {
+        'type': 'approval_update',
+        'payload': {'event': event, **(payload or {})},
+    })
+
+
 def webmail_event_stream(account_id: int) -> Iterator[bytes]:
     yield b': open\n\n'
     try:

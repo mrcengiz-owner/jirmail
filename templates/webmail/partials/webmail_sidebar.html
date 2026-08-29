@@ -92,6 +92,16 @@ Webmail sidebar v3 — klasörler + spam kutusu
 
     <p class="wm-sb-section__title">Araçlar</p>
     <nav class="wm-sb-list" aria-label="Araçlar">
+      {% if current_url == 'inbox' %}
+      <button type="button" class="wm-sb-row" x-show="aiEnabled" x-cloak
+              :class="aiPanelOpen && 'is-active'"
+              @click="toggleAiPanel(); sidebarOpen = false">
+        <span class="material-symbols-outlined wm-sb-row__icon wm-material-icon">smart_toy</span>
+        <span class="wm-sb-row__label">AI Hub</span>
+        <span x-show="agentStats && agentStats.pending_approvals > 0"
+              class="wm-sb-row__badge" x-text="agentStats.pending_approvals"></span>
+      </button>
+      {% endif %}
       <a href="{% url 'webmail:client_setup' %}"
          class="wm-sb-row {% if current_url == 'client_setup' %}is-active{% endif %}">
         <span class="material-symbols-outlined wm-sb-row__icon wm-material-icon">phonelink_setup</span>
