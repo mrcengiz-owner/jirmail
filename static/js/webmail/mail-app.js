@@ -91,6 +91,11 @@ document.addEventListener('alpine:init', function() {
             aiReplyDraft: null,
             aiReplyLoading: false,
             needsReplyList: [],
+            customFolders: [],
+            activeCustomFolder: '',
+            newFolderName: '',
+            showNewFolderInput: false,
+            moveFolderOpen: false,
             _fetchSeq: 0,
             _syncInFlight: false,
             _streamDebounce: null,
@@ -107,7 +112,13 @@ document.addEventListener('alpine:init', function() {
                 self.aiEnabled = root.dataset.aiEnabled === 'true';
                 var params = new URLSearchParams(window.location.search);
                 var folderParam = params.get('folder');
-                if (folderParam && FOLDER_MAP[folderParam]) {
+                if (folderParam === 'custom') {
+                    var customName = params.get('name');
+                    if (customName) {
+                        self.activeCustomFolder = customName;
+                        self.currentFolder = 'custom';
+                    }
+                } else if (folderParam && FOLDER_MAP[folderParam]) {
                     self.currentFolder = folderParam;
                 }
                 // Diğer sayfalardan "Yeni mesaj" linki ?compose=1 ile gelir —
@@ -121,6 +132,7 @@ document.addEventListener('alpine:init', function() {
                     } catch (e) { /* ignore */ }
                 }
                 self.loadQuota();
+                self.loadCustomFolders();
                 self.fetchMails();
                 self.loadSpamUnread();
                 self.loadOutboundPending();
@@ -174,11 +186,118 @@ document.addEventListener('alpine:init', function() {
             },
 
             imapFolder: function() {
+                if (this.activeCustomFolder) return this.activeCustomFolder;
                 return FOLDER_MAP[this.currentFolder] || 'INBOX';
             },
 
             folderTitle: function() {
+                if (this.activeCustomFolder) {
+                    var self = this;
+                    var hit = (self.customFolders || []).find(function(f) {
+                        return f.name === self.activeCustomFolder;
+                    });
+                    if (hit && hit.display_name) return hit.display_name;
+                    var parts = self.activeCustomFolder.split(/[./]/);
+                    return parts[parts.length - 1] || self.activeCustomFolder;
+                }
                 return FOLDER_TITLES[this.currentFolder] || 'Posta';
+            },
+
+            loadCustomFolders: function() {
+                var self = this;
+                WmApi.json('/api/mail/folders').then(function(r) {
+                    if (!r.data || !r.data.success) return;
+                    self.customFolders = r.data.custom_folders || (r.data.folders || []).filter(function(f) {
+                        return f.kind === 'custom';
+                    });
+                });
+            },
+
+            createCustomFolder: function() {
+                var self = this;
+                var name = (self.newFolderName || '').trim();
+                if (!name) {
+                    showToast('Klasör adı girin', 'warning');
+                    return;
+                }
+                WmApi.json('/api/mail/folders', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name: name })
+                }).then(function(r) {
+                    if (r.data && r.data.success) {
+                        showToast('Klasör oluşturuldu', 'success');
+                        self.newFolderName = '';
+                        self.showNewFolderInput = false;
+                        self.loadCustomFolders();
+                        if (r.data.folder && r.data.folder.name) {
+                            self.setCustomFolder(r.data.folder.name);
+                        }
+                    } else {
+                        showToast((r.data && r.data.message) || 'Klasör oluşturulamadı', 'error');
+                    }
+                });
+            },
+
+            deleteCustomFolder: function(folderName, ev) {
+                if (ev) ev.stopPropagation();
+                var self = this;
+                if (!folderName) return;
+                if (!window.confirm('“' + folderName + '” klasörü silinsin mi?')) return;
+                WmApi.json('/api/mail/folders?name=' + encodeURIComponent(folderName), {
+                    method: 'DELETE'
+                }).then(function(r) {
+                    if (r.data && r.data.success) {
+                        showToast('Klasör silindi', 'success');
+                        if (self.activeCustomFolder === folderName) {
+                            self.setFolder('inbox');
+                        }
+                        self.loadCustomFolders();
+                    } else {
+                        showToast((r.data && r.data.message) || 'Silinemedi', 'error');
+                    }
+                });
+            },
+
+            setCustomFolder: function(imapName) {
+                if (!imapName) return;
+                this.activeCustomFolder = imapName;
+                this.currentFolder = 'custom';
+                this.mobileView = 'list';
+                this.sidebarOpen = false;
+                this.selectedMail = null;
+                this.closeCompose();
+                this.page = 1;
+                this.fetchMails();
+                try {
+                    var u = new URL(window.location.href);
+                    u.searchParams.set('folder', 'custom');
+                    u.searchParams.set('name', imapName);
+                    history.replaceState(null, '', u.pathname + u.search);
+                } catch (e) { /* ignore */ }
+            },
+
+            moveMailToFolder: function(mail, targetFolder) {
+                if (!mail || mail.uid <= 0 || !targetFolder) return;
+                var self = this;
+                self.moveFolderOpen = false;
+                WmApi.json('/api/mail/messages/' + mail.uid + '/move', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ folder: self.imapFolder(), target: targetFolder })
+                }).then(function(r) {
+                    if (r.data && r.data.success) {
+                        showToast('Klasöre taşındı', 'success');
+                        self.mails = self.mails.filter(function(m) { return m.uid !== mail.uid; });
+                        if (self.selectedMail && self.selectedMail.uid === mail.uid) {
+                            self.selectedMail = null;
+                            self.mobileView = 'list';
+                        }
+                        self.loadCustomFolders();
+                    } else {
+                        showToast((r.data && r.data.message) || 'Taşınamadı', 'error');
+                    }
+                });
             },
 
             emptyFolderMessage: function() {
@@ -268,10 +387,11 @@ document.addEventListener('alpine:init', function() {
             },
 
             setFolder: function(id) {
-                if (this.currentFolder === id) {
+                if (this.currentFolder === id && !this.activeCustomFolder) {
                     this.sidebarOpen = false;
                     return;
                 }
+                this.activeCustomFolder = '';
                 this.currentFolder = id;
                 this.mobileView = 'list';
                 this.sidebarOpen = false;
@@ -795,7 +915,7 @@ document.addEventListener('alpine:init', function() {
                 if (this.aiPanelOpen && !this.aiMessages.length) {
                     this.aiMessages.push({
                         role: 'assistant',
-                        text: 'Merhaba! Gelen kutunuzu sınıflandırır, organize eder, taslak yazar ve gönderim yaparım. "Gelen kutusunu düzenle" veya "Bugünkü özeti ver" diyebilirsiniz.'
+                        text: 'Merhaba! Gelen kutunuzu düzenler, özet çıkarır, taslak yazar ve mailleri klasörlere taşırım. Örnek: "Bugünkü özeti ver" veya "Gelen kutusunu düzenle".'
                     });
                 }
                 if (this.aiPanelOpen && this.aiEnabled) {
@@ -1174,9 +1294,12 @@ document.addEventListener('alpine:init', function() {
                     context_subject: '',
                     context_from: '',
                     context_body: '',
-                    inbox_summary: ''
+                    inbox_summary: '',
+                    selected_uid: 0,
+                    selected_folder: self.imapFolder()
                 };
                 if (self.selectedMail) {
+                    ctx.selected_uid = self.selectedMail.uid || 0;
                     ctx.context_subject = self.selectedMail.subject || '';
                     ctx.context_from = self.selectedMail.from_addr || self.selectedMail.from || '';
                     ctx.context_body = (self.selectedMail.body || '').replace(/<[^>]+>/g, ' ').slice(0, 6000);
@@ -1188,6 +1311,11 @@ document.addEventListener('alpine:init', function() {
                     ctx.inbox_summary = recent.join('\n');
                 }
                 return ctx;
+            },
+
+            aiQuickCommand: function(text) {
+                this.aiInput = text || '';
+                this.sendAiMessage();
             },
 
             sendAiMessage: function() {
@@ -1214,8 +1342,11 @@ document.addEventListener('alpine:init', function() {
                         return;
                     }
                     self.aiMessages.push({ role: 'assistant', text: d.reply || '(boş yanıt)' });
+                    if (d.executed) {
+                        self.onAiExecuted(d.executed, d.action);
+                    }
                     if (d.action) {
-                        self.handleAiAction(d.action, d.reply);
+                        self.handleAiAction(d.action, d.reply, d.executed);
                     }
                 }).catch(function(e) {
                     self.aiLoading = false;
@@ -1223,11 +1354,64 @@ document.addEventListener('alpine:init', function() {
                 });
             },
 
-            handleAiAction: function(action, replyText) {
+            onAiExecuted: function(executed, action) {
+                if (!executed) return;
+                var ok = !!executed.success;
+                if (executed.message) {
+                    showToast(executed.message, ok ? 'success' : 'error');
+                }
+                if (ok) {
+                    this.fetchMails();
+                    this.loadCustomFolders();
+                    this.loadAgentStats();
+                    this.loadNeedsReplyList();
+                    if (action && (action.intent === 'triage_inbox' || action.intent === 'run_agent')) {
+                        var self = this;
+                        setTimeout(function() { self.fetchMails(); }, 2500);
+                    }
+                }
+            },
+
+            executeAiAction: function(action, confirmMsg) {
+                var self = this;
+                if (confirmMsg && !window.confirm(confirmMsg)) return;
+                WmApi.json('/api/mail/ai/execute', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(action)
+                }).then(function(r) {
+                    var d = r.data || {};
+                    self.onAiExecuted(d, action);
+                    if (d.success && d.reply) {
+                        self.aiMessages.push({ role: 'assistant', text: d.message || d.reply });
+                    }
+                });
+            },
+
+            handleAiAction: function(action, replyText, executed) {
                 var self = this;
                 if (!action || !action.intent) return;
+                if (executed && executed.success) return;
                 var intent = (action.intent || 'chat').toLowerCase();
-                if (intent === 'chat' || intent === 'analyze') return;
+                if (intent === 'chat') return;
+                if (intent === 'analyze') {
+                    if (action.summary && replyText) {
+                        var last = self.aiMessages[self.aiMessages.length - 1];
+                        if (last && last.role === 'assistant' && !last.text) {
+                            last.text = action.summary;
+                        }
+                    }
+                    return;
+                }
+
+                var autoIntents = [
+                    'move', 'archive', 'spam', 'mark_read', 'batch_move', 'create_folder',
+                    'create_rule', 'organize_inbox', 'run_agent', 'triage_inbox'
+                ];
+                if (autoIntents.indexOf(intent) >= 0) {
+                    self.executeAiAction(action);
+                    return;
+                }
 
                 if (intent === 'send_mail' && action.to && action.subject && action.body) {
                     if (window.confirm('AI bu mesajı göndermek istiyor. Onaylıyor musunuz?')) {
@@ -1265,15 +1449,6 @@ document.addEventListener('alpine:init', function() {
                             }
                         });
                     }
-                    return;
-                }
-
-                if (intent === 'organize_inbox') {
-                    self.organizeInboxNow();
-                    return;
-                }
-                if (intent === 'run_agent') {
-                    self.runAgentNow();
                     return;
                 }
 

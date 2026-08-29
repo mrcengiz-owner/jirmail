@@ -149,6 +149,87 @@ def is_spam_folder_name(folder_name: str) -> bool:
     return tail in ('junk', 'spam', 'junk e-mail', 'junk email') or 'junk' in tail or tail.endswith('spam')
 
 
+def is_standard_folder_name(folder_name: str) -> bool:
+    """INBOX, Sent, Junk vb. standart klasör mü?"""
+    raw = (folder_name or '').strip()
+    if not raw:
+        return True
+    low = raw.lower()
+    if low == 'inbox':
+        return True
+    tail = low.split('/')[-1].replace('.', '')
+    for aliases in FOLDER_ALIASES.values():
+        for alias in aliases:
+            al = alias.lower()
+            if al == low or al.split('/')[-1].replace('.', '') == tail:
+                return True
+    return False
+
+
+def folder_display_name(folder_name: str) -> str:
+    """UI için okunabilir klasör adı."""
+    name = (folder_name or '').strip()
+    if name.upper() == 'INBOX':
+        return 'Gelen kutusu'
+    if '.' in name:
+        return name.split('.')[-1]
+    if '/' in name:
+        return name.split('/')[-1]
+    return name
+
+
+def sync_folders_from_imap(account, password: str) -> list[str]:
+    """Sunucudaki tüm klasörleri DB'ye yansıt; isim listesi döndür."""
+    from .models import MailFolder
+
+    names = list_imap_folder_names(account, password)
+    for name in names:
+        MailFolder.objects.update_or_create(
+            account=account,
+            name=name,
+            defaults={'display_name': folder_display_name(name)},
+        )
+    return names
+
+
+def create_imap_folder(account, password: str, folder_name: str) -> str:
+    """Yeni IMAP klasörü oluştur (Dovecot: INBOX.AltKlasor)."""
+    label = (folder_name or '').strip()
+    if not label:
+        raise ValueError('Klasör adı gerekli')
+    if len(label) > 120:
+        raise ValueError('Klasör adı çok uzun')
+    label = re.sub(r'[^\w\s\-_.]', '', label, flags=re.UNICODE).strip()
+    if not label:
+        raise ValueError('Geçersiz klasör adı')
+
+    imap_name = label
+    if not is_standard_folder_name(label):
+        if '.' not in label and '/' not in label:
+            imap_name = f'INBOX.{label}'
+
+    with imap_connection(account, password) as client:
+        existing = [entry[2] for entry in client.list_folders()]
+        if imap_name in existing:
+            raise ValueError('Bu klasör zaten var')
+        client.create_folder(imap_name)
+
+    sync_folder_metadata(account, password, imap_name, limit=50)
+    return imap_name
+
+
+def delete_imap_folder(account, password: str, folder_name: str) -> None:
+    """Özel IMAP klasörünü sil."""
+    name = (folder_name or '').strip()
+    if not name or is_standard_folder_name(name):
+        raise ValueError('Standart klasör silinemez')
+    with imap_connection(account, password) as client:
+        client.delete_folder(name)
+    from .models import MailFolder
+
+    MailFolder.objects.filter(account=account, name=name).delete()
+
+
 def list_imap_folder_names(account, password: str) -> list[str]:
     with imap_connection(account, password) as client:
         return [entry[2] for entry in client.list_folders()]

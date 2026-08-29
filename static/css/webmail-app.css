@@ -1060,3 +1060,112 @@ html:not(.dark) .wm-tb-light-icon { display: none; }
 .wm-ai-panel__tabs button {
   position: relative;
 }
+
+/* ─── Özel klasörler ─── */
+.wm-sb-list--folders .wm-sb-row {
+  position: relative;
+  padding-right: 28px;
+}
+.wm-sb-folder-del {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  border: none;
+  background: transparent;
+  color: var(--wm-faint);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+.wm-sb-row:hover .wm-sb-folder-del { opacity: 1; }
+.wm-sb-row--ghost { opacity: 0.85; }
+.wm-sb-folder-create {
+  display: flex;
+  gap: 6px;
+  padding: 4px 10px 8px;
+}
+.wm-sb-folder-create__input {
+  flex: 1;
+  min-width: 0;
+  border: 1px solid var(--wm-border);
+  border-radius: 8px;
+  padding: 6px 8px;
+  font-size: 12px;
+  background: var(--wm-surface);
+  color: var(--wm-text);
+}
+.wm-sb-folder-create__btn {
+  border: 1px solid var(--wm-brand);
+  background: var(--wm-brand-soft);
+  color: var(--wm-brand);
+  border-radius: 8px;
+  padding: 6px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.wm-read-toolbar__move {
+  position: relative;
+  display: inline-flex;
+}
+.wm-folder-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  min-width: 180px;
+  max-height: 240px;
+  overflow-y: auto;
+  background: var(--wm-surface);
+  border: 1px solid var(--wm-border);
+  border-radius: var(--wm-radius-sm);
+  box-shadow: var(--wm-shadow-lg);
+  z-index: 30;
+  padding: 6px;
+}
+.wm-folder-menu__title {
+  margin: 0 0 6px;
+  padding: 4px 8px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--wm-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.wm-folder-menu__item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  border: none;
+  background: transparent;
+  padding: 8px 10px;
+  border-radius: 8px;
+  font-size: 13px;
+  cursor: pointer;
+  color: var(--wm-text);
+}
+.wm-folder-menu__item:hover {
+  background: var(--wm-surface-2);
+}
+.wm-ai-nl-hints {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 0 12px 10px;
+}
+.wm-ai-nl-hint {
+  border: 1px dashed var(--wm-border);
+  background: var(--wm-surface-2);
+  color: var(--wm-muted);
+  font-size: 11px;
+  padding: 5px 10px;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s;
+}
+.wm-ai-nl-hint:hover {
+  border-color: var(--wm-brand);
+  color: var(--wm-brand);
+}

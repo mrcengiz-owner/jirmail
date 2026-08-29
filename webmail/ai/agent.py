@@ -9,7 +9,7 @@ from typing import Any
 
 from django.utils import timezone
 
-from webmail.ai.client import chat_completion
+from webmail.ai.client import chat_completion, sanitize_ai_text
 from webmail.ai.service import resolve_ai_config
 
 logger = logging.getLogger(__name__)
@@ -463,12 +463,12 @@ def generate_inbox_digest(account, password: str) -> dict[str, Any]:
 
     profile = get_or_create_agent_profile(account)
     profile.last_digest_at = timezone.now()
-    profile.last_digest_text = out['content'][:12000]
+    profile.last_digest_text = sanitize_ai_text(out['content'])[:12000]
     profile.save(update_fields=['last_digest_at', 'last_digest_text'])
 
     return {
         'success': True,
-        'digest': out['content'],
+        'digest': sanitize_ai_text(out['content']),
         'stats': {
             'total': len(rows),
             'urgent': len(urgent),

@@ -143,24 +143,100 @@ def _get_account_and_password(request: HttpRequest):
 
 @router.get('/folders', summary='Folder listesi')
 def list_folders(request: HttpRequest):
-    account, _ = _get_account_and_password(request)
+    account, password = _get_account_and_password(request)
     if not account:
         return {'success': False, 'message': 'Oturum yok'}
 
-    folders = MailFolder.objects.filter(account=account)
+    if password:
+        try:
+            from webmail.imap_client import sync_folders_from_imap
+            sync_folders_from_imap(account, password)
+        except Exception:
+            pass
+
+    from webmail.imap_client import folder_display_name, is_standard_folder_name
+
+    folders = MailFolder.objects.filter(account=account).order_by('name')
+    standard = []
+    custom = []
+    for f in folders:
+        row = {
+            'name': f.name,
+            'display_name': f.display_name or folder_display_name(f.name),
+            'total': f.total,
+            'unread': f.unread,
+            'last_synced': f.last_synced.isoformat() if f.last_synced else None,
+            'kind': 'standard' if is_standard_folder_name(f.name) else 'custom',
+        }
+        if row['kind'] == 'custom':
+            custom.append(row)
+        else:
+            standard.append(row)
     return {
         'success': True,
-        'folders': [
-            {
-                'name': f.name,
-                'display_name': f.display_name or f.name,
-                'total': f.total,
-                'unread': f.unread,
-                'last_synced': f.last_synced.isoformat() if f.last_synced else None,
-            }
-            for f in folders
-        ],
+        'folders': standard + custom,
+        'custom_folders': custom,
     }
+
+
+class FolderCreateSchema(Schema):
+    name: str
+    display_name: Optional[str] = None
+
+
+@router.post('/folders', summary='Yeni IMAP klasörü oluştur')
+def create_folder(request: HttpRequest, data: FolderCreateSchema):
+    account, password = _get_account_and_password(request)
+    if not account:
+        return {'success': False, 'message': 'Oturum yok'}
+    if not password:
+        return {'success': False, 'message': 'Oturum parolası yok — yeniden giriş yapın.'}
+    from webmail.imap_client import create_imap_folder, folder_display_name
+
+    try:
+        imap_name = create_imap_folder(account, password, data.name)
+    except ValueError as exc:
+        return {'success': False, 'message': str(exc)}
+    except Exception as exc:
+        return {'success': False, 'message': str(exc)}
+
+    display = (data.display_name or folder_display_name(imap_name))[:255]
+    row, _ = MailFolder.objects.update_or_create(
+        account=account,
+        name=imap_name,
+        defaults={'display_name': display},
+    )
+    return {
+        'success': True,
+        'folder': {
+            'name': row.name,
+            'display_name': row.display_name,
+            'total': row.total,
+            'unread': row.unread,
+            'kind': 'custom',
+        },
+    }
+
+
+@router.delete('/folders', summary='Özel klasörü sil')
+def delete_folder(request: HttpRequest, name: str = ''):
+    account, password = _get_account_and_password(request)
+    if not account:
+        return {'success': False, 'message': 'Oturum yok'}
+    if not password:
+        return {'success': False, 'message': 'Oturum parolası yok — yeniden giriş yapın.'}
+    folder_name = (name or request.GET.get('name') or '').strip()
+    if not folder_name:
+        return {'success': False, 'message': 'Klasör adı gerekli'}
+    from webmail.imap_client import delete_imap_folder
+
+    try:
+        delete_imap_folder(account, password, folder_name)
+    except ValueError as exc:
+        return {'success': False, 'message': str(exc)}
+    except Exception as exc:
+        return {'success': False, 'message': str(exc)}
+    return {'success': True, 'message': 'Klasör silindi'}
 
 
 def _find_folder_row(account, folder: str):
@@ -470,7 +546,9 @@ def move(request: HttpRequest, uid: int, data: MoveSchema):
         return {'success': False, 'message': 'Oturum yok'}
 
     try:
-        move_message(account, password, data.folder, uid, data.target)
+        src = resolve_imap_folder(account, password, data.folder)
+        target = resolve_imap_folder(account, password, data.target)
+        move_message(account, password, src, uid, target)
         return {'success': True}
     except Exception as exc:
         return {'success': False, 'message': str(exc)}
@@ -760,6 +838,8 @@ class AiChatSchema(Schema):
     context_from: str = ''
     context_body: str = ''
     inbox_summary: str = ''
+    selected_uid: int = 0
+    selected_folder: str = 'INBOX'
 
 
 class AiExecuteSchema(Schema):
@@ -768,6 +848,18 @@ class AiExecuteSchema(Schema):
     subject: str = ''
     body: str = ''
     send_at: str = ''
+    uid: int = 0
+    folder: str = 'INBOX'
+    move_to: str = ''
+    action_target: str = ''
+    match_from: str = ''
+    match_subject: str = ''
+    rule_name: str = ''
+    action_type: str = ''
+    name: str = ''
+    limit: int = 50
+    summary: str = ''
+    create_folder: bool = False
 
 
 class AiTaskCreateSchema(Schema):
@@ -959,7 +1051,7 @@ def ai_status(request: HttpRequest):
 
 @router.post('/ai/chat', summary='AI sohbet / komut')
 def ai_chat(request: HttpRequest, data: AiChatSchema):
-    account, _ = _get_account_and_password(request)
+    account, password = _get_account_and_password(request)
     if not account:
         return {'success': False, 'message': 'Oturum yok'}
     from webmail.ai.service import ai_chat as run_chat
@@ -972,7 +1064,10 @@ def ai_chat(request: HttpRequest, data: AiChatSchema):
             'selected_from': data.context_from,
             'selected_body': data.context_body,
             'inbox_summary': data.inbox_summary,
+            'selected_uid': data.selected_uid,
+            'selected_folder': data.selected_folder or 'INBOX',
         },
+        password=password or '',
     )
 
 

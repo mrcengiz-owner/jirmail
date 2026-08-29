@@ -140,6 +140,20 @@
           <button type="button" class="wm-read-toolbar__btn" title="Arşivle" @click="archiveMail(selectedMail)">
             <span class="material-symbols-outlined">archive</span>
           </button>
+          <div class="wm-read-toolbar__move" x-show="customFolders.length" @click.outside="moveFolderOpen = false">
+            <button type="button" class="wm-read-toolbar__btn" title="Klasöre taşı"
+                    @click="moveFolderOpen = !moveFolderOpen">
+              <span class="material-symbols-outlined">drive_file_move</span>
+            </button>
+            <div class="wm-folder-menu" x-show="moveFolderOpen" x-cloak>
+              <p class="wm-folder-menu__title">Klasöre taşı</p>
+              <template x-for="cf in customFolders" :key="'mv-' + cf.name">
+                <button type="button" class="wm-folder-menu__item"
+                        @click="moveMailToFolder(selectedMail, cf.name)"
+                        x-text="cf.display_name || cf.name"></button>
+              </template>
+            </div>
+          </div>
           <button type="button" class="wm-read-toolbar__btn" x-show="aiEnabled" title="AI analiz" @click="analyzeSelectedMail()">
             <span class="material-symbols-outlined">smart_toy</span>
           </button>
@@ -262,6 +276,11 @@
         <button type="button" class="wm-inbox-btn" @click="analyzeSelectedMail()" :disabled="!selectedMail">Analiz</button>
         <button type="button" class="wm-inbox-btn" @click="runAgentNow()" :disabled="agentRunning">Tam döngü</button>
       </div>
+      <div class="wm-ai-nl-hints">
+        <button type="button" class="wm-ai-nl-hint" @click="aiQuickCommand('Bugünkü özeti ver')">Bugünkü özeti ver</button>
+        <button type="button" class="wm-ai-nl-hint" @click="aiQuickCommand('Gelen kutusunu düzenle')">Gelen kutusunu düzenle</button>
+        <button type="button" class="wm-ai-nl-hint" @click="aiQuickCommand('Paribu maillerini Finans klasörüne taşı')">Paribu → Finans</button>
+      </div>
       <div class="wm-ai-panel__messages" id="wm-ai-scroll">
         <template x-for="(m, mi) in aiMessages" :key="mi">
           <div class="wm-ai-msg" :class="m.role === 'user' && 'is-user'">
@@ -280,10 +299,11 @@
         </template>
       </div>
       <footer class="wm-ai-panel__foot">
-        <textarea x-model="aiInput" rows="2" class="wm-ai-panel__input" placeholder="Görev: taslak yaz, yanıt gönder, gelen kutusunu düzenle…"
+        <textarea x-model="aiInput" rows="2" class="wm-ai-panel__input" placeholder="Doğal dil: Paribu maillerini Finans klasörüne taşı, gelen kutusunu düzenle…"
                   @keydown.enter.prevent="if(!$event.shiftKey) sendAiMessage()"></textarea>
         <div class="flex gap-2 mt-2">
           <button type="button" class="wm-inbox-btn flex-1" @click="aiComposeDraft()">Taslak</button>
+          <button type="button" class="wm-inbox-btn flex-1" @click="aiPanelTab = 'digest'; loadDigest(true);">Özet</button>
           <button type="button" class="wm-sb-compose flex-1" style="margin:0;width:auto;" @click="sendAiMessage()" :disabled="aiLoading">Gönder</button>
         </div>
       </footer>
@@ -378,7 +398,7 @@
 {% endblock %}
 
 {% block extra_scripts %}
-<script src="{% url 'webmail:asset' asset_path='js/webmail/mail-app.js' %}?v=20260829e"></script>
+<script src="{% url 'webmail:asset' asset_path='js/webmail/mail-app.js' %}?v=20260830a"></script>
 {% endblock %}
 
 {% block shell_overlay %}

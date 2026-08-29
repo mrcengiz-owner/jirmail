@@ -90,6 +90,34 @@ Webmail sidebar v3 — klasörler + spam kutusu
       {% endif %}
     </nav>
 
+    {% if current_url == 'inbox' %}
+    <p class="wm-sb-section__title">Klasörlerim</p>
+    <nav class="wm-sb-list wm-sb-list--folders" aria-label="Özel klasörler">
+      <template x-for="cf in customFolders" :key="'cf-' + cf.name">
+        <button type="button"
+                class="wm-sb-row"
+                :class="activeCustomFolder === cf.name && 'is-active'"
+                @click="setCustomFolder(cf.name)">
+          <span class="material-symbols-outlined wm-sb-row__icon wm-material-icon">folder</span>
+          <span class="wm-sb-row__label" x-text="cf.display_name || cf.name"></span>
+          <span x-show="cf.unread > 0" class="wm-sb-row__badge" x-text="cf.unread"></span>
+          <button type="button" class="wm-sb-folder-del" title="Sil"
+                  @click.stop="deleteCustomFolder(cf.name, $event)">×</button>
+        </button>
+      </template>
+      <div class="wm-sb-folder-create" x-show="showNewFolderInput" x-cloak>
+        <input type="text" x-model="newFolderName" placeholder="Klasör adı"
+               class="wm-sb-folder-create__input"
+               @keydown.enter.prevent="createCustomFolder()">
+        <button type="button" class="wm-sb-folder-create__btn" @click="createCustomFolder()">Ekle</button>
+      </div>
+      <button type="button" class="wm-sb-row wm-sb-row--ghost" @click="showNewFolderInput = !showNewFolderInput">
+        <span class="material-symbols-outlined wm-sb-row__icon wm-material-icon">create_new_folder</span>
+        <span class="wm-sb-row__label" x-text="showNewFolderInput ? 'İptal' : 'Yeni klasör'"></span>
+      </button>
+    </nav>
+    {% endif %}
+
     <p class="wm-sb-section__title">Araçlar</p>
     <nav class="wm-sb-list" aria-label="Araçlar">
       {% if current_url == 'inbox' %}
