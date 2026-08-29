@@ -1,20 +1,22 @@
-{% comment %}
-Webmail ortak topbar — tüm webmail sayfalarında.
-Mobil hamburger + sayfa başlığı + tema toggle + ayarlar + avatar.
-Search input sadece inbox sayfasında render edilir (mailApp state'ine bağlı).
-{% endcomment %}
+{% comment %}Webmail topbar v5{% endcomment %}
 {% with current_url=request.resolver_match.url_name %}
 <header class="wm-topbar-ds">
   <button type="button" class="wm-tb-hamburger lg:hidden"
-          @click="sidebarOpen = true" aria-label="Menü">
+          @click="$store.wmPortal.openMobileSidebar()" aria-label="Menü">
     <span class="material-symbols-outlined">menu</span>
+  </button>
+  <button type="button" class="wm-tb-iconbtn hidden lg:inline-flex"
+          @click="$store.wmPortal.toggleCollapse()"
+          :title="$store.wmPortal.sidebarCollapsed ? 'Sidebar genişlet' : 'Sidebar daralt'"
+          aria-label="Sidebar daralt">
+    <span class="material-symbols-outlined" x-text="$store.wmPortal.sidebarCollapsed ? 'menu_open' : 'menu'"></span>
   </button>
 
   {% if current_url == 'inbox' %}
     <div class="wm-tb-search">
       <span class="material-symbols-outlined wm-tb-search__icon">search</span>
       <input type="search"
-             placeholder="Postada ara… (konu, gönderen, içerik)"
+             placeholder="Postada ara…"
              x-model.debounce.350ms="searchQuery"
              @input="onSearch()">
       <button type="button" class="wm-tb-search__sync"
@@ -51,7 +53,7 @@ Search input sadece inbox sayfasında render edilir (mailApp state'ine bağlı).
             :style="'background:' + avatarColor(userEmail)"
             x-text="initials(userEmail)"
           {% else %}
-            style="background: var(--jm-brand-500);"
+            style="background: var(--wm-brand);"
           {% endif %}>{% if current_url != 'inbox' %}{{ email|slice:":2"|upper }}{% endif %}</span>
     {% endif %}
   </div>

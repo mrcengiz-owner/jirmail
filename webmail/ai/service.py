@@ -127,7 +127,7 @@ def _try_digest_reply(account, user_message: str, *, password: str = '') -> dict
         return None
     from webmail.ai.agent import build_inbox_digest_reply
 
-    out = build_inbox_digest_reply(account, password=password or '')
+    out = build_inbox_digest_reply(account, password=password or '', force_refresh=True)
     reply = sanitize_ai_text(out.get('digest') or out.get('reply') or '')
     if not reply and out.get('success'):
         reply = out.get('message') or ''
@@ -422,7 +422,11 @@ def execute_ai_action(account, password: str, action: dict[str, Any]) -> dict[st
     if intent == 'digest':
         from webmail.ai.agent import build_inbox_digest_reply
 
-        out = build_inbox_digest_reply(account, password=password, force_refresh=bool(action.get('refresh')))
+        out = build_inbox_digest_reply(
+            account,
+            password=password,
+            force_refresh=bool(action.get('refresh')),
+        )
         text = sanitize_ai_text(out.get('digest') or out.get('reply') or '')
         if text:
             return {

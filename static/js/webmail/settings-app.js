@@ -13,6 +13,7 @@ document.addEventListener('alpine:init', function() {
             loading: true,
             saving: false,
             sidebarOpen: false,
+            tab: 'account',
             userEmail: '',
             email: '',
             ai_enabled: false,

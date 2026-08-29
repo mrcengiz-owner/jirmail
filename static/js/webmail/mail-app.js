@@ -39,7 +39,6 @@ document.addEventListener('alpine:init', function() {
             spamUnread: 0,
             currentFolder: 'inbox',
             mobileView: 'list',
-            sidebarOpen: false,
             composeOpen: false,
             composeMinimized: false,
             selectedMail: null,
@@ -264,7 +263,7 @@ document.addEventListener('alpine:init', function() {
                 this.activeCustomFolder = imapName;
                 this.currentFolder = 'custom';
                 this.mobileView = 'list';
-                this.sidebarOpen = false;
+                this.closeMobileSidebar();
                 this.selectedMail = null;
                 this.closeCompose();
                 this.page = 1;
@@ -386,15 +385,21 @@ document.addEventListener('alpine:init', function() {
                 this.fetchMails();
             },
 
+            closeMobileSidebar: function() {
+                if (typeof Alpine !== 'undefined' && Alpine.store('wmPortal')) {
+                    Alpine.store('wmPortal').closeMobileSidebar();
+                }
+            },
+
             setFolder: function(id) {
                 if (this.currentFolder === id && !this.activeCustomFolder) {
-                    this.sidebarOpen = false;
+                    this.closeMobileSidebar();
                     return;
                 }
                 this.activeCustomFolder = '';
                 this.currentFolder = id;
                 this.mobileView = 'list';
-                this.sidebarOpen = false;
+                this.closeMobileSidebar();
                 this.selectedMail = null;
                 this.closeCompose();
                 try {
@@ -558,7 +563,7 @@ document.addEventListener('alpine:init', function() {
                 self.composeExpanded = false;
                 self.selectedMail = null;
                 self.mobileView = 'detail';
-                self.sidebarOpen = false;
+                self.closeMobileSidebar();
                 self.$nextTick(function() { self.initQuill(); self.startDraftAutosave(); });
             },
 
@@ -1341,7 +1346,12 @@ document.addEventListener('alpine:init', function() {
                         self.aiMessages.push({ role: 'assistant', text: d.message || 'AI yanıt veremedi.' });
                         return;
                     }
-                    self.aiMessages.push({ role: 'assistant', text: d.reply || '(boş yanıt)' });
+                    self.aiMessages.push({
+                        role: 'assistant',
+                        text: d.reply || '(boş yanıt)',
+                        intent: (d.action && d.action.intent) || '',
+                        done: !!(d.executed && d.executed.success)
+                    });
                     if (d.executed) {
                         self.onAiExecuted(d.executed, d.action);
                     }
@@ -1360,8 +1370,11 @@ document.addEventListener('alpine:init', function() {
             onAiExecuted: function(executed, action) {
                 if (!executed) return;
                 var ok = !!executed.success;
-                if (executed.message) {
-                    showToast(executed.message, ok ? 'success' : 'error');
+                var msg = executed.message || executed.digest || '';
+                if (msg && msg.length < 120) {
+                    showToast(msg, ok ? 'success' : 'error');
+                } else if (msg && !ok) {
+                    showToast(msg.slice(0, 140) + '…', 'error');
                 }
                 if (ok) {
                     this.fetchMails();

@@ -294,7 +294,7 @@ def parse_nl_command(message: str, context: dict | None = None) -> dict[str, Any
         return {'intent': 'organize_inbox'}
 
     if _RE_DIGEST.search(text):
-        return {'intent': 'digest', 'refresh': 'yenile' in low or 'taze' in low}
+        return {'intent': 'digest', 'refresh': True}
 
     if _RE_TRIAGE.search(text) and 'özet' not in low:
         return {'intent': 'triage_inbox'}

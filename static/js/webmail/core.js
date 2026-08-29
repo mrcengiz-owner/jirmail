@@ -88,3 +88,27 @@
         }
     };
 })();
+
+document.addEventListener('alpine:init', function() {
+    var collapsed = false;
+    try {
+        collapsed = localStorage.getItem('wm-sidebar-collapsed') === '1';
+    } catch (e) { /* ignore */ }
+
+    Alpine.store('wmPortal', {
+        sidebarOpen: false,
+        sidebarCollapsed: collapsed,
+        toggleCollapse: function() {
+            this.sidebarCollapsed = !this.sidebarCollapsed;
+            try {
+                localStorage.setItem('wm-sidebar-collapsed', this.sidebarCollapsed ? '1' : '0');
+            } catch (e) { /* ignore */ }
+        },
+        openMobileSidebar: function() {
+            this.sidebarOpen = true;
+        },
+        closeMobileSidebar: function() {
+            this.sidebarOpen = false;
+        }
+    });
+});

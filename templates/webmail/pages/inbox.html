@@ -4,7 +4,6 @@
 {% block title %}Webmail — Jîr-Mail{% endblock %}
 
 {% block shell_extra_attrs %}
-  class="wm-v4"
   :class="aiEnabled && aiPanelOpen && 'wm-ai-docked'"
   x-data="mailApp()"
   x-init="init()"
@@ -283,11 +282,14 @@
       </div>
       <div class="wm-ai-panel__messages" id="wm-ai-scroll">
         <template x-for="(m, mi) in aiMessages" :key="mi">
-          <div class="wm-ai-msg" :class="m.role === 'user' && 'is-user'">
-            <p x-text="m.text"></p>
+          <div class="wm-ai-msg" :class="[m.role === 'user' && 'is-user', m.done && 'is-done']">
+            <span class="wm-ai-msg__badge" x-show="m.intent && m.intent !== 'chat'" x-text="m.intent"></span>
+            <p class="whitespace-pre-wrap" x-text="m.text"></p>
           </div>
         </template>
-        <p x-show="aiLoading" class="wm-ai-msg is-assistant">Düşünüyor…</p>
+        <p x-show="aiLoading" class="wm-ai-msg is-assistant wm-ai-msg--loading">
+          <span class="wm-ai-msg__spinner"></span> Komut işleniyor…
+        </p>
       </div>
       <div class="wm-ai-panel__tasks" x-show="aiTasks.length">
         <p class="text-xs font-semibold mb-2" style="color:var(--wm-muted);">Son görevler</p>
@@ -398,7 +400,7 @@
 {% endblock %}
 
 {% block extra_scripts %}
-<script src="{% url 'webmail:asset' asset_path='js/webmail/mail-app.js' %}?v=20260830b"></script>
+<script src="{% url 'webmail:asset' asset_path='js/webmail/mail-app.js' %}?v=20260830c"></script>
 {% endblock %}
 
 {% block shell_overlay %}

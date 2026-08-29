@@ -7,10 +7,12 @@ shell_overlay (sayfa dışına taşan modal/toast).
 {% endcomment %}
 
 {% block body %}
-<div class="wm-portal-shell" {% block shell_extra_attrs %}{% endblock %}>
+<div class="wm-portal-shell wm-v5"
+     :class="$store.wmPortal.sidebarCollapsed && 'is-sidebar-collapsed'"
+     {% block shell_extra_attrs %}{% endblock %}>
   <div class="wm-portal-backdrop"
-       x-show="sidebarOpen" x-cloak
-       @click="sidebarOpen = false" aria-hidden="true"></div>
+       x-show="$store.wmPortal.sidebarOpen" x-cloak
+       @click="$store.wmPortal.closeMobileSidebar()" aria-hidden="true"></div>
 
   {% include "webmail/partials/webmail_sidebar.html" %}
 

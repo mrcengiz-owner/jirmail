@@ -1,30 +1,39 @@
-{% comment %}
-Webmail sidebar v3 — klasörler + spam kutusu
-{% endcomment %}
+{% comment %}Webmail sidebar v5 — daraltılabilir{% endcomment %}
 {% with current_url=request.resolver_match.url_name folder=request.GET.folder|default:'inbox' %}
 <aside class="wm-sidebar-ds"
-       :class="sidebarOpen ? 'is-open' : ''"
+       :class="[
+         $store.wmPortal.sidebarOpen && 'is-open',
+         $store.wmPortal.sidebarCollapsed && 'is-collapsed'
+       ]"
        aria-label="Ana menü">
 
-  <a href="{% url 'webmail:inbox' %}" class="wm-sb-brand">
-    <span class="wm-sb-brand__logo" aria-hidden="true">
-      <span class="material-symbols-outlined wm-material-icon-fill">mail</span>
-    </span>
-    <span class="wm-sb-brand__text">
-      <span class="wm-sb-brand__title">Jîr-Mail</span>
-      <span class="wm-sb-brand__sub">Webmail</span>
-    </span>
-  </a>
+  <div class="wm-sb-top">
+    <a href="{% url 'webmail:inbox' %}" class="wm-sb-brand" title="Jîr-Mail">
+      <span class="wm-sb-brand__logo" aria-hidden="true">
+        <span class="material-symbols-outlined wm-material-icon-fill">mail</span>
+      </span>
+      <span class="wm-sb-brand__text">
+        <span class="wm-sb-brand__title">Jîr-Mail</span>
+        <span class="wm-sb-brand__sub">Webmail</span>
+      </span>
+    </a>
+    <button type="button" class="wm-sb-collapse-btn hidden lg:inline-flex"
+            @click="$store.wmPortal.toggleCollapse()"
+            :title="$store.wmPortal.sidebarCollapsed ? 'Sidebar aç' : 'Sidebar kapat'"
+            aria-label="Sidebar daralt">
+      <span class="material-symbols-outlined" x-text="$store.wmPortal.sidebarCollapsed ? 'chevron_right' : 'chevron_left'"></span>
+    </button>
+  </div>
 
   {% if current_url == 'inbox' %}
-  <button type="button" @click="openCompose(); sidebarOpen = false" class="wm-sb-compose">
+  <button type="button" @click="openCompose(); $store.wmPortal.closeMobileSidebar()" class="wm-sb-compose" title="Yeni mesaj">
     <span class="material-symbols-outlined wm-material-icon-fill">edit</span>
-    <span>Yeni mesaj</span>
+    <span class="wm-sb-compose__label">Yeni mesaj</span>
   </button>
   {% else %}
-  <a href="{% url 'webmail:inbox' %}?compose=1" class="wm-sb-compose">
+  <a href="{% url 'webmail:inbox' %}?compose=1" class="wm-sb-compose" title="Yeni mesaj">
     <span class="material-symbols-outlined wm-material-icon-fill">edit</span>
-    <span>Yeni mesaj</span>
+    <span class="wm-sb-compose__label">Yeni mesaj</span>
   </a>
   {% endif %}
 
@@ -37,12 +46,13 @@ Webmail sidebar v3 — klasörler + spam kutusu
         <button type="button"
                 class="wm-sb-row"
                 :class="[
-                  currentFolder === item.id && 'is-active',
+                  currentFolder === item.id && !activeCustomFolder && 'is-active',
                   item.id === 'spam' && 'is-spam'
                 ]"
-                @click="setFolder(item.id)">
+                @click="setFolder(item.id)"
+                :title="item.label">
           <span class="material-symbols-outlined wm-sb-row__icon"
-                :class="currentFolder === item.id ? 'wm-material-icon-fill' : 'wm-material-icon'"
+                :class="currentFolder === item.id && !activeCustomFolder ? 'wm-material-icon-fill' : 'wm-material-icon'"
                 x-text="item.ms"></span>
           <span class="wm-sb-row__label" x-text="item.label"></span>
           <span x-show="item.id === 'inbox' && unreadCount > 0"
@@ -52,38 +62,31 @@ Webmail sidebar v3 — klasörler + spam kutusu
         </button>
       </template>
       {% else %}
-      <a href="{% url 'webmail:inbox' %}"
-         class="wm-sb-row {% if folder == 'inbox' %}is-active{% endif %}">
+      <a href="{% url 'webmail:inbox' %}" class="wm-sb-row {% if folder == 'inbox' %}is-active{% endif %}" title="Gelen kutusu">
         <span class="material-symbols-outlined wm-sb-row__icon wm-material-icon">inbox</span>
         <span class="wm-sb-row__label">Gelen kutusu</span>
       </a>
-      <a href="{% url 'webmail:inbox' %}?folder=spam"
-         class="wm-sb-row is-spam {% if folder == 'spam' %}is-active{% endif %}">
+      <a href="{% url 'webmail:inbox' %}?folder=spam" class="wm-sb-row is-spam {% if folder == 'spam' %}is-active{% endif %}" title="Spam">
         <span class="material-symbols-outlined wm-sb-row__icon wm-material-icon">report</span>
         <span class="wm-sb-row__label">Spam</span>
       </a>
-      <a href="{% url 'webmail:inbox' %}?folder=sent"
-         class="wm-sb-row {% if folder == 'sent' %}is-active{% endif %}">
+      <a href="{% url 'webmail:inbox' %}?folder=sent" class="wm-sb-row {% if folder == 'sent' %}is-active{% endif %}" title="Gönderilen">
         <span class="material-symbols-outlined wm-sb-row__icon wm-material-icon">send</span>
         <span class="wm-sb-row__label">Gönderilen</span>
       </a>
-      <a href="{% url 'webmail:inbox' %}?folder=drafts"
-         class="wm-sb-row {% if folder == 'drafts' %}is-active{% endif %}">
+      <a href="{% url 'webmail:inbox' %}?folder=drafts" class="wm-sb-row {% if folder == 'drafts' %}is-active{% endif %}" title="Taslaklar">
         <span class="material-symbols-outlined wm-sb-row__icon wm-material-icon">draft</span>
         <span class="wm-sb-row__label">Taslaklar</span>
       </a>
-      <a href="{% url 'webmail:inbox' %}?folder=archive"
-         class="wm-sb-row {% if folder == 'archive' %}is-active{% endif %}">
+      <a href="{% url 'webmail:inbox' %}?folder=archive" class="wm-sb-row {% if folder == 'archive' %}is-active{% endif %}" title="Arşiv">
         <span class="material-symbols-outlined wm-sb-row__icon wm-material-icon">archive</span>
         <span class="wm-sb-row__label">Arşiv</span>
       </a>
-      <a href="{% url 'webmail:inbox' %}?folder=starred"
-         class="wm-sb-row {% if folder == 'starred' %}is-active{% endif %}">
+      <a href="{% url 'webmail:inbox' %}?folder=starred" class="wm-sb-row {% if folder == 'starred' %}is-active{% endif %}" title="Yıldızlı">
         <span class="material-symbols-outlined wm-sb-row__icon wm-material-icon">star</span>
         <span class="wm-sb-row__label">Yıldızlı</span>
       </a>
-      <a href="{% url 'webmail:inbox' %}?folder=trash"
-         class="wm-sb-row {% if folder == 'trash' %}is-active{% endif %}">
+      <a href="{% url 'webmail:inbox' %}?folder=trash" class="wm-sb-row {% if folder == 'trash' %}is-active{% endif %}" title="Çöp kutusu">
         <span class="material-symbols-outlined wm-sb-row__icon wm-material-icon">delete</span>
         <span class="wm-sb-row__label">Çöp kutusu</span>
       </a>
@@ -91,13 +94,14 @@ Webmail sidebar v3 — klasörler + spam kutusu
     </nav>
 
     {% if current_url == 'inbox' %}
-    <p class="wm-sb-section__title">Klasörlerim</p>
+    <p class="wm-sb-section__title wm-sb-section__title--folders">Klasörlerim</p>
     <nav class="wm-sb-list wm-sb-list--folders" aria-label="Özel klasörler">
       <template x-for="cf in customFolders" :key="'cf-' + cf.name">
         <button type="button"
                 class="wm-sb-row"
                 :class="activeCustomFolder === cf.name && 'is-active'"
-                @click="setCustomFolder(cf.name)">
+                @click="setCustomFolder(cf.name)"
+                :title="cf.display_name || cf.name">
           <span class="material-symbols-outlined wm-sb-row__icon wm-material-icon">folder</span>
           <span class="wm-sb-row__label" x-text="cf.display_name || cf.name"></span>
           <span x-show="cf.unread > 0" class="wm-sb-row__badge" x-text="cf.unread"></span>
@@ -105,13 +109,13 @@ Webmail sidebar v3 — klasörler + spam kutusu
                   @click.stop="deleteCustomFolder(cf.name, $event)">×</button>
         </button>
       </template>
-      <div class="wm-sb-folder-create" x-show="showNewFolderInput" x-cloak>
+      <div class="wm-sb-folder-create" x-show="showNewFolderInput && !$store.wmPortal.sidebarCollapsed" x-cloak>
         <input type="text" x-model="newFolderName" placeholder="Klasör adı"
                class="wm-sb-folder-create__input"
                @keydown.enter.prevent="createCustomFolder()">
         <button type="button" class="wm-sb-folder-create__btn" @click="createCustomFolder()">Ekle</button>
       </div>
-      <button type="button" class="wm-sb-row wm-sb-row--ghost" @click="showNewFolderInput = !showNewFolderInput">
+      <button type="button" class="wm-sb-row wm-sb-row--ghost" @click="showNewFolderInput = !showNewFolderInput" title="Yeni klasör">
         <span class="material-symbols-outlined wm-sb-row__icon wm-material-icon">create_new_folder</span>
         <span class="wm-sb-row__label" x-text="showNewFolderInput ? 'İptal' : 'Yeni klasör'"></span>
       </button>
@@ -123,26 +127,25 @@ Webmail sidebar v3 — klasörler + spam kutusu
       {% if current_url == 'inbox' %}
       <button type="button" class="wm-sb-row" x-show="aiEnabled" x-cloak
               :class="aiPanelOpen && 'is-active'"
-              @click="toggleAiPanel(); sidebarOpen = false">
+              @click="toggleAiPanel(); $store.wmPortal.closeMobileSidebar()"
+              title="AI Hub">
         <span class="material-symbols-outlined wm-sb-row__icon wm-material-icon">smart_toy</span>
         <span class="wm-sb-row__label">AI Hub</span>
         <span x-show="agentStats && agentStats.pending_approvals > 0"
               class="wm-sb-row__badge" x-text="agentStats.pending_approvals"></span>
       </button>
       {% endif %}
-      <a href="{% url 'webmail:client_setup' %}"
-         class="wm-sb-row {% if current_url == 'client_setup' %}is-active{% endif %}">
+      <a href="{% url 'webmail:client_setup' %}" class="wm-sb-row {% if current_url == 'client_setup' %}is-active{% endif %}" title="Cihaz kurulumu">
         <span class="material-symbols-outlined wm-sb-row__icon wm-material-icon">phonelink_setup</span>
         <span class="wm-sb-row__label">Cihaz kurulumu</span>
       </a>
-      <a href="{% url 'webmail:settings' %}"
-         class="wm-sb-row {% if current_url == 'settings' %}is-active{% endif %}">
+      <a href="{% url 'webmail:settings' %}" class="wm-sb-row {% if current_url == 'settings' %}is-active{% endif %}" title="Ayarlar">
         <span class="material-symbols-outlined wm-sb-row__icon wm-material-icon">settings</span>
         <span class="wm-sb-row__label">Ayarlar</span>
       </a>
       <form method="post" action="{% url 'webmail:logout' %}" class="wm-sb-form">
         {% csrf_token %}
-        <button type="submit" class="wm-sb-row wm-sb-row--danger">
+        <button type="submit" class="wm-sb-row wm-sb-row--danger" title="Çıkış">
           <span class="material-symbols-outlined wm-sb-row__icon wm-material-icon">logout</span>
           <span class="wm-sb-row__label">Çıkış</span>
         </button>
@@ -174,7 +177,7 @@ Webmail sidebar v3 — klasörler + spam kutusu
       {% else %}
       <span class="wm-sb-row__avatar" style="background: var(--wm-brand);">{{ email|slice:":2"|upper }}</span>
       {% endif %}
-      <span class="wm-sb-row__label">{{ email }}</span>
+      <span class="wm-sb-row__label wm-sb-row__label--email">{{ email }}</span>
     </div>
     {% endif %}
   </div>

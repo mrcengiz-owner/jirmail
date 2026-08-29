@@ -2,10 +2,6 @@
 
 {% block title %}Ayarlar — Jîr-Mail{% endblock %}
 
-{% block extra_head %}
-<link rel="stylesheet" href="{% url 'webmail:asset' asset_path='css/webmail-settings.css' %}?v=20260829a">
-{% endblock %}
-
 {% block shell_extra_attrs %}
   x-data="settingsApp()"
   x-init="init()"
@@ -13,114 +9,108 @@
 {% endblock %}
 
 {% block shell_content %}
-<div class="wm-page-scroll">
-  <div class="wm-page-inner" x-show="!loading" x-cloak>
-    <header class="wm-page-head">
-      <div>
-        <h1 class="wm-page-head__title">Ayarlar</h1>
-        <p class="wm-page-head__sub">Hesap ve yapay zeka tercihleri</p>
-      </div>
-    </header>
-
-    <section class="wm-settings-card wm-settings-card--profile">
-      <div class="wm-settings-card__icon">
-        <div class="wm-settings-avatar"
-             :style="'background:' + avatarColor(userEmail)"
-             x-text="initials(userEmail)"></div>
-      </div>
-      <div class="wm-settings-card__body">
-        <h2>Hesap</h2>
-        <p class="wm-settings-email" x-text="userEmail || email"></p>
-        <p class="wm-settings-hint">Posta kutunuz bu oturumla bağlı. Şifre değişikliği için yöneticinize başvurun.</p>
-        <a href="{% url 'webmail:client_setup' %}" class="wm-btn wm-btn-primary wm-client-setup-link">
-          Cihazda kurulum rehberi
-        </a>
-      </div>
-    </section>
-
-    <section class="wm-settings-card wm-settings-card--client">
-      <div class="wm-settings-card__row">
-        <div class="wm-settings-card__body">
-          <h2>Telefon veya masaüstü uygulaması</h2>
-          <p class="wm-settings-hint">
-            iPhone Mail, Android, Thunderbird, Outlook ve Windows Posta için IMAP/SMTP ayarları
-            ve adım adım kurulum rehberi.
-          </p>
-        </div>
-        <a href="{% url 'webmail:client_setup' %}" class="wm-btn wm-btn-secondary wm-client-setup-btn">
-          Rehbere git
-        </a>
-      </div>
-    </section>
-
-    <section class="wm-settings-card">
-      <h2>Yapay zeka asistanı</h2>
-      <p class="wm-settings-hint">OpenRouter veya OpenAI API anahtarınızı girin. Gelen kutusunda AI paneli ile sınıflandırma, organize, taslak, gönderim ve günlük özet alırsınız.</p>
-
-      <label class="wm-settings-check">
-        <input type="checkbox" x-model="ai_enabled">
-        <span>AI asistanını etkinleştir</span>
-      </label>
-
-      <div class="wm-settings-grid">
-        <div class="wm-field">
-          <label for="wm-ai-provider">Sağlayıcı</label>
-          <select id="wm-ai-provider" class="wm-input" x-model="ai_provider" @change="onProviderChange()">
-            <template x-for="p in providers" :key="p.id">
-              <option :value="p.id" x-text="p.label"></option>
-            </template>
-          </select>
-        </div>
-        <div class="wm-field">
-          <label for="wm-ai-model">Model</label>
-          <input id="wm-ai-model" type="text" class="wm-input" x-model="ai_model" placeholder="openai/gpt-4o-mini">
-        </div>
-      </div>
-
-      <div class="wm-field">
-        <label for="wm-ai-key">API anahtarı</label>
-        <input id="wm-ai-key" type="password" class="wm-input" x-model="ai_api_key"
-               :placeholder="has_api_key ? ('Mevcut: ' + api_key_hint) : 'sk-... veya or-...'">
-        <button type="button" class="wm-btn-link" x-show="has_api_key" @click="clearApiKey()">Anahtarı kaldır</button>
-      </div>
-
-      <div class="wm-field">
-        <label for="wm-ai-prompt">Sistem talimatı <span class="wm-label-opt">(isteğe bağlı)</span></label>
-        <textarea id="wm-ai-prompt" class="wm-input wm-textarea" rows="4" x-model="ai_system_prompt"
-                  placeholder="Sen yardımcı bir e-posta asistanısın…"></textarea>
-      </div>
-
-      <p class="wm-settings-ai-note" x-show="!ai_enabled || !has_api_key">
-        AI panelini kullanmak için anahtarı kaydedin ve asistanı etkinleştirin, ardından <a href="{% url 'webmail:inbox' %}">gelen kutusuna</a> dönün.
-      </p>
-    </section>
-
-    <section class="wm-settings-card wm-settings-card--appearance">
-      <h2>Görünüm</h2>
-      <p class="wm-settings-hint">Aydınlık veya karanlık tema.</p>
-      <div class="wm-theme-toggle">
-        <button type="button" class="wm-theme-btn" :class="theme !== 'light' && 'is-active'" @click="setTheme('dark')">Karanlık</button>
-        <button type="button" class="wm-theme-btn" :class="theme === 'light' && 'is-active'" @click="setTheme('light')">Aydınlık</button>
-      </div>
-    </section>
-
-    <p class="wm-settings-msg" :class="messageOk ? 'is-ok' : 'is-err'" x-show="message" x-text="message" x-cloak></p>
-
-    <div class="wm-settings-actions">
-      <a href="{% url 'webmail:inbox' %}" class="wm-btn wm-btn-secondary">Gelen kutusu</a>
-      <button type="button" class="wm-btn wm-btn-primary" @click="save()" :disabled="saving">
+<div class="wm-settings-v5">
+  <header class="wm-settings-v5__head">
+    <div>
+      <h1>Ayarlar</h1>
+      <p x-text="userEmail || email"></p>
+    </div>
+    <div class="wm-settings-v5__head-actions">
+      <a href="{% url 'webmail:inbox' %}" class="wm-btn-v5 wm-btn-v5--ghost">← Gelen kutusu</a>
+      <button type="button" class="wm-btn-v5 wm-btn-v5--primary" @click="save()" :disabled="saving || loading">
         <span x-text="saving ? 'Kaydediliyor…' : 'Kaydet'"></span>
       </button>
     </div>
+  </header>
+
+  <div class="wm-settings-v5__layout" x-show="!loading" x-cloak>
+    <nav class="wm-settings-v5__nav" aria-label="Ayar bölümleri">
+      <button type="button" class="wm-settings-v5__nav-btn" :class="tab === 'account' && 'is-active'" @click="tab = 'account'">
+        <span class="material-symbols-outlined">person</span> Hesap
+      </button>
+      <button type="button" class="wm-settings-v5__nav-btn" :class="tab === 'ai' && 'is-active'" @click="tab = 'ai'">
+        <span class="material-symbols-outlined">smart_toy</span> AI
+      </button>
+      <button type="button" class="wm-settings-v5__nav-btn" :class="tab === 'appearance' && 'is-active'" @click="tab = 'appearance'">
+        <span class="material-symbols-outlined">palette</span> Görünüm
+      </button>
+    </nav>
+
+    <div class="wm-settings-v5__panel">
+      <section x-show="tab === 'account'" class="wm-settings-v5__section">
+        <div class="wm-settings-v5__profile">
+          <div class="wm-settings-v5__avatar" :style="'background:' + avatarColor(userEmail)" x-text="initials(userEmail)"></div>
+          <div>
+            <strong x-text="userEmail || email"></strong>
+            <span>Oturum açık · şifre değişikliği için yöneticinize başvurun</span>
+          </div>
+        </div>
+        <div class="wm-settings-v5__row">
+          <div>
+            <h3>Cihaz kurulumu</h3>
+            <p>iPhone, Android, Thunderbird ve Outlook için IMAP/SMTP rehberi.</p>
+          </div>
+          <a href="{% url 'webmail:client_setup' %}" class="wm-btn-v5 wm-btn-v5--secondary">Rehber</a>
+        </div>
+      </section>
+
+      <section x-show="tab === 'ai'" class="wm-settings-v5__section">
+        <label class="wm-settings-v5__check">
+          <input type="checkbox" x-model="ai_enabled">
+          <span>AI posta ajanını etkinleştir</span>
+        </label>
+
+        <div class="wm-settings-v5__grid">
+          <label class="wm-field-v5">
+            <span>Sağlayıcı</span>
+            <select x-model="ai_provider" @change="onProviderChange()">
+              <template x-for="p in providers" :key="p.id">
+                <option :value="p.id" x-text="p.label"></option>
+              </template>
+            </select>
+          </label>
+          <label class="wm-field-v5">
+            <span>Model</span>
+            <input type="text" x-model="ai_model" placeholder="openai/gpt-4o-mini">
+          </label>
+        </div>
+
+        <label class="wm-field-v5">
+          <span>API anahtarı</span>
+          <input type="password" x-model="ai_api_key" :placeholder="has_api_key ? ('Mevcut: ' + api_key_hint) : 'sk-... veya or-...'">
+          <button type="button" class="wm-link-danger" x-show="has_api_key" @click="clearApiKey()">Anahtarı kaldır</button>
+        </label>
+
+        <label class="wm-field-v5">
+          <span>Sistem talimatı <em>(isteğe bağlı)</em></span>
+          <textarea rows="3" x-model="ai_system_prompt" placeholder="Türkçe yanıt ver. Posta komutlarını doğrudan uygula…"></textarea>
+        </label>
+
+        <p class="wm-settings-v5__note" x-show="!ai_enabled || !has_api_key">
+          AI Hub için anahtarı kaydedin, asistanı açın ve <a href="{% url 'webmail:inbox' %}">gelen kutusuna</a> dönün.
+        </p>
+      </section>
+
+      <section x-show="tab === 'appearance'" class="wm-settings-v5__section">
+        <h3>Tema</h3>
+        <div class="wm-theme-v5">
+          <button type="button" :class="theme === 'light' && 'is-active'" @click="setTheme('light')">Aydınlık</button>
+          <button type="button" :class="theme !== 'light' && 'is-active'" @click="setTheme('dark')">Karanlık</button>
+        </div>
+        <p class="wm-settings-v5__hint">Sidebar genişliği gelen kutusundan sol üst menü ile daraltılabilir.</p>
+      </section>
+
+      <p class="wm-settings-v5__msg" :class="messageOk ? 'is-ok' : 'is-err'" x-show="message" x-text="message"></p>
+    </div>
   </div>
 
-  <div class="wm-settings-loading" x-show="loading">
-    <div class="wm-settings-loading__spinner" aria-hidden="true"></div>
-    <p>Ayarlar yükleniyor…</p>
+  <div class="wm-settings-v5__loading" x-show="loading">
+    <div class="wm-settings-loading__spinner"></div>
+    <p>Yükleniyor…</p>
   </div>
 </div>
 {% endblock %}
 
 {% block extra_scripts %}
-<script src="{% url 'webmail:asset' asset_path='js/webmail/settings-app.js' %}?v=20260525c"></script>
+<script src="{% url 'webmail:asset' asset_path='js/webmail/settings-app.js' %}?v=20260830c"></script>
 {% endblock %}
