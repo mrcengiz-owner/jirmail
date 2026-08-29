@@ -110,22 +110,24 @@ def build_sender_info(
                 'Bitcoin veya ödeme taleplerine güvenmeyin.'
             )
         elif sender_email and sender_email != from_email:
-            is_spoofed = True
+            # Toplu posta (Paribu, bankalar vb.) — uyarı; gizleme yok
             warning = (
                 f'Görünen gönderen ({from_email}) ile teknik gönderen ({sender_email}) farklı.'
             )
         elif return_path and return_path != from_email:
-            is_spoofed = True
             warning = (
                 f'Görünen gönderen ({from_email}) ile posta yolu ({return_path}) uyuşmuyor.'
             )
 
     is_probable_scam = False
     blob = f'{subject}\n{snippet}'.lower()
-    if any(m in blob for m in _SCAM_BODY_MARKERS) or any(m in subject.lower() for m in _SCAM_SUBJECT_MARKERS):
+    if any(m in blob for m in _SCAM_BODY_MARKERS):
         is_probable_scam = True
         if not warning:
             warning = 'Bu mesaj bilinen dolandırıcılık kalıplarına benziyor.'
+    elif any(m in subject.lower() for m in _SCAM_SUBJECT_MARKERS):
+        if not warning:
+            warning = 'Konu satırı şüpheli görünüyor — göndereni doğrulayın.'
 
     return {
         'from_name': from_name,
@@ -173,16 +175,21 @@ def sender_info_from_message(msg, account_email: str, *, is_inbound: bool = True
     auth = parse_mail_auth(msg)
     info['auth'] = auth
     if is_inbound and auth.get('spf') == 'fail' and not info.get('is_spoofed'):
-        info['is_spoofed'] = True
-        info['warning'] = 'SPF doğrulaması başarısız — gönderen adresi sahte olabilir.'
+        info['warning'] = info.get('warning') or (
+            'SPF doğrulaması başarısız — gönderen adresi sahte olabilir.'
+        )
+        info['spf_failed'] = True
     return info
 
 
 def should_block_inbound(sender_meta: dict) -> bool:
-    """Gelen kutusunda gösterilmemesi / senkronize edilmemesi gereken ileti."""
+    """Gelen kutusunda gösterilmemesi gereken ileti (yalnızca kesin tehditler)."""
     if not sender_meta:
         return False
-    return bool(sender_meta.get('is_spoofed') or sender_meta.get('is_probable_scam'))
+    # Kendi adresinizden sahte posta veya gövdede bilinen dolandırıcılık kalıpları
+    if sender_meta.get('is_spoofed'):
+        return True
+    return bool(sender_meta.get('is_probable_scam'))
 
 
 def purge_blocked_inbound_cache(account) -> int:

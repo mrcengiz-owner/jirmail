@@ -256,6 +256,8 @@ def sync_folder_metadata(account, password: str, folder_name: str = 'INBOX', *, 
                 MailMessageCache.objects.filter(folder=folder_obj, uid=uid).update(is_deleted=True)
                 continue
 
+            meta['is_deleted'] = False
+
             if not meta['is_seen']:
                 unread_count += 1
 

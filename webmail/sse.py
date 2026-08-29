@@ -19,11 +19,49 @@ def _channel(account_id: int) -> str:
     return f'webmail:account:{account_id}'
 
 
-def publish_new_mail(account_id: int, payload: dict) -> None:
+def _publish(account_id: int, event: dict) -> None:
     try:
-        _redis().publish(_channel(account_id), json.dumps({'type': 'new_mail', 'payload': payload}))
+        _redis().publish(_channel(account_id), json.dumps(event))
     except Exception:
         pass
+
+
+def publish_new_mail(account_id: int, payload: dict) -> None:
+    _publish(account_id, {'type': 'new_mail', 'payload': payload})
+
+
+def publish_outbound_status(
+    account_id: int,
+    outbound_id: int,
+    status: str,
+    message: str = '',
+) -> None:
+    _publish(account_id, {
+        'type': 'outbound_status',
+        'payload': {
+            'outbound_id': outbound_id,
+            'status': status,
+            'message': message,
+        },
+    })
+
+
+def publish_ai_task_status(account_id: int, task_id: int, status: str, result: dict | None = None) -> None:
+    _publish(account_id, {
+        'type': 'ai_task_status',
+        'payload': {
+            'task_id': task_id,
+            'status': status,
+            'result': result or {},
+        },
+    })
+
+
+def publish_agent_event(account_id: int, event_type: str, payload: dict | None = None) -> None:
+    _publish(account_id, {
+        'type': event_type,
+        'payload': payload or {},
+    })
 
 
 def webmail_event_stream(account_id: int) -> Iterator[bytes]:

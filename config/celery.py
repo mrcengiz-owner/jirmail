@@ -37,4 +37,12 @@ app.conf.beat_schedule = {
         'task': 'webmail.process_scheduled_mail',
         'schedule': 60.0,
     },
+    'ai-agent-triage-every-15-minutes': {
+        'task': 'webmail.ai_agent_scheduled',
+        'schedule': 900.0,
+    },
+    'ai-digest-hourly-check': {
+        'task': 'webmail.ai_digest_scheduled',
+        'schedule': 3600.0,
+    },
 }

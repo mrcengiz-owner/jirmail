@@ -71,6 +71,19 @@ document.addEventListener('alpine:init', function() {
             bounceRawOpen: false,
             diagRunning: false,
             diagResult: null,
+            aiEnabled: false,
+            aiAvailable: false,
+            aiPanelOpen: false,
+            aiMessages: [],
+            aiInput: '',
+            aiLoading: false,
+            aiTasks: [],
+            outboundPending: [],
+            agentProfile: null,
+            aiRules: [],
+            aiDigest: '',
+            aiPanelTab: 'chat',
+            agentRunning: false,
             _fetchSeq: 0,
             _syncInFlight: false,
             _streamDebounce: null,
@@ -84,6 +97,7 @@ document.addEventListener('alpine:init', function() {
                 var self = this;
                 var root = this.$el;
                 self.userEmail = root.dataset.userEmail || '';
+                self.aiEnabled = root.dataset.aiEnabled === 'true';
                 var params = new URLSearchParams(window.location.search);
                 var folderParam = params.get('folder');
                 if (folderParam && FOLDER_MAP[folderParam]) {
@@ -102,6 +116,12 @@ document.addEventListener('alpine:init', function() {
                 self.loadQuota();
                 self.fetchMails();
                 self.loadSpamUnread();
+                self.loadOutboundPending();
+                if (self.aiEnabled) {
+                    self.loadAiStatus();
+                    self.loadAgentProfile();
+                    self.loadAiRules();
+                }
                 self.syncAllFoldersBackground();
                 self.$watch('currentFolder', function() {
                     self.page = 1;
@@ -289,7 +309,8 @@ document.addEventListener('alpine:init', function() {
                             attachments: [],
                             unread: !m.is_seen,
                             starred: m.is_flagged,
-                            hasAttachments: m.has_attachments
+                            hasAttachments: m.has_attachments,
+                            ai_meta: m.ai_meta || {}
                         };
                     });
                     if (self.currentFolder === 'starred') {
@@ -644,68 +665,488 @@ document.addEventListener('alpine:init', function() {
                     showToast('Cc alanına geçerli e-posta yazın veya boş bırakın', 'warning');
                     return;
                 }
-                self.sendingMail = true;
                 var bodyText = self.getEditorText();
                 var bodyHtml = self.getEditorHtml();
-                var done = function(ok, msg, warnings) {
-                    self.sendingMail = false;
-                    if (ok) {
-                        showToast(msg || 'Mesaj sunucuya iletildi', 'success');
-                        if (warnings && warnings.length) {
-                            setTimeout(function() {
-                                showToast(warnings[0], 'warning');
-                            }, 400);
+                var files = self.composeFiles.slice();
+                var payload = {
+                    to: self.composeTo,
+                    cc: self.composeCc || '',
+                    subject: self.composeSubject,
+                    body_text: bodyText,
+                    body_html: bodyHtml,
+                    background: true
+                };
+                var snapshot = {
+                    to: payload.to,
+                    subject: payload.subject
+                };
+
+                self.stopDraftAutosave();
+                self.closeCompose();
+                showToast('Mesaj arka planda gönderiliyor…', 'success');
+
+                var onQueued = function(d) {
+                    if (d.success && (d.queued || d.outbound_id)) {
+                        self.trackOutbound({
+                            id: d.outbound_id,
+                            to: snapshot.to,
+                            subject: snapshot.subject,
+                            status: 'pending'
+                        });
+                        if (d.warnings && d.warnings.length) {
+                            setTimeout(function() { showToast(d.warnings[0], 'warning'); }, 500);
                         }
-                        self.stopDraftAutosave();
-                        self.closeCompose();
+                        return;
+                    }
+                    if (d.success) {
+                        showToast(d.message || 'Mesaj gönderildi', 'success');
                         self.currentFolder = 'sent';
                         self.fetchMails();
-                    } else {
-                        showToast(msg || 'Gönderilemedi', 'error');
+                        return;
                     }
+                    showToast(d.message || 'Gönderilemedi', 'error');
                 };
-                if (self.composeFiles.length) {
+
+                if (files.length) {
                     var fd = new FormData();
-                    fd.append('to', self.composeTo);
-                    fd.append('subject', self.composeSubject);
+                    fd.append('to', payload.to);
+                    fd.append('cc', payload.cc);
+                    fd.append('subject', payload.subject);
                     fd.append('body_text', bodyText);
                     fd.append('body_html', bodyHtml);
-                    self.composeFiles.forEach(function(f) { fd.append('attachments', f); });
-                    WmApi.fetch('/api/mail/send-attachments', { method: 'POST', body: fd, timeoutMs: 90000 })
+                    fd.append('background', 'true');
+                    files.forEach(function(f) { fd.append('attachments', f); });
+                    WmApi.fetch('/api/mail/send-attachments', { method: 'POST', body: fd, timeoutMs: 120000 })
                         .then(function(r) { return r.json(); })
-                        .then(function(d) {
-                            done(d.success, d.message || (d.success ? 'Mesaj sunucuya iletildi' : 'Hata'), d.warnings);
-                        })
+                        .then(onQueued)
                         .catch(function(e) {
-                            var msg = e.name === 'AbortError'
-                                ? 'Gönderim zaman aşımı (90 sn). Postfix/Dovecot loglarına bakın.'
-                                : (e.message || 'Bağlantı hatası');
-                            done(false, msg);
+                            showToast(e.message || 'Gönderim başlatılamadı', 'error');
                         });
                 } else {
                     WmApi.fetch('/api/mail/send', {
                         method: 'POST',
-                        timeoutMs: 90000,
+                        timeoutMs: 30000,
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            to: self.composeTo,
-                            cc: self.composeCc,
-                            subject: self.composeSubject,
-                            body_text: bodyText,
-                            body_html: bodyHtml
-                        })
+                        body: JSON.stringify(payload)
                     })
                         .then(function(r) { return r.json(); })
-                        .then(function(d) {
-                            done(d.success, d.message || (d.success ? 'Mesaj sunucuya iletildi' : 'Gönderilemedi'), d.warnings);
-                        })
+                        .then(onQueued)
                         .catch(function(e) {
-                            var msg = e.name === 'AbortError'
-                                ? 'Gönderim zaman aşımı (90 sn). Postfix/Dovecot loglarına bakın.'
-                                : (e.message || 'Bağlantı hatası');
-                            done(false, msg);
+                            showToast(e.message || 'Gönderim başlatılamadı', 'error');
                         });
                 }
+            },
+
+            loadOutboundPending: function() {
+                var self = this;
+                WmApi.json('/api/mail/outbound/pending').then(function(r) {
+                    if (r.data && r.data.success) {
+                        self.outboundPending = (r.data.items || []).map(function(it) {
+                            return {
+                                id: it.id,
+                                to: it.to,
+                                subject: it.subject,
+                                status: 'pending'
+                            };
+                        });
+                    }
+                });
+            },
+
+            trackOutbound: function(item) {
+                if (!item || !item.id) return;
+                var exists = this.outboundPending.some(function(o) { return o.id === item.id; });
+                if (!exists) {
+                    this.outboundPending.unshift(item);
+                }
+            },
+
+            onOutboundStatus: function(payload) {
+                var self = this;
+                if (!payload || !payload.outbound_id) return;
+                var id = payload.outbound_id;
+                var st = payload.status;
+                self.outboundPending = self.outboundPending.filter(function(o) {
+                    return o.id !== id;
+                });
+                if (st === 'sent') {
+                    showToast('Mesaj gönderildi: ' + (payload.message || ''), 'success');
+                    if (self.currentFolder === 'sent') {
+                        self.fetchMails();
+                    }
+                } else if (st === 'failed') {
+                    showToast('Gönderim başarısız: ' + (payload.message || ''), 'error');
+                    self.fetchMails();
+                }
+            },
+
+            toggleAiPanel: function() {
+                this.aiPanelOpen = !this.aiPanelOpen;
+                if (this.aiPanelOpen && !this.aiMessages.length) {
+                    this.aiMessages.push({
+                        role: 'assistant',
+                        text: 'Merhaba! Gelen kutunuzu sınıflandırır, organize eder, taslak yazar ve gönderim yaparım. "Gelen kutusunu düzenle" veya "Bugünkü özeti ver" diyebilirsiniz.'
+                    });
+                }
+                if (this.aiPanelOpen && this.aiEnabled) {
+                    this.loadAgentProfile();
+                }
+            },
+
+            aiPriorityLabel: function(mail) {
+                var ai = (mail && mail.ai_meta) || {};
+                var p = ai.priority || '';
+                if (p === 'urgent') return 'Acil';
+                if (p === 'high') return 'Yüksek';
+                if (p === 'low') return 'Düşük';
+                return '';
+            },
+
+            aiCategoryLabel: function(mail) {
+                var ai = (mail && mail.ai_meta) || {};
+                var c = ai.category || '';
+                var map = {
+                    personal: 'Kişisel', work: 'İş', finance: 'Finans',
+                    newsletter: 'Bülten', promo: 'Promo', spam: 'Spam',
+                    transactional: 'Bildirim', support: 'Destek', other: ''
+                };
+                return map[c] || c;
+            },
+
+            loadAgentProfile: function() {
+                var self = this;
+                WmApi.json('/api/mail/ai/agent/profile').then(function(r) {
+                    if (r.data && r.data.success) {
+                        self.agentProfile = r.data.profile;
+                    }
+                });
+            },
+
+            saveAgentProfile: function() {
+                var self = this;
+                if (!self.agentProfile) return;
+                WmApi.json('/api/mail/ai/agent/profile', {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(self.agentProfile)
+                }).then(function(r) {
+                    if (r.data && r.data.success) {
+                        self.agentProfile = r.data.profile;
+                        showToast('Ajan ayarları kaydedildi', 'success');
+                    }
+                });
+            },
+
+            runAgentNow: function() {
+                var self = this;
+                if (self.agentRunning) return;
+                self.agentRunning = true;
+                WmApi.json('/api/mail/ai/agent/run', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ triage: true, organize: true, digest: false })
+                }).then(function(r) {
+                    showToast(
+                        (r.data && r.data.message) || 'AI ajan çalıştırıldı',
+                        r.data && r.data.success ? 'success' : 'warning'
+                    );
+                }).finally(function() {
+                    self.agentRunning = false;
+                });
+            },
+
+            triageInboxNow: function() {
+                var self = this;
+                self.aiLoading = true;
+                WmApi.json('/api/mail/ai/triage/inbox?limit=20', { method: 'POST' })
+                    .then(function(r) {
+                        self.aiLoading = false;
+                        if (r.data && r.data.success) {
+                            showToast((r.data.triaged || 0) + ' mail sınıflandırıldı', 'success');
+                            self.fetchMails();
+                        } else {
+                            showToast((r.data && r.data.message) || 'Triage başarısız', 'error');
+                        }
+                    }).catch(function() { self.aiLoading = false; });
+            },
+
+            organizeInboxNow: function() {
+                var self = this;
+                self.aiLoading = true;
+                WmApi.json('/api/mail/ai/organize/inbox', { method: 'POST' })
+                    .then(function(r) {
+                        self.aiLoading = false;
+                        if (r.data && r.data.success) {
+                            var n = (r.data.applied || []).length;
+                            showToast(n ? n + ' aksiyon uygulandı' : 'Organize önerileri hazır', 'success');
+                            self.fetchMails();
+                        }
+                    }).catch(function() { self.aiLoading = false; });
+            },
+
+            loadDigest: function(refresh) {
+                var self = this;
+                var url = '/api/mail/ai/digest' + (refresh ? '?refresh=true' : '');
+                WmApi.json(url).then(function(r) {
+                    if (r.data && r.data.success) {
+                        self.aiDigest = r.data.digest || '';
+                    }
+                });
+            },
+
+            loadAiRules: function() {
+                var self = this;
+                WmApi.json('/api/mail/ai/rules').then(function(r) {
+                    if (r.data && r.data.success) {
+                        self.aiRules = r.data.items || [];
+                    }
+                });
+            },
+
+            onAgentCycleComplete: function(payload) {
+                showToast('AI ajan döngüsü tamamlandı', 'success');
+                this.fetchMails();
+                this.loadAgentProfile();
+                if (payload && payload.steps && payload.steps.digest) {
+                    this.aiDigest = payload.steps.digest.digest || this.aiDigest;
+                }
+            },
+
+            loadAiStatus: function() {
+                var self = this;
+                WmApi.json('/api/mail/ai/status').then(function(r) {
+                    if (r.data && r.data.success) {
+                        self.aiAvailable = !!r.data.ai_available;
+                    }
+                });
+                self.loadAiTasks();
+            },
+
+            loadAiTasks: function() {
+                var self = this;
+                WmApi.json('/api/mail/ai/tasks').then(function(r) {
+                    if (r.data && r.data.success) {
+                        self.aiTasks = r.data.items || [];
+                    }
+                });
+            },
+
+            aiContextPayload: function() {
+                var self = this;
+                var ctx = {
+                    context_subject: '',
+                    context_from: '',
+                    context_body: '',
+                    inbox_summary: ''
+                };
+                if (self.selectedMail) {
+                    ctx.context_subject = self.selectedMail.subject || '';
+                    ctx.context_from = self.selectedMail.from_addr || self.selectedMail.from || '';
+                    ctx.context_body = (self.selectedMail.body || '').replace(/<[^>]+>/g, ' ').slice(0, 6000);
+                }
+                var recent = (self.mails || []).slice(0, 8).map(function(m) {
+                    return '- ' + (m.subject || '(konu yok)') + ' ← ' + (m.from || m.from_addr || '');
+                });
+                if (recent.length) {
+                    ctx.inbox_summary = recent.join('\n');
+                }
+                return ctx;
+            },
+
+            sendAiMessage: function() {
+                var self = this;
+                var msg = (self.aiInput || '').trim();
+                if (!msg || self.aiLoading) return;
+                if (!self.aiAvailable) {
+                    showToast('AI kapalı — Ayarlar’dan API anahtarı ekleyin.', 'warning');
+                    return;
+                }
+                self.aiMessages.push({ role: 'user', text: msg });
+                self.aiInput = '';
+                self.aiLoading = true;
+                var body = Object.assign({ message: msg }, self.aiContextPayload());
+                WmApi.json('/api/mail/ai/chat', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body)
+                }).then(function(r) {
+                    self.aiLoading = false;
+                    var d = r.data || {};
+                    if (!d.success) {
+                        self.aiMessages.push({ role: 'assistant', text: d.message || 'AI yanıt veremedi.' });
+                        return;
+                    }
+                    self.aiMessages.push({ role: 'assistant', text: d.reply || '(boş yanıt)' });
+                    if (d.action) {
+                        self.handleAiAction(d.action, d.reply);
+                    }
+                }).catch(function(e) {
+                    self.aiLoading = false;
+                    self.aiMessages.push({ role: 'assistant', text: e.message || 'Bağlantı hatası' });
+                });
+            },
+
+            handleAiAction: function(action, replyText) {
+                var self = this;
+                if (!action || !action.intent) return;
+                var intent = (action.intent || 'chat').toLowerCase();
+                if (intent === 'chat' || intent === 'analyze') return;
+
+                if (intent === 'send_mail' && action.to && action.subject && action.body) {
+                    if (window.confirm('AI bu mesajı göndermek istiyor. Onaylıyor musunuz?')) {
+                        WmApi.json('/api/mail/ai/execute', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(action)
+                        }).then(function(r) {
+                            if (r.data && r.data.success) {
+                                showToast(r.data.message || 'Gönderim kuyruğa alındı', 'success');
+                                if (r.data.outbound_id) {
+                                    self.trackOutbound({
+                                        id: r.data.outbound_id,
+                                        to: action.to,
+                                        subject: action.subject,
+                                        status: 'pending'
+                                    });
+                                }
+                            } else {
+                                showToast((r.data && r.data.message) || 'Gönderilemedi', 'error');
+                            }
+                        });
+                    }
+                    return;
+                }
+
+                if (intent === 'reply' || intent === 'send_mail') {
+                    if (action.to) self.composeTo = action.to;
+                    if (action.subject) self.composeSubject = action.subject;
+                    if (action.body) {
+                        self.openCompose();
+                        self.$nextTick(function() {
+                            if (self.quill) {
+                                self.quill.clipboard.dangerouslyPasteHTML(action.body);
+                            }
+                        });
+                    }
+                    return;
+                }
+
+                if (intent === 'organize_inbox') {
+                    self.organizeInboxNow();
+                    return;
+                }
+                if (intent === 'run_agent') {
+                    self.runAgentNow();
+                    return;
+                }
+
+                if (intent === 'schedule_mail') {
+                    WmApi.json('/api/mail/ai/execute', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(action)
+                    }).then(function(r) {
+                        if (r.data && r.data.success) {
+                            showToast(r.data.message || 'Planlandı', 'success');
+                        } else {
+                            showToast((r.data && r.data.message) || 'Planlanamadı', 'error');
+                        }
+                    });
+                }
+            },
+
+            analyzeSelectedMail: function() {
+                var self = this;
+                if (!self.selectedMail) {
+                    showToast('Önce bir mail seçin', 'warning');
+                    return;
+                }
+                if (!self.aiAvailable) {
+                    showToast('AI kapalı — Ayarlar’dan etkinleştirin.', 'warning');
+                    return;
+                }
+                self.aiPanelOpen = true;
+                self.aiLoading = true;
+                var plain = (self.selectedMail.body || '').replace(/<[^>]+>/g, ' ').slice(0, 8000);
+                WmApi.json('/api/mail/ai/analyze', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        message: 'Bu maili analiz et',
+                        context_subject: self.selectedMail.subject || '',
+                        context_from: self.selectedMail.from_addr || self.selectedMail.from || '',
+                        context_body: plain
+                    })
+                }).then(function(r) {
+                    self.aiLoading = false;
+                    var d = r.data || {};
+                    self.aiMessages.push({
+                        role: 'assistant',
+                        text: d.reply || d.message || 'Analiz tamamlandı.'
+                    });
+                }).catch(function() {
+                    self.aiLoading = false;
+                });
+            },
+
+            aiComposeDraft: function() {
+                var self = this;
+                var instruction = (self.aiInput || '').trim();
+                if (!instruction) {
+                    showToast('Taslak talimatı yazın', 'warning');
+                    return;
+                }
+                self.aiLoading = true;
+                WmApi.json('/api/mail/ai/compose', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ message: instruction })
+                }).then(function(r) {
+                    self.aiLoading = false;
+                    if (r.data && r.data.success && r.data.body) {
+                        self.openCompose();
+                        self.$nextTick(function() {
+                            if (self.quill) {
+                                self.quill.clipboard.dangerouslyPasteHTML(r.data.body);
+                            }
+                        });
+                        showToast('Taslak editöre eklendi', 'success');
+                    } else {
+                        showToast((r.data && r.data.message) || 'Taslak üretilemedi', 'error');
+                    }
+                }).catch(function() {
+                    self.aiLoading = false;
+                });
+            },
+
+            queueAiTask: function(instruction, taskType) {
+                var self = this;
+                if (!instruction) return;
+                var ctx = self.aiContextPayload();
+                WmApi.json('/api/mail/ai/tasks', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        instruction: instruction,
+                        task_type: taskType || 'custom',
+                        context_subject: ctx.context_subject,
+                        context_from: ctx.context_from,
+                        context_body: ctx.context_body
+                    })
+                }).then(function(r) {
+                    if (r.data && r.data.success) {
+                        showToast('AI görevi kuyruğa alındı', 'success');
+                        self.loadAiTasks();
+                    } else {
+                        showToast((r.data && r.data.message) || 'Görev oluşturulamadı', 'error');
+                    }
+                });
+            },
+
+            onAiTaskStatus: function(payload) {
+                if (!payload) return;
+                showToast('AI görevi: ' + (payload.status || ''), payload.status === 'done' ? 'success' : 'warning');
+                this.loadAiTasks();
             },
 
             runOutboundDiagnostics: function() {
@@ -943,11 +1384,31 @@ document.addEventListener('alpine:init', function() {
                     }
                     self.eventSource = new EventSource('/api/mail/stream');
                     self.eventSource.onmessage = function(ev) {
-                        if (!ev.data || ev.data.indexOf('new_mail') === -1) return;
-                        if (self._streamDebounce) clearTimeout(self._streamDebounce);
-                        self._streamDebounce = setTimeout(function() {
-                            self.fetchMails();
-                        }, 2000);
+                        if (!ev.data) return;
+                        var parsed = null;
+                        try {
+                            parsed = JSON.parse(ev.data);
+                        } catch (e) {
+                            if (ev.data.indexOf('new_mail') >= 0) {
+                                if (self._streamDebounce) clearTimeout(self._streamDebounce);
+                                self._streamDebounce = setTimeout(function() {
+                                    self.fetchMails();
+                                }, 2000);
+                            }
+                            return;
+                        }
+                        if (parsed.type === 'new_mail') {
+                            if (self._streamDebounce) clearTimeout(self._streamDebounce);
+                            self._streamDebounce = setTimeout(function() {
+                                self.fetchMails();
+                            }, 2000);
+                        } else if (parsed.type === 'outbound_status') {
+                            self.onOutboundStatus(parsed.payload || {});
+                        } else if (parsed.type === 'ai_task_status') {
+                            self.onAiTaskStatus(parsed.payload || {});
+                        } else if (parsed.type === 'agent_cycle_complete') {
+                            self.onAgentCycleComplete(parsed.payload || {});
+                        }
                     };
                 } catch (e) { /* ignore */ }
             }

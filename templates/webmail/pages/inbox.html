@@ -12,8 +12,21 @@
 {% endblock %}
 
 {% block shell_content %}
-<div class="wm-inbox">
-
+<div class="wm-inbox-wrap">
+  <div class="wm-outbound-bar" x-show="outboundPending.length" x-cloak>
+    <span class="material-symbols-outlined wm-outbound-bar__icon">schedule_send</span>
+    <div class="wm-outbound-bar__list">
+      <template x-for="job in outboundPending" :key="'out-' + job.id">
+        <span class="wm-outbound-bar__item">
+          <strong x-text="job.subject || '(konu yok)'"></strong>
+          <span x-text="' → ' + job.to"></span>
+          <em> · gönderiliyor…</em>
+        </span>
+      </template>
+    </div>
+  </div>
+  <div class="wm-inbox-main">
+  <div class="wm-inbox">
   <!-- Liste -->
   <section class="wm-inbox-list"
            :class="mobileView !== 'list' && 'is-hidden'">
@@ -58,8 +71,12 @@
               <span class="wm-mail-row__date" x-text="formatDate(mail.date)"></span>
             </div>
             <div class="wm-mail-row__subject" x-text="mail.subject"></div>
-            <div class="wm-mail-row__preview" x-text="mail.preview"></div>
-            <div class="wm-mail-row__tags" x-show="mail.hasAttachments || mail.starred">
+            <div class="wm-mail-row__preview" x-text="mail.preview || (mail.ai_meta && mail.ai_meta.summary) || ''"></div>
+            <div class="wm-mail-row__tags">
+              <span class="wm-ai-badge wm-ai-badge--urgent" x-show="mail.ai_meta && mail.ai_meta.priority === 'urgent'" x-text="aiPriorityLabel(mail)"></span>
+              <span class="wm-ai-badge wm-ai-badge--high" x-show="mail.ai_meta && mail.ai_meta.priority === 'high'" x-text="aiPriorityLabel(mail)"></span>
+              <span class="wm-ai-badge wm-ai-badge--cat" x-show="mail.ai_meta && mail.ai_meta.category" x-text="aiCategoryLabel(mail)"></span>
+              <span class="wm-ai-badge wm-ai-badge--reply" x-show="mail.ai_meta && mail.ai_meta.needs_reply">Yanıt</span>
               <span class="wm-mail-tag" x-show="mail.hasAttachments">Ek</span>
               <span class="wm-mail-tag" x-show="mail.starred">★</span>
             </div>
@@ -99,6 +116,9 @@
           <button type="button" class="wm-read-toolbar__btn" title="Arşivle" @click="archiveMail(selectedMail)">
             <span class="material-symbols-outlined">archive</span>
           </button>
+          <button type="button" class="wm-read-toolbar__btn" x-show="aiEnabled" title="AI analiz" @click="analyzeSelectedMail()">
+            <span class="material-symbols-outlined">smart_toy</span>
+          </button>
           <span class="wm-read-toolbar__sep"></span>
           <button type="button" class="wm-read-toolbar__btn wm-read-toolbar__btn--danger" title="Sil" @click="deleteMail(selectedMail)">
             <span class="material-symbols-outlined">delete</span>
@@ -109,6 +129,12 @@
         <div class="wm-read-scroll">
           <article class="wm-read-article">
             <h1 class="wm-read-subject" x-text="selectedMail.subject"></h1>
+
+            <div x-show="selectedMail.ai_meta && selectedMail.ai_meta.summary" class="wm-ai-read-banner mb-4 rounded-xl border px-4 py-3 text-sm" style="border-color:rgba(91,108,255,0.25);background:rgba(91,108,255,0.06);">
+              <p class="font-semibold mb-1" style="color:var(--wm-brand);">AI özeti</p>
+              <p x-text="selectedMail.ai_meta.summary"></p>
+              <p class="text-xs mt-2 opacity-70" x-show="selectedMail.ai_meta.needs_reply">↳ Yanıt önerilir</p>
+            </div>
 
             <div x-show="isBounceMail(selectedMail)" class="wm-bounce-banner mb-6 rounded-xl border px-4 py-3 text-left" style="border-color:rgba(220,61,61,0.3);background:rgba(220,61,61,0.08);">
               <p class="text-sm font-semibold mb-2 flex items-center gap-2" style="color:var(--wm-danger);">
@@ -164,10 +190,106 @@
     </div>
   </section>
 </div>
+
+  <!-- AI Asistan paneli -->
+  <aside class="wm-ai-panel" :class="aiPanelOpen && 'is-open'" x-show="aiEnabled" x-cloak>
+    <header class="wm-ai-panel__head">
+      <div>
+        <h3 class="wm-ai-panel__title">AI Posta Asistanı</h3>
+        <p class="wm-ai-panel__sub" x-text="aiAvailable ? 'Aktif — görev verebilirsiniz' : 'API anahtarı gerekli (Ayarlar)'"></p>
+      </div>
+      <button type="button" class="wm-read-toolbar__btn" @click="toggleAiPanel()" title="Kapat">
+        <span class="material-symbols-outlined">close</span>
+      </button>
+    </header>
+
+    <div class="wm-ai-panel__tabs">
+      <button type="button" :class="aiPanelTab === 'chat' && 'is-active'" @click="aiPanelTab = 'chat'">Sohbet</button>
+      <button type="button" :class="aiPanelTab === 'agent' && 'is-active'" @click="aiPanelTab = 'agent'; loadAgentProfile(); loadAiRules();">Ajan</button>
+      <button type="button" :class="aiPanelTab === 'digest' && 'is-active'" @click="aiPanelTab = 'digest'; loadDigest(false);">Özet</button>
+    </div>
+
+    <div x-show="aiPanelTab === 'chat'" class="wm-ai-panel__tab-body">
+      <div class="wm-ai-panel__quick">
+        <button type="button" class="wm-inbox-btn" @click="analyzeSelectedMail()" :disabled="!selectedMail">Analiz</button>
+        <button type="button" class="wm-inbox-btn" @click="runAgentNow()" :disabled="agentRunning">Tam döngü</button>
+      </div>
+      <div class="wm-ai-panel__messages" id="wm-ai-scroll">
+        <template x-for="(m, mi) in aiMessages" :key="mi">
+          <div class="wm-ai-msg" :class="m.role === 'user' && 'is-user'">
+            <p x-text="m.text"></p>
+          </div>
+        </template>
+        <p x-show="aiLoading" class="wm-ai-msg is-assistant">Düşünüyor…</p>
+      </div>
+      <div class="wm-ai-panel__tasks" x-show="aiTasks.length">
+        <p class="text-xs font-semibold mb-2" style="color:var(--wm-muted);">Son görevler</p>
+        <template x-for="t in aiTasks.slice(0, 5)" :key="'task-' + t.id">
+          <div class="wm-ai-task-row">
+            <span class="wm-ai-task-row__status" x-text="t.status"></span>
+            <span x-text="t.instruction"></span>
+          </div>
+        </template>
+      </div>
+      <footer class="wm-ai-panel__foot">
+        <textarea x-model="aiInput" rows="2" class="wm-ai-panel__input" placeholder="Görev: taslak yaz, yanıt gönder, gelen kutusunu düzenle…"
+                  @keydown.enter.prevent="if(!$event.shiftKey) sendAiMessage()"></textarea>
+        <div class="flex gap-2 mt-2">
+          <button type="button" class="wm-inbox-btn flex-1" @click="aiComposeDraft()">Taslak</button>
+          <button type="button" class="wm-sb-compose flex-1" style="margin:0;width:auto;" @click="sendAiMessage()" :disabled="aiLoading">Gönder</button>
+        </div>
+      </footer>
+    </div>
+
+    <div x-show="aiPanelTab === 'agent'" class="wm-ai-panel__tab-body wm-ai-agent-settings" x-cloak>
+      <template x-if="agentProfile">
+        <div class="wm-ai-agent-form">
+          <label class="wm-ai-field">
+            <span>Mod</span>
+            <select x-model="agentProfile.mode" @change="saveAgentProfile()">
+              <option value="off">Kapalı</option>
+              <option value="assist">Asistan (öneri)</option>
+              <option value="autopilot">Otopilot (güvenli aksiyonlar)</option>
+            </select>
+          </label>
+          <label class="wm-ai-check"><input type="checkbox" x-model="agentProfile.auto_triage" @change="saveAgentProfile()"> Otomatik sınıflandırma</label>
+          <label class="wm-ai-check"><input type="checkbox" x-model="agentProfile.auto_organize" @change="saveAgentProfile()"> Otomatik organize</label>
+          <label class="wm-ai-check"><input type="checkbox" x-model="agentProfile.digest_enabled" @change="saveAgentProfile()"> Günlük özet</label>
+          <div class="flex flex-wrap gap-2 mt-3">
+            <button type="button" class="wm-inbox-btn" @click="triageInboxNow()">Sınıflandır</button>
+            <button type="button" class="wm-inbox-btn" @click="organizeInboxNow()">Organize et</button>
+            <button type="button" class="wm-sb-compose" style="margin:0;width:auto;" @click="runAgentNow()">Tam ajan</button>
+          </div>
+          <p class="text-xs mt-3" style="color:var(--wm-muted);" x-show="agentProfile.last_triage_at">
+            Son triage: <span x-text="agentProfile.last_triage_at"></span>
+          </p>
+        </div>
+      </template>
+      <div class="wm-ai-rules" x-show="aiRules.length">
+        <p class="text-xs font-semibold mb-2" style="color:var(--wm-muted);">Posta kuralları</p>
+        <template x-for="rule in aiRules" :key="'rule-' + rule.id">
+          <div class="wm-ai-task-row">
+            <span x-text="rule.name"></span>
+            <span class="opacity-60" x-text="' → ' + rule.action_type"></span>
+          </div>
+        </template>
+      </div>
+    </div>
+
+    <div x-show="aiPanelTab === 'digest'" class="wm-ai-panel__tab-body" x-cloak>
+      <div class="wm-ai-panel__quick">
+        <button type="button" class="wm-inbox-btn" @click="loadDigest(true)">Yenile</button>
+      </div>
+      <div class="wm-ai-digest" x-show="aiDigest" x-text="aiDigest"></div>
+      <p x-show="!aiDigest" class="wm-inbox-empty text-sm">Henüz özet yok — Yenile’ye basın.</p>
+    </div>
+  </aside>
+  </div>
+</div>
 {% endblock %}
 
 {% block extra_scripts %}
-<script src="{% url 'webmail:asset' asset_path='js/webmail/mail-app.js' %}?v=20260829a"></script>
+<script src="{% url 'webmail:asset' asset_path='js/webmail/mail-app.js' %}?v=20260829c"></script>
 {% endblock %}
 
 {% block shell_overlay %}
@@ -221,8 +343,8 @@
       <div class="flex gap-2 justify-end">
         <button type="button" class="wm-inbox-btn" @click="saveDraft(true)">Taslak</button>
         <button type="button" class="wm-inbox-btn" @click="closeCompose()">İptal</button>
-        <button type="button" class="wm-sb-compose" style="margin:0;width:auto;" @click="sendMail()" :disabled="sendingMail">
-          <span x-text="sendingMail ? 'Gönderiliyor…' : 'Gönder'"></span>
+        <button type="button" class="wm-sb-compose" style="margin:0;width:auto;" @click="sendMail()">
+          <span>Gönder</span>
         </button>
       </div>
     </footer>

@@ -119,6 +119,7 @@ def _message_to_api(m: MailMessageCache, account: MailAccount, folder: str) -> d
         'sender_reply_to': sender.get('reply_to'),
         'sender_return_path': sender.get('return_path'),
         'auth': sender.get('auth') or {},
+        'ai_meta': m.ai_meta if isinstance(getattr(m, 'ai_meta', None), dict) else {},
     }
 
 
@@ -130,10 +131,14 @@ def _get_account_and_password(request: HttpRequest):
     password = get_mail_password(request.session)
     if not account_id or not password:
         return None, ''
-    return (
-        MailAccount.objects.select_related('domain').filter(id=account_id).first(),
-        password,
-    )
+    account = MailAccount.objects.select_related('domain').filter(id=account_id).first()
+    if account and password:
+        try:
+            from webmail.credential_cache import cache_account_password
+            cache_account_password(int(account_id), password)
+        except Exception:
+            pass
+    return account, password
 
 
 @router.get('/folders', summary='Folder listesi')
@@ -300,6 +305,7 @@ class SendMailSchema(Schema):
     body_html: str = ''
     cc: str = ''
     bcc: str = ''
+    background: bool = True
 
 
 def _sanitize_send_result(result: dict) -> dict:
@@ -361,6 +367,25 @@ def send(request: HttpRequest, data: SendMailSchema):
             )
         except Exception as exc:
             log.warning('MailOutboundLog kaydı atlandı: %s', exc)
+
+        if data.background:
+            from webmail.outbound_queue import queue_outbound_send
+
+            if log_row:
+                log_row.delete()
+            out = queue_outbound_send(
+                account,
+                password,
+                to=data.to,
+                subject=data.subject,
+                body_text=data.body_text,
+                body_html=data.body_html,
+                cc=data.cc,
+                bcc=data.bcc,
+            )
+            for w in check.get('warnings') or []:
+                out.setdefault('warnings', []).append(w)
+            return out
 
         result = send_mail(
             account, password,
@@ -693,6 +718,8 @@ def sync_all(request: HttpRequest):
     except Exception:
         pass
 
+    _maybe_queue_agent_after_sync(account, password)
+
     return {
         'success': True,
         'synced': results,
@@ -702,9 +729,93 @@ def sync_all(request: HttpRequest):
     }
 
 
+def _maybe_queue_agent_after_sync(account, password: str) -> None:
+    if not password or not account.ai_available:
+        return
+    try:
+        from webmail.ai.agent import get_or_create_agent_profile
+        from webmail.models import MailAgentProfile
+        from jir_core.session_secrets import encrypt_secret
+        from webmail.tasks import ai_agent_cycle_task
+
+        profile = get_or_create_agent_profile(account)
+        if profile.mode == MailAgentProfile.MODE_OFF:
+            return
+        if not profile.auto_triage and not profile.auto_organize:
+            return
+        ai_agent_cycle_task.delay(
+            account.id,
+            encrypt_secret(password),
+            triage=profile.auto_triage,
+            organize=profile.auto_organize,
+            digest=False,
+        )
+    except Exception:
+        pass
+
+
 class AiChatSchema(Schema):
     message: str
     context_subject: str = ''
+    context_from: str = ''
+    context_body: str = ''
+    inbox_summary: str = ''
+
+
+class AiExecuteSchema(Schema):
+    intent: str = 'chat'
+    to: str = ''
+    subject: str = ''
+    body: str = ''
+    send_at: str = ''
+
+
+class AiTaskCreateSchema(Schema):
+    instruction: str
+    task_type: str = 'custom'
+    context_subject: str = ''
+    context_from: str = ''
+    context_body: str = ''
+
+
+class AgentProfileSchema(Schema):
+    mode: Optional[str] = None
+    auto_triage: Optional[bool] = None
+    auto_organize: Optional[bool] = None
+    auto_reply_suggest: Optional[bool] = None
+    digest_enabled: Optional[bool] = None
+    digest_frequency: Optional[str] = None
+    digest_hour: Optional[int] = None
+    triage_batch_size: Optional[int] = None
+    organize_batch_size: Optional[int] = None
+
+
+class AiRuleSchema(Schema):
+    name: str
+    enabled: bool = True
+    priority: int = 100
+    match_from: str = ''
+    match_subject: str = ''
+    match_category: str = ''
+    action_type: str = 'archive'
+    action_target: str = ''
+
+
+class AiRulePatchSchema(Schema):
+    name: Optional[str] = None
+    enabled: Optional[bool] = None
+    priority: Optional[int] = None
+    match_from: Optional[str] = None
+    match_subject: Optional[str] = None
+    match_category: Optional[str] = None
+    action_type: Optional[str] = None
+    action_target: Optional[str] = None
+
+
+class AgentRunSchema(Schema):
+    triage: bool = True
+    organize: bool = True
+    digest: bool = False
 
 
 class AiSettingsSchema(Schema):
@@ -832,7 +943,12 @@ def ai_chat(request: HttpRequest, data: AiChatSchema):
     return run_chat(
         account,
         data.message,
-        context={'selected_subject': data.context_subject},
+        context={
+            'selected_subject': data.context_subject,
+            'selected_from': data.context_from,
+            'selected_body': data.context_body,
+            'inbox_summary': data.inbox_summary,
+        },
     )
 
 
@@ -945,7 +1061,64 @@ def send_with_attachments(request: HttpRequest):
         except Exception as exc:
             log.debug('ensure_outbound_delivery: %s', exc)
 
+        background = request.POST.get('background', 'true').lower() not in ('0', 'false', 'no')
         to_list = parse_recipient_list(to_raw)
+        cc_list = parse_recipient_list(cc_raw) or None
+        bcc_list = parse_recipient_list(bcc_raw) or None
+
+        if background:
+            from jir_core.session_secrets import encrypt_secret
+            from webmail.outbound_queue import queue_outbound_send, save_outbound_attachments
+            from webmail.tasks import send_mail_async
+
+            snippet = (body_text or body_html or '')[:480]
+            log_row = MailOutboundLog.objects.create(
+                account=account,
+                to_addr=', '.join(to_list),
+                subject=subject,
+                snippet=snippet,
+                status=MailOutboundLog.STATUS_PENDING,
+            )
+            files = list(request.FILES.getlist('attachments'))
+            meta = save_outbound_attachments(log_row.id, files) if files else []
+            try:
+                send_mail_async.delay(
+                    outbound_id=log_row.id,
+                    password_enc=encrypt_secret(password),
+                    to=to_list,
+                    subject=subject,
+                    body_text=body_text,
+                    body_html=body_html,
+                    cc=cc_list,
+                    bcc=bcc_list,
+                    attachments_meta=meta,
+                )
+                out = {
+                    'success': True,
+                    'queued': True,
+                    'outbound_id': log_row.id,
+                    'message': 'Mesaj arka planda gönderiliyor.',
+                }
+            except Exception as exc:
+                log.warning('Celery kuyruk hatası (ekli): %s', exc)
+                from webmail.tasks import send_mail_async as send_async_fn
+
+                out = send_async_fn(
+                    outbound_id=log_row.id,
+                    password_enc=encrypt_secret(password),
+                    to=to_list,
+                    subject=subject,
+                    body_text=body_text,
+                    body_html=body_html,
+                    cc=cc_list,
+                    bcc=bcc_list,
+                    attachments_meta=meta,
+                )
+                out['queued'] = False
+            for w in check.get('warnings') or []:
+                out.setdefault('warnings', []).append(w)
+            return out
+
         attachments = []
         for f in request.FILES.getlist('attachments'):
             attachments.append({
@@ -969,6 +1142,316 @@ def send_with_attachments(request: HttpRequest):
     except Exception as exc:
         log.exception('POST /api/mail/send-attachments')
         return {'success': False, 'message': f'Gönderim hatası: {exc}'}
+
+
+@router.get('/outbound/pending', summary='Bekleyen gönderimler')
+def outbound_pending(request: HttpRequest):
+    account, _ = _get_account_and_password(request)
+    if not account:
+        return {'success': False, 'message': 'Oturum yok'}
+    rows = MailOutboundLog.objects.filter(
+        account=account,
+        status=MailOutboundLog.STATUS_PENDING,
+    ).order_by('-created_at')[:20]
+    return {
+        'success': True,
+        'items': [
+            {
+                'id': r.id,
+                'to': r.to_addr,
+                'subject': r.subject,
+                'created_at': r.created_at.isoformat(),
+            }
+            for r in rows
+        ],
+    }
+
+
+@router.get('/outbound/{outbound_id}', summary='Gönderim durumu')
+def outbound_status(request: HttpRequest, outbound_id: int):
+    account, _ = _get_account_and_password(request)
+    if not account:
+        return {'success': False, 'message': 'Oturum yok'}
+    row = MailOutboundLog.objects.filter(account=account, pk=outbound_id).first()
+    if not row:
+        return {'success': False, 'message': 'Kayıt bulunamadı'}
+    return {
+        'success': True,
+        'id': row.id,
+        'status': row.status,
+        'error_message': row.error_message,
+        'message_id': row.message_id,
+    }
+
+
+@router.post('/ai/analyze', summary='Seçili maili AI ile analiz et')
+def ai_analyze(request: HttpRequest, data: AiChatSchema):
+    account, _ = _get_account_and_password(request)
+    if not account:
+        return {'success': False, 'message': 'Oturum yok'}
+    from webmail.ai.service import ai_analyze_message
+
+    return ai_analyze_message(
+        account,
+        subject=data.context_subject,
+        from_addr=data.context_from,
+        body_text=data.context_body or data.message,
+    )
+
+
+@router.post('/ai/execute', summary='AI aksiyonunu uygula (gönder/planla)')
+def ai_execute(request: HttpRequest, data: AiExecuteSchema):
+    account, password = _get_account_and_password(request)
+    if not account:
+        return {'success': False, 'message': 'Oturum yok'}
+    from webmail.ai.service import execute_ai_action
+
+    return execute_ai_action(account, password, data.dict())
+
+
+@router.post('/ai/tasks', summary='Arka plan AI görevi oluştur')
+def ai_create_task(request: HttpRequest, data: AiTaskCreateSchema):
+    account, password = _get_account_and_password(request)
+    if not account:
+        return {'success': False, 'message': 'Oturum yok'}
+    from jir_core.session_secrets import encrypt_secret
+    from webmail.ai.service import create_ai_task
+    from webmail.models import MailAiTask
+    from webmail.tasks import run_ai_task
+
+    ctx = {
+        'subject': data.context_subject,
+        'from': data.context_from,
+        'body': data.context_body,
+    }
+    task = create_ai_task(
+        account,
+        data.instruction,
+        task_type=data.task_type or MailAiTask.TYPE_CUSTOM,
+        context=ctx,
+    )
+    pwd_enc = encrypt_secret(password) if password else ''
+    try:
+        run_ai_task.delay(task.id, pwd_enc)
+    except Exception:
+        run_ai_task(task.id, pwd_enc)
+    return {'success': True, 'task_id': task.id, 'status': task.status}
+
+
+@router.get('/ai/tasks', summary='AI görev listesi')
+def ai_list_tasks(request: HttpRequest):
+    account, _ = _get_account_and_password(request)
+    if not account:
+        return {'success': False, 'message': 'Oturum yok'}
+    from webmail.models import MailAiTask
+
+    rows = MailAiTask.objects.filter(account=account).order_by('-created_at')[:30]
+    return {
+        'success': True,
+        'items': [
+            {
+                'id': t.id,
+                'instruction': t.instruction[:200],
+                'task_type': t.task_type,
+                'status': t.status,
+                'created_at': t.created_at.isoformat(),
+                'finished_at': t.finished_at.isoformat() if t.finished_at else None,
+                'result_preview': (t.result.get('reply') or t.result.get('message') or '')[:300]
+                if isinstance(t.result, dict) else '',
+            }
+            for t in rows
+        ],
+    }
+
+
+def _agent_profile_dict(profile) -> dict:
+    return {
+        'mode': profile.mode,
+        'auto_triage': profile.auto_triage,
+        'auto_organize': profile.auto_organize,
+        'auto_reply_suggest': profile.auto_reply_suggest,
+        'digest_enabled': profile.digest_enabled,
+        'digest_frequency': profile.digest_frequency,
+        'digest_hour': profile.digest_hour,
+        'triage_batch_size': profile.triage_batch_size,
+        'organize_batch_size': profile.organize_batch_size,
+        'last_triage_at': profile.last_triage_at.isoformat() if profile.last_triage_at else None,
+        'last_organize_at': profile.last_organize_at.isoformat() if profile.last_organize_at else None,
+        'last_digest_at': profile.last_digest_at.isoformat() if profile.last_digest_at else None,
+        'last_digest_preview': (profile.last_digest_text or '')[:400],
+    }
+
+
+@router.get('/ai/agent/profile', summary='AI ajan profili')
+def agent_profile_get(request: HttpRequest):
+    account, _ = _get_account_and_password(request)
+    if not account:
+        return {'success': False, 'message': 'Oturum yok'}
+    from webmail.ai.agent import get_or_create_agent_profile
+
+    profile = get_or_create_agent_profile(account)
+    return {'success': True, 'profile': _agent_profile_dict(profile)}
+
+
+@router.patch('/ai/agent/profile', summary='AI ajan profili güncelle')
+def agent_profile_patch(request: HttpRequest, data: AgentProfileSchema):
+    account, _ = _get_account_and_password(request)
+    if not account:
+        return {'success': False, 'message': 'Oturum yok'}
+    from webmail.ai.agent import get_or_create_agent_profile
+
+    profile = get_or_create_agent_profile(account)
+    fields = []
+    for attr, val in data.dict(exclude_unset=True).items():
+        if val is not None:
+            setattr(profile, attr, val)
+            fields.append(attr)
+    if fields:
+        profile.save(update_fields=fields + ['updated_at'])
+    return {'success': True, 'profile': _agent_profile_dict(profile)}
+
+
+@router.post('/ai/agent/run', summary='Tam ajan döngüsü (triage + organize)')
+def agent_run(request: HttpRequest, data: AgentRunSchema):
+    account, password = _get_account_and_password(request)
+    if not account:
+        return {'success': False, 'message': 'Oturum yok'}
+    if not password:
+        return {'success': False, 'message': 'Oturum parolası yok.'}
+    from jir_core.session_secrets import encrypt_secret
+    from webmail.tasks import ai_agent_cycle_task
+
+    try:
+        ai_agent_cycle_task.delay(
+            account.id,
+            encrypt_secret(password),
+            triage=data.triage,
+            organize=data.organize,
+            digest=data.digest,
+        )
+        return {'success': True, 'queued': True, 'message': 'AI ajan arka planda çalışıyor.'}
+    except Exception:
+        from webmail.ai.agent import run_agent_cycle
+
+        result = run_agent_cycle(
+            account,
+            password,
+            triage=data.triage,
+            organize=data.organize,
+            digest=data.digest,
+        )
+        return result
+
+
+@router.post('/ai/triage/inbox', summary='Gelen kutusunu AI ile sınıflandır')
+def triage_inbox(request: HttpRequest, limit: int = 20):
+    account, password = _get_account_and_password(request)
+    if not account:
+        return {'success': False, 'message': 'Oturum yok'}
+    if not password:
+        return {'success': False, 'message': 'Oturum parolası yok.'}
+    from webmail.ai.agent import batch_triage_inbox
+
+    return batch_triage_inbox(account, password, limit=min(limit, 50))
+
+
+@router.post('/ai/organize/inbox', summary='Gelen kutusunu organize et')
+def organize_inbox_api(request: HttpRequest, autopilot: bool = False):
+    account, password = _get_account_and_password(request)
+    if not account:
+        return {'success': False, 'message': 'Oturum yok'}
+    if not password:
+        return {'success': False, 'message': 'Oturum parolası yok.'}
+    from webmail.ai.agent import organize_inbox
+
+    return organize_inbox(account, password, autopilot=autopilot)
+
+
+@router.get('/ai/digest', summary='Gelen kutusu brifingi')
+def get_digest(request: HttpRequest, refresh: bool = False):
+    account, password = _get_account_and_password(request)
+    if not account:
+        return {'success': False, 'message': 'Oturum yok'}
+    from webmail.ai.agent import generate_inbox_digest, get_or_create_agent_profile
+
+    profile = get_or_create_agent_profile(account)
+    if not refresh and profile.last_digest_text:
+        return {
+            'success': True,
+            'digest': profile.last_digest_text,
+            'generated_at': profile.last_digest_at.isoformat() if profile.last_digest_at else None,
+            'cached': True,
+        }
+    if not password:
+        return {'success': False, 'message': 'Oturum parolası yok.'}
+    return generate_inbox_digest(account, password)
+
+
+@router.get('/ai/rules', summary='Posta kuralları')
+def list_ai_rules(request: HttpRequest):
+    account, _ = _get_account_and_password(request)
+    if not account:
+        return {'success': False, 'message': 'Oturum yok'}
+    from webmail.models import MailAiRule
+
+    rows = MailAiRule.objects.filter(account=account).order_by('priority', 'id')
+    return {
+        'success': True,
+        'items': [
+            {
+                'id': r.id,
+                'name': r.name,
+                'enabled': r.enabled,
+                'priority': r.priority,
+                'match_from': r.match_from,
+                'match_subject': r.match_subject,
+                'match_category': r.match_category,
+                'action_type': r.action_type,
+                'action_target': r.action_target,
+                'created_by_ai': r.created_by_ai,
+            }
+            for r in rows
+        ],
+    }
+
+
+@router.post('/ai/rules', summary='Posta kuralı ekle')
+def create_ai_rule(request: HttpRequest, data: AiRuleSchema):
+    account, _ = _get_account_and_password(request)
+    if not account:
+        return {'success': False, 'message': 'Oturum yok'}
+    from webmail.models import MailAiRule
+
+    row = MailAiRule.objects.create(account=account, **data.dict())
+    return {'success': True, 'id': row.id}
+
+
+@router.patch('/ai/rules/{rule_id}', summary='Kural güncelle')
+def patch_ai_rule(request: HttpRequest, rule_id: int, data: AiRulePatchSchema):
+    account, _ = _get_account_and_password(request)
+    if not account:
+        return {'success': False, 'message': 'Oturum yok'}
+    from webmail.models import MailAiRule
+
+    row = MailAiRule.objects.filter(account=account, pk=rule_id).first()
+    if not row:
+        return {'success': False, 'message': 'Kural bulunamadı'}
+    for attr, val in data.dict(exclude_unset=True).items():
+        if val is not None:
+            setattr(row, attr, val)
+    row.save()
+    return {'success': True}
+
+
+@router.delete('/ai/rules/{rule_id}', summary='Kural sil')
+def delete_ai_rule(request: HttpRequest, rule_id: int):
+    account, _ = _get_account_and_password(request)
+    if not account:
+        return {'success': False, 'message': 'Oturum yok'}
+    from webmail.models import MailAiRule
+
+    n, _ = MailAiRule.objects.filter(account=account, pk=rule_id).delete()
+    return {'success': n > 0}
 
 
 def mail_stream(request: HttpRequest):
