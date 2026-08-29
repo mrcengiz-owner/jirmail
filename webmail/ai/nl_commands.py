@@ -66,6 +66,14 @@ _RE_AGENT = re.compile(
     r'(?:tam\s+döngü|tam\s+dongu|ajan(?:ı|i)?\s+çalıştır|full\s+agent|postalarımı\s+yönet)',
     re.I,
 )
+_RE_DIGEST = re.compile(
+    r'(?:'
+    r'bugünkü\s+özeti|bugünkü\s+özet|günün\s+özeti|günlük\s+özet|'
+    r'mailleri?\s+özetle|mail(?:leri|erini)?\s+özetle|özetler\s+misin|özetler\s+mısın|'
+    r'özeti\s+ver|özet\s+ver|özet\s+çıkar|brifing|digest'
+    r')',
+    re.I,
+)
 _RE_RULE = re.compile(
     r'(?P<sender>.+?)\s+(?:maillerini|mail(?:erini|leri)?)\s+'
     r'(?:her\s+zaman|hep|otomatik(?:\s+olarak)?|bundan\s+sonra)\s+'
@@ -285,6 +293,9 @@ def parse_nl_command(message: str, context: dict | None = None) -> dict[str, Any
     if _RE_ORGANIZE.search(text):
         return {'intent': 'organize_inbox'}
 
+    if _RE_DIGEST.search(text):
+        return {'intent': 'digest', 'refresh': 'yenile' in low or 'taze' in low}
+
     if _RE_TRIAGE.search(text) and 'özet' not in low:
         return {'intent': 'triage_inbox'}
 
@@ -407,6 +418,8 @@ def _default_reply(intent: str, action: dict, executed: dict) -> str:
         return f'{executed.get("triaged", 0)} mail sınıflandırıldı.'
     if intent == 'run_agent':
         return 'AI ajan döngüsü başlatıldı.'
+    if intent == 'digest':
+        return executed.get('digest') or executed.get('message') or 'Gelen kutusu özeti hazır.'
     if intent == 'create_folder':
         return f'Klasör oluşturuldu: {executed.get("folder") or action.get("name")}'
     if intent == 'move':

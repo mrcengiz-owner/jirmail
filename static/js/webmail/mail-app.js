@@ -1345,6 +1345,9 @@ document.addEventListener('alpine:init', function() {
                     if (d.executed) {
                         self.onAiExecuted(d.executed, d.action);
                     }
+                    if (d.action && d.action.intent === 'digest' && d.reply) {
+                        self.aiDigest = d.reply;
+                    }
                     if (d.action) {
                         self.handleAiAction(d.action, d.reply, d.executed);
                     }
@@ -1406,7 +1409,7 @@ document.addEventListener('alpine:init', function() {
 
                 var autoIntents = [
                     'move', 'archive', 'spam', 'mark_read', 'batch_move', 'create_folder',
-                    'create_rule', 'organize_inbox', 'run_agent', 'triage_inbox'
+                    'create_rule', 'organize_inbox', 'run_agent', 'triage_inbox', 'digest'
                 ];
                 if (autoIntents.indexOf(intent) >= 0) {
                     self.executeAiAction(action);

@@ -11,10 +11,37 @@ from django.utils import timezone
 from webmail.ai.client import chat_completion, sanitize_ai_text
 
 _GREETING = frozenset({'merhaba', 'selam', 'hey', 'hi', 'hello', 'günaydın', 'iyi günler'})
+# Türkçe ekler (özeti, özetle…) — \b kelime sınırı kullanma
 _DIGEST_PATTERN = re.compile(
-    r'\b(özet|digest|brifing|günün özeti|bugünkü özet|inbox özeti|postalarımın özeti)\b',
+    r'(?:'
+    r'bugünkü\s+özeti|bugünkü\s+özet|günün\s+özeti|günlük\s+özet|'
+    r'inbox\s+özeti|postalarımın\s+özeti|gelen\s+kutusu\s+özeti|'
+    r'mailleri?\s+özetle|mail(?:leri|erini)?\s+özetle|postaları\s+özetle|'
+    r'özetler\s+misin|özetler\s+mısın|özeti\s+ver|özet\s+ver|'
+    r'özet\s+çıkar|özet\s+yap|özetler\s+mi|brifing|digest|'
+    r'(?:ne\s+var|neler\s+var)\s+(?:gelen\s+kutusu|inbox)|'
+    r'(?:gelen\s+kutusu|inbox)(?:\s+|\s*için\s+)özet'
+    r')',
     re.I,
 )
+
+
+def _is_digest_request(message: str) -> bool:
+    return bool(_DIGEST_PATTERN.search(message or ''))
+
+
+def _is_pure_greeting(message: str) -> bool:
+    """Yalnızca selam — özet/komut içermeyen kısa mesaj."""
+    text = (message or '').strip()
+    if not text:
+        return False
+    if _is_digest_request(text):
+        return False
+    low = re.sub(r'[^\w\s]', '', text.lower()).strip()
+    if low in _GREETING:
+        return True
+    words = low.split()
+    return len(words) <= 2 and words[0] in _GREETING and len(words) == 1
 
 _AGENT_SYSTEM_SUFFIX = (
     '\n\nSen Jîr-Mail posta ajanısın. Gelen/giden postayı analiz eder, sınıflandırır, '
@@ -23,7 +50,7 @@ _AGENT_SYSTEM_SUFFIX = (
     'Yanıtını JSON bloğu ile bitir:\n'
     '```json\n'
     '{"intent":"chat|send_mail|schedule_mail|reply|analyze|archive|spam|move|'
-    'mark_read|organize_inbox|run_agent|create_rule",'
+    'mark_read|organize_inbox|run_agent|create_rule|digest|triage_inbox|batch_move",'
     '"to":"","subject":"","body":"","send_at":"","summary":"",'
     '"uid":0,"folder":"INBOX","move_to":"","match_from":"","match_subject":"",'
     '"rule_name":"","action_type":"move_folder"}\n'
@@ -32,6 +59,7 @@ _AGENT_SYSTEM_SUFFIX = (
     '- "paribu maillerini finans klasörüne taşı" → intent batch_move, match_from paribu, move_to finans\n'
     '- "bunu arşivle" → intent archive (seçili mail uid bağlamdan)\n'
     '- "gelen kutusunu düzenle" → intent organize_inbox\n'
+    '- "bugünkü özeti ver" / "mailleri özetle" → intent digest\n'
     'move_to: hedef klasör etiketi veya IMAP adı. batch_move: gönderene göre toplu taşıma.'
 )
 
@@ -95,36 +123,34 @@ def _fallback_reply(user_message: str) -> str:
 
 
 def _try_digest_reply(account, user_message: str, *, password: str = '') -> dict[str, Any] | None:
-    if not _DIGEST_PATTERN.search(user_message or ''):
+    if not _is_digest_request(user_message):
         return None
-    from webmail.ai.agent import generate_inbox_digest, get_or_create_agent_profile
+    from webmail.ai.agent import build_inbox_digest_reply
 
-    if password:
-        dig = generate_inbox_digest(account, password)
-        if dig.get('success'):
-            text = sanitize_ai_text(dig.get('digest') or '')
-            if text:
-                return {
-                    'success': True,
-                    'reply': text,
-                    'action': {'intent': 'chat'},
-                    'model': '',
-                }
-    profile = get_or_create_agent_profile(account)
-    cached = sanitize_ai_text(profile.last_digest_text or '')
-    if cached:
+    out = build_inbox_digest_reply(account, password=password or '')
+    reply = sanitize_ai_text(out.get('digest') or out.get('reply') or '')
+    if not reply and out.get('success'):
+        reply = out.get('message') or ''
+    if reply:
         return {
             'success': True,
-            'reply': cached,
-            'action': {'intent': 'chat'},
+            'reply': reply,
+            'action': {'intent': 'digest'},
+            'executed': out if out.get('success') else None,
             'model': '',
         }
-    return None
+    err = out.get('message') or 'Özet oluşturulamadı. Gelen kutusunu senkronize edip tekrar deneyin.'
+    return {
+        'success': True,
+        'reply': err,
+        'action': {'intent': 'digest'},
+        'model': '',
+    }
 
 
 _AUTO_EXECUTE = frozenset({
     'organize_inbox', 'run_agent', 'triage_inbox', 'batch_move', 'create_folder',
-    'archive', 'spam', 'mark_read', 'move', 'create_rule',
+    'archive', 'spam', 'mark_read', 'move', 'create_rule', 'digest',
 })
 
 
@@ -183,8 +209,7 @@ def ai_chat(
     if digest_out:
         return digest_out
 
-    low = (user_message or '').strip().lower()
-    if low in _GREETING:
+    if _is_pure_greeting(user_message):
         return {
             'success': True,
             'reply': _fallback_reply(user_message),
@@ -393,6 +418,20 @@ def execute_ai_action(account, password: str, action: dict[str, Any]) -> dict[st
         if out.get('success'):
             out['message'] = f'{out.get("triaged", 0)} mail sınıflandırıldı.'
         return out
+
+    if intent == 'digest':
+        from webmail.ai.agent import build_inbox_digest_reply
+
+        out = build_inbox_digest_reply(account, password=password, force_refresh=bool(action.get('refresh')))
+        text = sanitize_ai_text(out.get('digest') or out.get('reply') or '')
+        if text:
+            return {
+                'success': True,
+                'intent': intent,
+                'digest': text,
+                'message': text,
+            }
+        return {'success': False, 'message': out.get('message') or 'Özet oluşturulamadı.'}
 
     if intent == 'create_folder':
         from webmail.imap_client import create_imap_folder, folder_display_name

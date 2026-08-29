@@ -410,6 +410,89 @@ def organize_inbox(account, password: str, *, limit: int = 25, autopilot: bool =
     }
 
 
+def _local_digest_text(rows, urgent_lines: list, needs_reply_lines: list) -> str:
+    """AI yanıt vermezse yerel özet."""
+    if not rows:
+        return 'Gelen kutunuz boş — özetlenecek mail yok. Senkronize butonuna basıp tekrar deneyin.'
+    parts = [f'Gelen kutusunda {len(rows)} mesaj var.', '']
+    if urgent_lines:
+        parts.append('Acil / yüksek öncelik:')
+        for line in urgent_lines[:8]:
+            parts.append('• ' + line.lstrip('- '))
+        parts.append('')
+    if needs_reply_lines:
+        parts.append('Yanıt bekleyen:')
+        for line in needs_reply_lines[:8]:
+            parts.append('• ' + line.lstrip('- '))
+        parts.append('')
+    parts.append('Son mesajlar:')
+    for r in rows[:12]:
+        subj = r.subject or '(konu yok)'
+        frm = r.from_addr or '?'
+        parts.append(f'• {subj} ← {frm}')
+    return '\n'.join(parts)
+
+
+def build_inbox_digest_reply(account, *, password: str = '', force_refresh: bool = False) -> dict[str, Any]:
+    """Özet isteği — önbellek, AI veya yerel liste."""
+    from webmail.models import MailFolder, MailMessageCache
+
+    profile = get_or_create_agent_profile(account)
+    if not force_refresh and profile.last_digest_text:
+        cached = sanitize_ai_text(profile.last_digest_text)
+        if cached:
+            return {
+                'success': True,
+                'digest': cached,
+                'reply': cached,
+                'cached': True,
+            }
+
+    inbox = MailFolder.objects.filter(account=account, name__iexact='INBOX').first()
+    if not inbox:
+        return {'success': False, 'message': 'Gelen kutusu henüz senkronize edilmemiş. Yenile butonuna basın.'}
+
+    rows = list(
+        MailMessageCache.objects.filter(folder=inbox, is_deleted=False).order_by('-date')[:40]
+    )
+    urgent = []
+    needs_reply = []
+    for r in rows:
+        ai = r.ai_meta if isinstance(r.ai_meta, dict) else {}
+        pri = ai.get('priority') or 'normal'
+        line = f"- [{pri}] {r.subject or '(konu yok)'} ← {r.from_addr or '?'}"
+        if ai.get('summary'):
+            line += f" — {ai['summary'][:120]}"
+        if pri in ('urgent', 'high'):
+            urgent.append(line)
+        if ai.get('needs_reply'):
+            needs_reply.append(line)
+
+    if password and rows:
+        ai_out = generate_inbox_digest(account, password)
+        if ai_out.get('success'):
+            text = sanitize_ai_text(ai_out.get('digest') or '')
+            if text:
+                return {**ai_out, 'reply': text}
+        local = _local_digest_text(rows, urgent, needs_reply)
+        return {
+            'success': True,
+            'digest': local,
+            'reply': local,
+            'stats': ai_out.get('stats') if ai_out.get('success') else {'total': len(rows)},
+            'fallback': True,
+        }
+
+    local = _local_digest_text(rows, urgent, needs_reply)
+    return {
+        'success': True,
+        'digest': local,
+        'reply': local,
+        'stats': {'total': len(rows)},
+        'fallback': True,
+    }
+
+
 def generate_inbox_digest(account, password: str) -> dict[str, Any]:
     from webmail.models import MailFolder, MailMessageCache
 
@@ -463,12 +546,15 @@ def generate_inbox_digest(account, password: str) -> dict[str, Any]:
 
     profile = get_or_create_agent_profile(account)
     profile.last_digest_at = timezone.now()
-    profile.last_digest_text = sanitize_ai_text(out['content'])[:12000]
+    text = sanitize_ai_text(out['content'])
+    if not text:
+        text = _local_digest_text(rows, urgent, needs_reply)
+    profile.last_digest_text = text[:12000]
     profile.save(update_fields=['last_digest_at', 'last_digest_text'])
 
     return {
         'success': True,
-        'digest': sanitize_ai_text(out['content']),
+        'digest': text,
         'stats': {
             'total': len(rows),
             'urgent': len(urgent),
