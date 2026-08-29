@@ -86,8 +86,12 @@ class MailDomain(models.Model):
         self.dkim_private_key = private_key
         self.dkim_public_key = public_key
         self.dkim_record = f"{selector}._domainkey.{self.name} IN TXT \"v=DKIM1; k=rsa; p={public_key_dns}\""
-        self.spf_record = f"v=spf1 mx a:mail.{self.name} -all"
-        self.dmarc_record = f"v=DMARC1; p=quarantine; rua=mailto:dmarc@{self.name}"
+        try:
+            from webmail.send_validation import build_spf_record
+            self.spf_record = build_spf_record(f'mail.{self.name}')
+        except Exception:
+            self.spf_record = f"v=spf1 mx a:mail.{self.name} -all"
+        self.dmarc_record = f"v=DMARC1; p=none; rua=mailto:dmarc@{self.name}; adkim=r; aspf=r"
         self.dkim_enabled = True
         self.verification_status = 'pending'
         self.save()

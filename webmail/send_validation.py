@@ -1,5 +1,7 @@
-"""Gönderim öncesi alıcı ve rol doğrulaması."""
+"""Gönderim öncesi alıcı doğrulama ve teslim edilebilirlik uyarıları."""
 from __future__ import annotations
+
+import os
 
 from django.conf import settings
 
@@ -7,6 +9,113 @@ from core.mail_domains import hosted_domain_names, is_reserved_public_domain, no
 from core.models import MailAccount, MailRole
 from webmail.recipients import parse_recipient_list
 
+
+def _relay_spf_includes() -> list[str]:
+    """SMTP relay kullanılıyorsa SPF include satırları."""
+    relay = (
+        (getattr(settings, 'SMTP_RELAYHOST', '') or '')
+        or os.getenv('SMTP_RELAYHOST', '')
+        or ''
+    ).lower()
+    host = (
+        (getattr(settings, 'SMTP_RELAY_HOST', '') or '')
+        or os.getenv('SMTP_RELAY_HOST', '')
+        or ''
+    ).lower()
+    blob = f'{relay} {host}'
+    extra = (getattr(settings, 'SPF_EXTRA_INCLUDE', '') or os.getenv('SPF_EXTRA_INCLUDE', '') or '').strip()
+    includes: list[str] = []
+    if extra:
+        includes.extend(x.strip() for x in extra.split(',') if x.strip())
+    if 'sendgrid' in blob:
+        includes.append('include:sendgrid.net')
+    if 'mailgun' in blob:
+        includes.append('include:mailgun.org')
+    if 'amazonaws' in blob or 'ses' in blob:
+        includes.append('include:amazonses.com')
+    if 'brevo' in blob or 'sendinblue' in blob:
+        includes.append('include:spf.brevo.com')
+    # Tekrarları kaldır
+    seen = set()
+    out = []
+    for inc in includes:
+        if inc not in seen:
+            seen.add(inc)
+            out.append(inc)
+    return out
+
+
+def build_spf_record(mail_host: str) -> str:
+    """SPF TXT — relay varsa include ekler."""
+    parts = ['v=spf1', 'mx', f'a:{mail_host}']
+    parts.extend(_relay_spf_includes())
+    parts.append('-all')
+    return ' '.join(parts)
+
+
+def check_outbound_deliverability(account) -> dict:
+    """Gönderim öncesi spam/gelen kutusu riski uyarıları."""
+    warnings: list[str] = []
+    block = False
+    block_reason = ''
+
+    domain = getattr(account, 'domain', None)
+    if not domain:
+        warnings.append('Hesap bir domain ile ilişkilendirilmemiş — DKIM/SPF uygulanamaz.')
+        return {'ok': True, 'warnings': warnings, 'block': False, 'block_reason': ''}
+
+    from webmail.dkim_sign import dkim_sign_status
+
+    dkim = dkim_sign_status(account)
+    if not dkim.get('configured'):
+        warnings.append(
+            'DKIM etkin değil — Panel → Domainler → DNS kayıtlarından DKIM anahtarı üretin '
+            've TXT kaydını yayınlayın.'
+        )
+    elif not dkim.get('verified_dns'):
+        warnings.append(
+            'DNS doğrulanmadı — SPF, DKIM ve DMARC TXT kayıtlarını DNS sağlayıcınıza ekleyip '
+            'Panelden “Doğrula” çalıştırın. Aksi halde Gmail/Outlook spam klasörüne atabilir.'
+        )
+
+    if (getattr(settings, 'OUTBOUND_BLOCK_UNVERIFIED_DNS', False)
+            and dkim.get('configured') and not dkim.get('verified_dns')):
+        block = True
+        block_reason = (
+            'Domain DNS kayıtları doğrulanmadan dış gönderim yapılamaz. '
+            'SPF, DKIM ve DMARC TXT kayıtlarını yayınlayın.'
+        )
+
+    relay = (getattr(settings, 'SMTP_RELAYHOST', '') or os.getenv('SMTP_RELAYHOST', '') or '').strip()
+    relay_host = (getattr(settings, 'SMTP_RELAY_HOST', '') or os.getenv('SMTP_RELAY_HOST', '') or '').strip()
+    if relay or relay_host:
+        includes = _relay_spf_includes()
+        if not includes and not (getattr(settings, 'SPF_EXTRA_INCLUDE', '') or '').strip():
+            warnings.append(
+                'SMTP relay kullanılıyor — SPF kaydına relay sağlayıcı include ekleyin '
+                '(ör. include:sendgrid.net). .env → SPF_EXTRA_INCLUDE=include:sendgrid.net'
+            )
+
+    spf = (getattr(domain, 'spf_record', '') or '').strip()
+    if spf.endswith('-all') and relay and 'include:' not in spf:
+        warnings.append(
+            'SPF kaydı relay IP’sini kapsamıyor olabilir — alıcı sunucular SPF fail verebilir.'
+        )
+
+    dmarc = (getattr(domain, 'dmarc_record', '') or '').strip()
+    if 'p=reject' in dmarc or 'p=quarantine' in dmarc:
+        if not dkim.get('verified_dns'):
+            warnings.append(
+                'DMARC politikası sıkı (quarantine/reject) — DNS doğrulanmadan teslimat spam’e düşer.'
+            )
+
+    return {
+        'ok': not block,
+        'warnings': warnings,
+        'block': block,
+        'block_reason': block_reason,
+        'dkim': dkim,
+    }
 
 def active_local_domains() -> set[str]:
     """Bu sunucuda posta kutusu barındırılan domainler (hesabı olanlar)."""
@@ -133,6 +242,16 @@ def validate_outbound_recipients(account, raw_to: str, raw_cc: str = '', raw_bcc
             ),
             'invalid': invalid,
             'warnings': [],
+        }
+
+    deliverability = check_outbound_deliverability(account)
+    warnings.extend(deliverability.get('warnings') or [])
+    if deliverability.get('block'):
+        return {
+            'ok': False,
+            'message': deliverability.get('block_reason') or 'DNS doğrulanmadı.',
+            'invalid': [],
+            'warnings': warnings,
         }
 
     return {'ok': True, 'message': '', 'invalid': [], 'warnings': warnings}

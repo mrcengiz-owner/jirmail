@@ -91,10 +91,14 @@ def ensure_domain_dkim(domain_name: str):
         domain_obj.generate_dkim_keys()
     elif not domain_obj.spf_record or not domain_obj.dmarc_record:
         mail_host = f'mail.{domain_obj.name}'
-        domain_obj.spf_record = domain_obj.spf_record or f'v=spf1 mx a:{mail_host} -all'
+        try:
+            from webmail.send_validation import build_spf_record
+            domain_obj.spf_record = domain_obj.spf_record or build_spf_record(mail_host)
+        except Exception:
+            domain_obj.spf_record = domain_obj.spf_record or f'v=spf1 mx a:{mail_host} -all'
         domain_obj.dmarc_record = (
             domain_obj.dmarc_record
-            or f'v=DMARC1; p=quarantine; rua=mailto:dmarc@{domain_obj.name}'
+            or f'v=DMARC1; p=none; rua=mailto:dmarc@{domain_obj.name}; adkim=r; aspf=r'
         )
         domain_obj.save(update_fields=['spf_record', 'dmarc_record'])
     return domain_obj
@@ -134,8 +138,10 @@ def build_mail_dns_records(
         except Exception:
             domain_obj = None
 
-    spf = f'v=spf1 mx a:{mail_host} -all'
-    dmarc = f'v=DMARC1; p=quarantine; rua=mailto:dmarc@{domain}'
+    from webmail.send_validation import build_spf_record
+
+    spf = build_spf_record(mail_host)
+    dmarc = f'v=DMARC1; p=none; rua=mailto:dmarc@{domain}; adkim=r; aspf=r'
     if domain_obj:
         # Model ile senkron tut (a:mail.host tercih edilir)
         if not domain_obj.spf_record or 'v=spf1' in domain_obj.spf_record:

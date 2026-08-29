@@ -12,7 +12,7 @@ import ssl
 
 logger = logging.getLogger(__name__)
 from email.message import EmailMessage
-from email.utils import formataddr, make_msgid
+from email.utils import formataddr, formatdate, make_msgid
 
 from django.conf import settings
 
@@ -89,19 +89,32 @@ def send_mail(account, password: str, *, to: list[str] | str, subject: str, body
         bcc_addrs = parse_recipient_list(', '.join(bcc)) if bcc else []
 
         msg = EmailMessage()
-        local_part = account.email.split('@')[0] if '@' in account.email else account.email
-        msg['From'] = formataddr((local_part, account.email))
+        display = (getattr(account, 'username', '') or '').strip()
+        if not display and '@' in account.email:
+            display = account.email.split('@')[0].replace('.', ' ').replace('_', ' ').title()
+        msg['From'] = formataddr((display or account.email, account.email))
         msg['To'] = ', '.join(to_addrs)
         if cc_addrs:
             msg['Cc'] = ', '.join(cc_addrs)
-        if bcc_addrs:
-            msg['Bcc'] = ', '.join(bcc_addrs)
+        # Bcc yalnızca SMTP envelope'da — başlığa yazma (gizlilik + spam skoru)
         msg['Subject'] = subject or ''
         msg['Message-ID'] = make_msgid(domain=_message_id_domain(account))
+        msg['Date'] = formatdate(localtime=True)
 
-        msg.set_content(body_text or '')
+        body = body_text or ''
+        signature = (getattr(account, 'signature', '') or '').strip()
+        if signature and signature not in body:
+            body = f'{body.rstrip()}\n\n--\n{signature}' if body.strip() else signature
+
         if body_html:
-            msg.add_alternative(body_html, subtype='html')
+            html = body_html
+            if signature and signature not in html:
+                sig_html = signature.replace('\n', '<br>\n')
+                html = f'{html}<br><br>--<br>{sig_html}'
+            msg.set_content(body)
+            msg.add_alternative(html, subtype='html')
+        else:
+            msg.set_content(body)
 
         for att in (attachments or []):
             content = att.get('content', b'')
@@ -120,7 +133,18 @@ def send_mail(account, password: str, *, to: list[str] | str, subject: str, body
 
         raw_bytes = msg.as_bytes()
         from webmail.dkim_sign import sign_message_bytes
-        raw_bytes = sign_message_bytes(raw_bytes, account)
+
+        raw_bytes, dkim_status = sign_message_bytes(raw_bytes, account)
+        if dkim_status.get('required') and not dkim_status.get('signed'):
+            reason = dkim_status.get('reason') or 'DKIM imzalanamadı'
+            return {
+                'success': False,
+                'message': (
+                    f'Gönderim iptal: {reason}. '
+                    'Panel → Domainler → DNS kayıtlarını doğrulayın (SPF, DKIM, DMARC).'
+                ),
+                'dkim': dkim_status,
+            }
     except Exception as exc:
         logger.exception('send_mail prepare')
         return {'success': False, 'message': f'Mesaj hazırlanamadı: {exc}'}
@@ -135,7 +159,13 @@ def send_mail(account, password: str, *, to: list[str] | str, subject: str, body
                 recipients=recipients,
             )
         # raw_bytes yalnızca IMAP Sent append için; API JSON yanıtına eklenmez (bytes → 500).
-        out = {'success': True, 'message_id': msg['Message-ID']}
+        out = {'success': True, 'message_id': msg['Message-ID'], 'dkim': dkim_status}
+        if dkim_status.get('required') and dkim_status.get('signed'):
+            out['message'] = 'Gönderildi (DKIM imzalı).'
+        elif not dkim_status.get('required'):
+            out.setdefault('warnings', []).append(
+                'DKIM yapılandırılmadı — alıcı spam klasörüne düşebilir. DNS kayıtlarını tamamlayın.'
+            )
         if password:
             try:
                 from webmail.imap_client import append_message_to_sent, sync_folder_metadata
