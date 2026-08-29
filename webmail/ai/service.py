@@ -8,26 +8,15 @@ from typing import Any
 
 from django.utils import timezone
 
-from webmail.ai.client import chat_completion, sanitize_ai_text
+from webmail.ai.client import chat_completion, sanitize_ai_text, is_meaningful_ai_text
 
 _GREETING = frozenset({'merhaba', 'selam', 'hey', 'hi', 'hello', 'günaydın', 'iyi günler'})
-# Türkçe ekler (özeti, özetle…) — \b kelime sınırı kullanma
-_DIGEST_PATTERN = re.compile(
-    r'(?:'
-    r'bugünkü\s+özeti|bugünkü\s+özet|günün\s+özeti|günlük\s+özet|'
-    r'inbox\s+özeti|postalarımın\s+özeti|gelen\s+kutusu\s+özeti|'
-    r'mailleri?\s+özetle|mail(?:leri|erini)?\s+özetle|postaları\s+özetle|'
-    r'özetler\s+misin|özetler\s+mısın|özeti\s+ver|özet\s+ver|'
-    r'özet\s+çıkar|özet\s+yap|özetler\s+mi|brifing|digest|'
-    r'(?:ne\s+var|neler\s+var)\s+(?:gelen\s+kutusu|inbox)|'
-    r'(?:gelen\s+kutusu|inbox)(?:\s+|\s*için\s+)özet'
-    r')',
-    re.I,
-)
 
 
 def _is_digest_request(message: str) -> bool:
-    return bool(_DIGEST_PATTERN.search(message or ''))
+    from webmail.ai.mail_summary import is_inbox_digest_request
+
+    return is_inbox_digest_request(message)
 
 
 def _is_pure_greeting(message: str) -> bool:
@@ -59,7 +48,8 @@ _AGENT_SYSTEM_SUFFIX = (
     '- "paribu maillerini finans klasörüne taşı" → intent batch_move, match_from paribu, move_to finans\n'
     '- "bunu arşivle" → intent archive (seçili mail uid bağlamdan)\n'
     '- "gelen kutusunu düzenle" → intent organize_inbox\n'
-    '- "bugünkü özeti ver" / "mailleri özetle" → intent digest\n'
+    '- "bugünkü özeti ver" / "gelen kutusu özeti" → intent digest\n'
+    '- "X mailini özetle" / "içeriğin özetini getir" → intent analyze (tek mail)\n'
     'move_to: hedef klasör etiketi veya IMAP adı. batch_move: gönderene göre toplu taşıma.'
 )
 
@@ -129,6 +119,8 @@ def _try_digest_reply(account, user_message: str, *, password: str = '') -> dict
 
     out = build_inbox_digest_reply(account, password=password or '', force_refresh=True)
     reply = sanitize_ai_text(out.get('digest') or out.get('reply') or '')
+    if reply and not is_meaningful_ai_text(reply):
+        reply = ''
     if not reply and out.get('success'):
         reply = out.get('message') or ''
     if reply:
@@ -197,6 +189,7 @@ def ai_chat(
     *,
     context: dict | None = None,
     password: str = '',
+    chat_history: list[dict] | None = None,
 ) -> dict[str, Any]:
     cfg = resolve_ai_config(account)
     if not cfg:
@@ -204,6 +197,20 @@ def ai_chat(
             'success': False,
             'message': 'AI bu hesap için kapalı veya API anahtarı yok (domain ayarlarını kontrol edin).',
         }
+
+    hist = list(chat_history or [])
+
+    from webmail.ai.mail_summary import try_mail_summary_reply
+
+    mail_summary_out = try_mail_summary_reply(
+        account,
+        user_message,
+        context=context,
+        password=password,
+        chat_history=hist,
+    )
+    if mail_summary_out:
+        return mail_summary_out
 
     digest_out = _try_digest_reply(account, user_message, password=password)
     if digest_out:
@@ -250,10 +257,13 @@ def ai_chat(
     if ctx_block:
         system += '\n\n--- Bağlam ---\n' + ctx_block
 
-    messages = [
-        {'role': 'system', 'content': system},
-        {'role': 'user', 'content': user_message},
-    ]
+    messages = [{'role': 'system', 'content': system}]
+    for turn in hist[-10:]:
+        role = (turn.get('role') or '').lower()
+        text = sanitize_ai_text(turn.get('text') or turn.get('content') or '')
+        if role in ('user', 'assistant') and text:
+            messages.append({'role': role, 'content': text[:2500]})
+    messages.append({'role': 'user', 'content': user_message})
     try:
         out = chat_completion(
             api_key=cfg['api_key'],
@@ -428,7 +438,7 @@ def execute_ai_action(account, password: str, action: dict[str, Any]) -> dict[st
             force_refresh=bool(action.get('refresh')),
         )
         text = sanitize_ai_text(out.get('digest') or out.get('reply') or '')
-        if text:
+        if text and is_meaningful_ai_text(text):
             return {
                 'success': True,
                 'intent': intent,

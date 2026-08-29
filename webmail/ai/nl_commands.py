@@ -69,8 +69,8 @@ _RE_AGENT = re.compile(
 _RE_DIGEST = re.compile(
     r'(?:'
     r'bugünkü\s+özeti|bugünkü\s+özet|günün\s+özeti|günlük\s+özet|'
-    r'mailleri?\s+özetle|mail(?:leri|erini)?\s+özetle|özetler\s+misin|özetler\s+mısın|'
-    r'özeti\s+ver|özet\s+ver|özet\s+çıkar|brifing|digest'
+    r'(?:tüm\s+)?mailleri?\s+özetle|(?:tüm\s+)?mail(?:leri|erini)?\s+özetle|'
+    r'özeti\s+ver|özet\s+ver|brifing|digest'
     r')',
     re.I,
 )
@@ -294,7 +294,10 @@ def parse_nl_command(message: str, context: dict | None = None) -> dict[str, Any
         return {'intent': 'organize_inbox'}
 
     if _RE_DIGEST.search(text):
-        return {'intent': 'digest', 'refresh': True}
+        from webmail.ai.mail_summary import is_mail_summary_request
+
+        if not is_mail_summary_request(text):
+            return {'intent': 'digest', 'refresh': True}
 
     if _RE_TRIAGE.search(text) and 'özet' not in low:
         return {'intent': 'triage_inbox'}

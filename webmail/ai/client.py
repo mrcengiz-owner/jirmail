@@ -16,8 +16,16 @@ _SAFETY_LINE = re.compile(
     r'^(user\s+)?safety\s*:\s*(safe|unsafe|moderate|blocked).*$',
     re.I,
 )
+_SAFETY_CATEGORIES = re.compile(
+    r'^safety\s+categories?\s*:.*$',
+    re.I,
+)
 _META_LINE = re.compile(
-    r'^(moderation|content.?filter|classification)\s*:\s*.+$',
+    r'^(moderation|content.?filter|classification|safety)\s*[:].*$',
+    re.I,
+)
+_GARBAGE_LINE = re.compile(
+    r'^(pii\s*/?\s*privacy|privacy\s*/?\s*pii|harmful|violence|sexual|hate)\s*\.?$',
     re.I,
 )
 
@@ -50,10 +58,36 @@ def sanitize_ai_text(text: str) -> str:
             continue
         if _SAFETY_LINE.match(stripped):
             continue
+        if _SAFETY_CATEGORIES.match(stripped):
+            continue
         if _META_LINE.match(stripped):
             continue
+        if _GARBAGE_LINE.match(stripped):
+            continue
+        if re.match(r'^safety\s', stripped, re.I) and ':' in stripped:
+            continue
         lines.append(line)
-    return '\n'.join(lines).strip()
+    out = '\n'.join(lines).strip()
+    out = re.sub(r'\bSafety Categories:\s*PII/Privacy\b', '', out, flags=re.I).strip()
+    return out
+
+
+def is_meaningful_ai_text(text: str, *, min_len: int = 24) -> bool:
+    """Yanıt yalnızca moderasyon/güvenlik etiketlerinden mi oluşuyor?"""
+    cleaned = sanitize_ai_text(text)
+    if not cleaned or len(cleaned) < min_len:
+        return False
+    low = cleaned.lower()
+    junk_markers = (
+        'safety categories',
+        'pii/privacy',
+        'user safety',
+        'content filter',
+        'moderation:',
+    )
+    if any(m in low for m in junk_markers) and len(cleaned) < 80:
+        return False
+    return True
 
 
 def chat_completion(

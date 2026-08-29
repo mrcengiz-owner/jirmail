@@ -1323,6 +1323,28 @@ document.addEventListener('alpine:init', function() {
                 this.sendAiMessage();
             },
 
+            aiIntentLabel: function(intent) {
+                var map = {
+                    digest: 'Özet',
+                    organize_inbox: 'Düzenle',
+                    triage_inbox: 'Sınıflandır',
+                    run_agent: 'Ajan',
+                    analyze: 'Mail özeti',
+                    reply: 'Yanıt',
+                    send_mail: 'Gönder',
+                    batch_move: 'Taşı',
+                    create_folder: 'Klasör',
+                    create_rule: 'Kural',
+                    archive: 'Arşiv',
+                    spam: 'Spam',
+                    mark_read: 'Okundu',
+                    move: 'Taşı',
+                    schedule_mail: 'Zamanla'
+                };
+                var key = (intent || '').toLowerCase();
+                return map[key] || intent || '';
+            },
+
             sendAiMessage: function() {
                 var self = this;
                 var msg = (self.aiInput || '').trim();
@@ -1334,7 +1356,10 @@ document.addEventListener('alpine:init', function() {
                 self.aiMessages.push({ role: 'user', text: msg });
                 self.aiInput = '';
                 self.aiLoading = true;
-                var body = Object.assign({ message: msg }, self.aiContextPayload());
+                var history = (self.aiMessages || []).slice(-12).map(function(m) {
+                    return { role: m.role, text: m.text || '' };
+                });
+                var body = Object.assign({ message: msg, chat_history: history }, self.aiContextPayload());
                 WmApi.json('/api/mail/ai/chat', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -1697,6 +1722,62 @@ document.addEventListener('alpine:init', function() {
                     return name + ' <' + addr + '>';
                 }
                 return addr || name || 'Bilinmeyen';
+            },
+
+            fromName: function(mail) {
+                if (!mail) return 'Bilinmeyen';
+                if (mail.from_name) return mail.from_name;
+                var addr = mail.from_addr || mail.from || '';
+                if (addr.indexOf('@') >= 0) {
+                    var local = addr.split('@')[0];
+                    return local.replace(/[._-]+/g, ' ').replace(/\b\w/g, function(c) {
+                        return c.toUpperCase();
+                    }) || addr;
+                }
+                return addr || 'Bilinmeyen';
+            },
+
+            fromEmail: function(mail) {
+                if (!mail) return '';
+                return mail.from_addr || mail.from || '';
+            },
+
+            isBodyLoading: function(mail) {
+                return !!(mail && mail.uid > 0 && !mail.bodyLoaded);
+            },
+
+            hasMailBody: function(mail) {
+                if (!mail || !mail.bodyLoaded) return false;
+                var html = mail.body || '';
+                if (!String(html).trim()) return false;
+                var tmp = document.createElement('div');
+                tmp.innerHTML = html;
+                var text = (tmp.innerText || tmp.textContent || '').replace(/\s+/g, ' ').trim();
+                if (text.length > 0) return true;
+                return !!tmp.querySelector('img, table, video, iframe');
+            },
+
+            attachmentKind: function(filename) {
+                var ext = String(filename || '').split('.').pop().toLowerCase();
+                if (['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'bmp', 'heic'].indexOf(ext) >= 0) return 'image';
+                if (ext === 'pdf') return 'pdf';
+                if (['doc', 'docx', 'odt', 'rtf', 'txt'].indexOf(ext) >= 0) return 'doc';
+                if (['xls', 'xlsx', 'csv', 'ods'].indexOf(ext) >= 0) return 'sheet';
+                if (['zip', 'rar', '7z', 'tar', 'gz'].indexOf(ext) >= 0) return 'archive';
+                return 'file';
+            },
+
+            attachmentIcon: function(filename) {
+                var kind = this.attachmentKind(filename);
+                var map = {
+                    image: 'image',
+                    pdf: 'picture_as_pdf',
+                    doc: 'description',
+                    sheet: 'table_chart',
+                    archive: 'folder_zip',
+                    file: 'attach_file'
+                };
+                return map[kind] || 'attach_file';
             },
 
             formatDate: function(iso) {

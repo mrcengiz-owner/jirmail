@@ -167,72 +167,114 @@
         </div>
 
         <div class="wm-read-scroll">
-          <article class="wm-read-article">
-            <h1 class="wm-read-subject" x-text="selectedMail.subject"></h1>
+          <div class="wm-read-canvas">
+            <article class="wm-read-sheet">
+              <header class="wm-read-header">
+                <div class="wm-read-header__top">
+                  <h1 class="wm-read-subject" x-text="selectedMail.subject || '(konu yok)'"></h1>
+                  <time class="wm-read-header__date" x-text="formatDetailDate(selectedMail.date)"></time>
+                </div>
 
-            <div x-show="selectedMail.ai_meta && selectedMail.ai_meta.summary" class="wm-read-card wm-ai-read-banner">
-              <p class="font-semibold mb-1 flex items-center gap-2" style="color:var(--wm-brand);">
-                <span class="material-symbols-outlined text-[18px]">auto_awesome</span>
-                AI özeti
-              </p>
-              <p x-text="selectedMail.ai_meta.summary"></p>
-              <p class="text-xs mt-2 opacity-70" x-show="selectedMail.ai_meta.needs_reply">↳ Yanıt önerilir</p>
-            </div>
+                <div class="wm-read-meta">
+                  <div class="wm-read-meta__avatar"
+                       :style="'background:' + avatarColor(selectedMail.from)"
+                       x-text="initials(selectedMail.from)"></div>
+                  <div class="wm-read-meta__info">
+                    <div class="wm-read-meta__name" x-text="fromName(selectedMail)"></div>
+                    <div class="wm-read-meta__email" x-text="fromEmail(selectedMail)"></div>
+                  </div>
+                </div>
+              </header>
 
-            <div x-show="aiEnabled && (aiReplyDraft || (selectedMail.ai_meta && selectedMail.ai_meta.reply_draft))" class="wm-read-card wm-ai-reply-banner">
-              <p class="font-semibold mb-2 flex items-center gap-2" style="color:#2e7d32;">
-                <span class="material-symbols-outlined text-[18px]">reply</span>
-                AI yanıt taslağı
-              </p>
-              <p class="whitespace-pre-wrap mb-3" x-text="aiReplyDraft ? aiReplyDraft.body : (selectedMail.ai_meta && selectedMail.ai_meta.reply_draft)"></p>
-              <div class="flex flex-wrap gap-2">
-                <button type="button" class="wm-inbox-btn" @click="openReplyDraftInCompose()">Düzenle</button>
-                <button type="button" class="wm-sb-compose" style="margin:0;width:auto;" @click="sendAiReplyNow()">Gönder</button>
-                <button type="button" class="wm-inbox-btn" @click="generateAiReply('')" :disabled="aiReplyLoading">Yeniden üret</button>
+              <div x-show="selectedMail.ai_meta && selectedMail.ai_meta.summary" class="wm-read-card wm-ai-read-banner">
+                <p class="font-semibold mb-1 flex items-center gap-2" style="color:var(--wm-brand);">
+                  <span class="material-symbols-outlined text-[18px]">auto_awesome</span>
+                  AI özeti
+                </p>
+                <p x-text="selectedMail.ai_meta.summary"></p>
+                <p class="text-xs mt-2 opacity-70" x-show="selectedMail.ai_meta.needs_reply">↳ Yanıt önerilir</p>
               </div>
-              <p x-show="aiReplyLoading" class="text-xs mt-2 opacity-60">Yanıt yazılıyor…</p>
-            </div>
 
-            <div x-show="isBounceMail(selectedMail)" class="wm-bounce-banner mb-6 rounded-xl border px-4 py-3 text-left" style="border-color:rgba(220,61,61,0.3);background:rgba(220,61,61,0.08);">
-              <p class="text-sm font-semibold mb-2 flex items-center gap-2" style="color:var(--wm-danger);">
-                <span class="material-symbols-outlined text-[20px]">error</span>
-                Teslim edilemedi
-              </p>
-              <template x-if="selectedMail.bounceReport && selectedMail.bounceReport.recipient">
-                <p class="text-sm mb-1"><strong>Alıcı:</strong> <span x-text="selectedMail.bounceReport.recipient"></span></p>
-              </template>
-              <p class="text-sm mb-1">
-                <strong>Sebep:</strong>
-                <span x-text="(selectedMail.bounceReport && selectedMail.bounceReport.reason) || selectedMail.bounceSummary || 'Ayrıntı çıkarılamadı.'"></span>
-              </p>
-            </div>
-
-            <div class="wm-read-meta">
-              <div class="wm-read-meta__avatar"
-                   :style="'background:' + avatarColor(selectedMail.from)"
-                   x-text="initials(selectedMail.from)"></div>
-              <div>
-                <div class="wm-read-meta__from" x-text="displayFrom(selectedMail)"></div>
-                <div class="wm-read-meta__date" x-text="formatDetailDate(selectedMail.date)"></div>
-              </div>
-            </div>
-
-            <template x-if="selectedMail.attachments && selectedMail.attachments.length">
-              <div class="mb-6">
-                <p class="text-sm font-semibold mb-2" x-text="selectedMail.attachments.length + ' ek dosya'"></p>
+              <div x-show="aiEnabled && (aiReplyDraft || (selectedMail.ai_meta && selectedMail.ai_meta.reply_draft))" class="wm-read-card wm-ai-reply-banner">
+                <p class="font-semibold mb-2 flex items-center gap-2" style="color:var(--wm-success);">
+                  <span class="material-symbols-outlined text-[18px]">reply</span>
+                  AI yanıt taslağı
+                </p>
+                <p class="whitespace-pre-wrap mb-3" x-text="aiReplyDraft ? aiReplyDraft.body : (selectedMail.ai_meta && selectedMail.ai_meta.reply_draft)"></p>
                 <div class="flex flex-wrap gap-2">
+                  <button type="button" class="wm-inbox-btn" @click="openReplyDraftInCompose()">Düzenle</button>
+                  <button type="button" class="wm-sb-compose" style="margin:0;width:auto;" @click="sendAiReplyNow()">Gönder</button>
+                  <button type="button" class="wm-inbox-btn" @click="generateAiReply('')" :disabled="aiReplyLoading">Yeniden üret</button>
+                </div>
+                <p x-show="aiReplyLoading" class="text-xs mt-2 opacity-60">Yanıt yazılıyor…</p>
+              </div>
+
+              <div x-show="isBounceMail(selectedMail)" class="wm-read-card wm-bounce-banner">
+                <p class="text-sm font-semibold mb-2 flex items-center gap-2" style="color:var(--wm-danger);">
+                  <span class="material-symbols-outlined text-[20px]">error</span>
+                  Teslim edilemedi
+                </p>
+                <template x-if="selectedMail.bounceReport && selectedMail.bounceReport.recipient">
+                  <p class="text-sm mb-1"><strong>Alıcı:</strong> <span x-text="selectedMail.bounceReport.recipient"></span></p>
+                </template>
+                <p class="text-sm mb-0">
+                  <strong>Sebep:</strong>
+                  <span x-text="(selectedMail.bounceReport && selectedMail.bounceReport.reason) || selectedMail.bounceSummary || 'Ayrıntı çıkarılamadı.'"></span>
+                </p>
+              </div>
+
+              <section class="wm-read-attachments" x-show="selectedMail.attachments && selectedMail.attachments.length">
+                <div class="wm-read-attachments__head">
+                  <span class="material-symbols-outlined">attach_file</span>
+                  <span x-text="selectedMail.attachments.length + ' ek dosya'"></span>
+                </div>
+                <div class="wm-read-attachments__grid">
                   <template x-for="(att, ai) in (selectedMail.attachments || [])" :key="ai">
-                    <div class="text-xs px-3 py-2 rounded-lg border" style="border-color:var(--wm-border);background:var(--wm-surface);">
-                      <span x-text="att.filename"></span>
-                      <span class="opacity-60" x-text="' · ' + formatSize(att.size)"></span>
+                    <div class="wm-read-att" :class="'wm-read-att--' + attachmentKind(att.filename)">
+                      <span class="wm-read-att__icon material-symbols-outlined" x-text="attachmentIcon(att.filename)"></span>
+                      <div class="wm-read-att__meta">
+                        <span class="wm-read-att__name" x-text="att.filename"></span>
+                        <span class="wm-read-att__size" x-text="formatSize(att.size)"></span>
+                      </div>
                     </div>
                   </template>
                 </div>
-              </div>
-            </template>
+              </section>
 
-            <div class="wm-mail-body" x-html="sanitizeHtml(selectedMail.body || '<p style=&quot;color:var(--wm-muted)&quot;>İçerik yükleniyor…</p>')"></div>
-          </article>
+              <section class="wm-read-body">
+                <div class="wm-mail-body-frame" :class="isBodyLoading(selectedMail) && 'is-loading'">
+                  <div class="wm-mail-body-loading" x-show="isBodyLoading(selectedMail)">
+                    <div class="wm-mail-body-loading__bar"></div>
+                    <div class="wm-mail-body-loading__bar wm-mail-body-loading__bar--short"></div>
+                    <div class="wm-mail-body-loading__bar wm-mail-body-loading__bar--medium"></div>
+                    <p>İçerik yükleniyor…</p>
+                  </div>
+                  <div class="wm-mail-body-empty" x-show="selectedMail.bodyLoaded && !hasMailBody(selectedMail)">
+                    <span class="material-symbols-outlined">draft</span>
+                    <p>Bu iletinin görüntülenecek metin içeriği yok.</p>
+                  </div>
+                  <div class="wm-mail-body"
+                       x-show="!isBodyLoading(selectedMail) && hasMailBody(selectedMail)"
+                       x-html="sanitizeHtml(selectedMail.body)"></div>
+                </div>
+              </section>
+
+              <footer class="wm-read-footer">
+                <button type="button" class="wm-read-footer__btn wm-read-footer__btn--primary" @click="replyTo()">
+                  <span class="material-symbols-outlined">reply</span>
+                  Yanıtla
+                </button>
+                <button type="button" class="wm-read-footer__btn" @click="forwardMail()">
+                  <span class="material-symbols-outlined">forward</span>
+                  İlet
+                </button>
+                <button type="button" class="wm-read-footer__btn" x-show="aiEnabled" @click="generateAiReply('')" :disabled="aiReplyLoading">
+                  <span class="material-symbols-outlined">auto_fix</span>
+                  AI yanıt
+                </button>
+              </footer>
+            </article>
+          </div>
         </div>
       </div>
     </template>
@@ -283,7 +325,7 @@
       <div class="wm-ai-panel__messages" id="wm-ai-scroll">
         <template x-for="(m, mi) in aiMessages" :key="mi">
           <div class="wm-ai-msg" :class="[m.role === 'user' && 'is-user', m.done && 'is-done']">
-            <span class="wm-ai-msg__badge" x-show="m.intent && m.intent !== 'chat'" x-text="m.intent"></span>
+            <span class="wm-ai-msg__badge" x-show="m.intent && m.intent !== 'chat'" x-text="aiIntentLabel(m.intent)"></span>
             <p class="whitespace-pre-wrap" x-text="m.text"></p>
           </div>
         </template>
@@ -400,7 +442,7 @@
 {% endblock %}
 
 {% block extra_scripts %}
-<script src="{% url 'webmail:asset' asset_path='js/webmail/mail-app.js' %}?v=20260830c"></script>
+<script src="{% url 'webmail:asset' asset_path='js/webmail/mail-app.js' %}?v=20260830f"></script>
 {% endblock %}
 
 {% block shell_overlay %}

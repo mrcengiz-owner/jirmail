@@ -9,7 +9,7 @@ from typing import Any
 
 from django.utils import timezone
 
-from webmail.ai.client import chat_completion, sanitize_ai_text
+from webmail.ai.client import chat_completion, sanitize_ai_text, is_meaningful_ai_text
 from webmail.ai.service import resolve_ai_config
 
 logger = logging.getLogger(__name__)
@@ -410,6 +410,36 @@ def organize_inbox(account, password: str, *, limit: int = 25, autopilot: bool =
     }
 
 
+def _sender_label(from_addr: str) -> str:
+    """Özet prompt'unda tam e-posta yerine domain veya kısa etiket."""
+    addr = (from_addr or '').strip()
+    if not addr:
+        return 'bilinmeyen'
+    if '@' in addr:
+        local, domain = addr.rsplit('@', 1)
+        local = local.strip() or '?'
+        if len(local) > 12:
+            local = local[:10] + '…'
+        return f'{local}@{domain.lower()}'
+    return addr[:40]
+
+
+def _digest_line(r, ai: dict) -> str:
+    pri = ai.get('priority') or 'normal'
+    subj = r.subject or '(konu yok)'
+    frm = _sender_label(r.from_addr or '')
+    line = f"- [{pri}] {subj} ← {frm}"
+    if ai.get('summary'):
+        line += f" — {ai['summary'][:120]}"
+    return line
+
+
+_DIGEST_SYSTEM = (
+    'Sen posta brifing asistanısın. Yalnızca Türkçe, madde madde kısa özet yaz. '
+    'Güvenlik etiketi, moderasyon uyarısı veya PII notu yazma.'
+)
+
+
 def _local_digest_text(rows, urgent_lines: list, needs_reply_lines: list) -> str:
     """AI yanıt vermezse yerel özet."""
     if not rows:
@@ -428,7 +458,7 @@ def _local_digest_text(rows, urgent_lines: list, needs_reply_lines: list) -> str
     parts.append('Son mesajlar:')
     for r in rows[:12]:
         subj = r.subject or '(konu yok)'
-        frm = r.from_addr or '?'
+        frm = _sender_label(r.from_addr or '')
         parts.append(f'• {subj} ← {frm}')
     return '\n'.join(parts)
 
@@ -440,7 +470,7 @@ def build_inbox_digest_reply(account, *, password: str = '', force_refresh: bool
     profile = get_or_create_agent_profile(account)
     if not force_refresh and profile.last_digest_text:
         cached = sanitize_ai_text(profile.last_digest_text)
-        if cached:
+        if is_meaningful_ai_text(cached):
             return {
                 'success': True,
                 'digest': cached,
@@ -459,10 +489,8 @@ def build_inbox_digest_reply(account, *, password: str = '', force_refresh: bool
     needs_reply = []
     for r in rows:
         ai = r.ai_meta if isinstance(r.ai_meta, dict) else {}
+        line = _digest_line(r, ai)
         pri = ai.get('priority') or 'normal'
-        line = f"- [{pri}] {r.subject or '(konu yok)'} ← {r.from_addr or '?'}"
-        if ai.get('summary'):
-            line += f" — {ai['summary'][:120]}"
         if pri in ('urgent', 'high'):
             urgent.append(line)
         if ai.get('needs_reply'):
@@ -472,7 +500,7 @@ def build_inbox_digest_reply(account, *, password: str = '', force_refresh: bool
         ai_out = generate_inbox_digest(account, password)
         if ai_out.get('success'):
             text = sanitize_ai_text(ai_out.get('digest') or '')
-            if text:
+            if is_meaningful_ai_text(text):
                 return {**ai_out, 'reply': text}
         local = _local_digest_text(rows, urgent, needs_reply)
         return {
@@ -513,11 +541,9 @@ def generate_inbox_digest(account, password: str) -> dict[str, Any]:
     needs_reply = []
     for r in rows:
         ai = r.ai_meta if isinstance(r.ai_meta, dict) else {}
-        pri = ai.get('priority') or 'normal'
-        line = f"- [{pri}] {r.subject or '(konu yok)'} ← {r.from_addr or '?'}"
-        if ai.get('summary'):
-            line += f" — {ai['summary'][:120]}"
+        line = _digest_line(r, ai)
         lines.append(line)
+        pri = ai.get('priority') or 'normal'
         if pri in ('urgent', 'high'):
             urgent.append(line)
         if ai.get('needs_reply'):
@@ -535,7 +561,7 @@ def generate_inbox_digest(account, password: str) -> dict[str, Any]:
             api_key=cfg['api_key'],
             model=cfg['model'],
             messages=[
-                {'role': 'system', 'content': cfg['system_prompt']},
+                {'role': 'system', 'content': _DIGEST_SYSTEM},
                 {'role': 'user', 'content': prompt},
             ],
             provider=cfg['provider'],
@@ -547,7 +573,7 @@ def generate_inbox_digest(account, password: str) -> dict[str, Any]:
     profile = get_or_create_agent_profile(account)
     profile.last_digest_at = timezone.now()
     text = sanitize_ai_text(out['content'])
-    if not text:
+    if not is_meaningful_ai_text(text):
         text = _local_digest_text(rows, urgent, needs_reply)
     profile.last_digest_text = text[:12000]
     profile.save(update_fields=['last_digest_at', 'last_digest_text'])

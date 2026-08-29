@@ -840,6 +840,7 @@ class AiChatSchema(Schema):
     inbox_summary: str = ''
     selected_uid: int = 0
     selected_folder: str = 'INBOX'
+    chat_history: list[dict] = []
 
 
 class AiExecuteSchema(Schema):
@@ -1068,6 +1069,7 @@ def ai_chat(request: HttpRequest, data: AiChatSchema):
             'selected_folder': data.selected_folder or 'INBOX',
         },
         password=password or '',
+        chat_history=data.chat_history or [],
     )
 
 
