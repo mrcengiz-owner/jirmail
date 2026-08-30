@@ -499,6 +499,104 @@ def apply_dns_records(request, domain: str, data: DnsApplyBody = None, key: str 
         return {"status": "error", "message": str(e)}
 
 
+@router.post("/fix-all-dns", summary="Tüm domainlerde mail DNS düzelt (Cloudflare vb.)")
+def fix_all_dns_records(request, key: str = None):
+    """Her aktif domain için DKIM üretir, zone'a yazar; çift SPF/DMARC temizler."""
+    if not check_panel_auth(request, key):
+        return {"status": "error", "message": "Yetkiniz yok. Süper yönetici yetkisi gerekir."}
+
+    try:
+        from dns_providers.records import apply_mail_dns, detect_public_ip
+        from dns_providers.system_dns import (
+            credentials_configured,
+            get_system_dns_config,
+            normalize_provider_credentials,
+            resolve_mail_hostname,
+        )
+
+        sys_provider, sys_creds = get_system_dns_config()
+        domains = MailDomain.objects.all().order_by('name')
+        if not domains.exists():
+            return {"status": "error", "message": "Düzeltilecek domain yok."}
+
+        domain_results: list[dict] = []
+        fixed = 0
+        partial = 0
+        failed = 0
+
+        for domain_obj in domains:
+            if not domain_obj.dkim_private_key or not domain_obj.dkim_record:
+                domain_obj.generate_dkim_keys()
+
+            provider = (domain_obj.dns_provider or sys_provider or 'manual').lower()
+            credentials = normalize_provider_credentials(
+                provider, domain_obj.dns_credentials or sys_creds or {},
+            )
+            if provider == 'manual' or not credentials_configured(provider, credentials):
+                if sys_provider != 'manual' and credentials_configured(sys_provider, sys_creds):
+                    provider = sys_provider
+                    credentials = sys_creds
+
+            if provider == 'manual' or not credentials_configured(provider, credentials):
+                domain_results.append({
+                    'domain': domain_obj.name,
+                    'success': False,
+                    'skipped': True,
+                    'message': 'Cloudflare/API bilgisi yok — Ayarlar → DNS',
+                })
+                failed += 1
+                continue
+
+            mail_host = getattr(settings, 'MAIL_SERVER_HOSTNAME', None) or resolve_mail_hostname(domain_obj.name)
+            outcome = apply_mail_dns(
+                domain_obj.name,
+                provider_name=provider,
+                credentials=credentials,
+                server_ip=detect_public_ip() or '',
+                mail_hostname=mail_host,
+                domain_obj=domain_obj,
+            )
+            ok = outcome.get('success') or outcome.get('partial')
+            if outcome.get('success'):
+                fixed += 1
+            elif outcome.get('partial'):
+                partial += 1
+            else:
+                failed += 1
+            domain_results.append({
+                'domain': domain_obj.name,
+                'success': bool(outcome.get('success')),
+                'partial': bool(outcome.get('partial')),
+                'removed_duplicates': outcome.get('removed_duplicates', 0),
+                'message': outcome.get('message') or ('Tamam' if ok else 'Başarısız'),
+            })
+
+        total = len(domain_results)
+        if fixed == total:
+            status = 'success'
+            message = f'Tüm domainler düzeltildi ({fixed}/{total})'
+        elif fixed or partial:
+            status = 'success'
+            message = f'{fixed + partial}/{total} domain güncellendi'
+            if failed:
+                message += f' ({failed} atlandı/hata)'
+        else:
+            status = 'error'
+            message = domain_results[0]['message'] if domain_results else 'DNS düzeltilemedi'
+
+        return {
+            'status': status,
+            'message': message,
+            'fixed': fixed,
+            'partial': partial,
+            'failed': failed,
+            'total': total,
+            'domains': domain_results,
+        }
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+
 @router.get("/list-domains", summary="Domain Listesi")
 def list_domains(request, key: str = None):
     if not check_auth(request, key):

@@ -22,12 +22,20 @@
                 <span class="text-slate-500"> domain bu örnekte aktif</span>
             </p>
         </div>
-        <button type="button" class="btn btn-primary" @click="openAddModal()" :disabled="loading">
-            <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
-            </svg>
-            <span>Domain ekle</span>
-        </button>
+        <div class="flex flex-wrap items-center gap-2 shrink-0">
+            <button type="button" class="btn btn-secondary" @click="syncAllDns()" :disabled="loading" x-show="domains.length > 1" x-cloak title="Tüm domainlerde çift SPF sil, DKIM/DMARC/MX güncelle">
+                <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                </svg>
+                <span>Tümünü düzelt</span>
+            </button>
+            <button type="button" class="btn btn-primary" @click="openAddModal()" :disabled="loading">
+                <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                </svg>
+                <span>Domain ekle</span>
+            </button>
+        </div>
     </header>
 
     <div x-show="domains.length > 0" x-cloak
@@ -87,8 +95,12 @@
                 </div>
 
                 <div class="flex flex-col sm:flex-row gap-2 pt-1 border-t border-slate-800/60">
-                    <button type="button" class="btn btn-secondary btn-sm flex-1 justify-center" @click="syncDns(d)" :disabled="loading">
-                        DNS senkronize et
+                    <button type="button"
+                            class="btn btn-secondary btn-sm flex-1 justify-center"
+                            @click="syncDns(d)"
+                            :disabled="loading"
+                            title="Cloudflare API ile çift SPF sil, DKIM/DMARC/MX güncelle">
+                        Cloudflare'de düzelt
                     </button>
                     <button type="button"
                             class="btn btn-sm flex-1 justify-center"
@@ -278,6 +290,13 @@
             </div>
 
             <div class="flex flex-col sm:flex-row gap-2 mt-6 pt-4 border-t border-slate-800/70">
+                <button type="button"
+                        class="btn btn-secondary btn-sm sm:flex-1 justify-center ring-1 ring-inset ring-primary-500/30 text-primary-300"
+                        @click="applyDnsFromModal()"
+                        :disabled="dnsLoading"
+                        title="Cloudflare API ile kayıtları yayınla, çift SPF temizle">
+                    Cloudflare'e uygula
+                </button>
                 <button type="button" class="btn btn-primary btn-sm sm:flex-1 justify-center" @click="regenerateDns()" :disabled="dnsLoading">
                     Anahtarları oluştur / yenile
                 </button>

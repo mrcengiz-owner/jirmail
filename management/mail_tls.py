@@ -12,6 +12,7 @@ from django.conf import settings
 logger = logging.getLogger(__name__)
 
 _CA_BOOTSTRAPPED: str | None = None
+VOLUME_CA_PATH = Path('/etc/jir-mail/tls/ca.crt')
 
 
 def mail_tls_mode() -> str:
@@ -35,24 +36,54 @@ def imap_ssl_verify_required() -> bool:
     return mail_tls_e2e_required()
 
 
+def invalidate_mail_tls_ca_cache() -> None:
+    """CA yolu değiştiğinde veya PKI yenilendiğinde önbelleği temizle."""
+    global _CA_BOOTSTRAPPED
+    _CA_BOOTSTRAPPED = None
+
+
 def _default_ca_paths() -> list[Path]:
+    """Öncelik: volume CA (Postfix ile aynı) → env → tempfile."""
     paths: list[Path] = []
+    # Volume her zaman en güvenilir kaynak — Postfix/Dovecot ile paylaşılır
+    if VOLUME_CA_PATH.is_file():
+        paths.append(VOLUME_CA_PATH)
+
     env_ca = (os.getenv('MAIL_TLS_CA_FILE') or getattr(settings, 'MAIL_TLS_CA_FILE', '') or '').strip()
     if env_ca:
-        paths.append(Path(env_ca))
-    paths.append(Path('/etc/jir-mail/tls/ca.crt'))
+        env_path = Path(env_ca)
+        if env_path != VOLUME_CA_PATH:
+            paths.append(env_path)
+
     paths.append(Path(tempfile.gettempdir()) / 'jir-mail-internal-ca.crt')
-    return paths
+    # Tekrarları kaldır, sırayı koru
+    seen: set[str] = set()
+    out: list[Path] = []
+    for p in paths:
+        key = str(p)
+        if key not in seen:
+            seen.add(key)
+            out.append(p)
+    return out
 
 
 def resolve_mail_tls_ca_file() -> str | None:
     """Doğrulama için güvenilir dahili CA dosyası."""
     global _CA_BOOTSTRAPPED
+
+    # Volume CA varsa cache'lenmiş /tmp yolunu ezer (eski SystemConfig PEM tuzağı)
+    if VOLUME_CA_PATH.is_file() and VOLUME_CA_PATH.stat().st_size > 0:
+        vol = str(VOLUME_CA_PATH)
+        if _CA_BOOTSTRAPPED != vol:
+            _CA_BOOTSTRAPPED = vol
+            os.environ['MAIL_TLS_CA_FILE'] = vol
+        return _CA_BOOTSTRAPPED
+
     if _CA_BOOTSTRAPPED and Path(_CA_BOOTSTRAPPED).is_file():
         return _CA_BOOTSTRAPPED
 
     for path in _default_ca_paths():
-        if path.is_file():
+        if path.is_file() and path.stat().st_size > 0:
             _CA_BOOTSTRAPPED = str(path)
             return _CA_BOOTSTRAPPED
 
@@ -117,6 +148,78 @@ def imap_tls_context() -> ssl.SSLContext | None:
     ctx.check_hostname = False
     ctx.verify_mode = ssl.CERT_NONE
     return ctx
+
+
+def heal_mail_tls_pki(*, force_regen: bool = False) -> dict:
+    """Bozuk / uyumsuz dahili PKI'yi onar; Postfix/Dovecot TLS'i yenile."""
+    import time
+
+    out: dict = {'ok': False, 'actions': []}
+    try:
+        from installer.mail_pki import MAIL_TLS_MOUNT, ensure_mail_pki_files, mail_pki_chain_ok
+
+        domain = (os.getenv('MAIL_DOMAIN') or getattr(settings, 'MAIL_DOMAIN', None) or 'mail.local').strip()
+        hostname = (
+            os.getenv('MAIL_HOSTNAME')
+            or getattr(settings, 'MAIL_SERVER_HOSTNAME', None)
+            or f'mail.{domain}'
+        ).strip()
+        tls_dir = Path(MAIL_TLS_MOUNT)
+        material = ensure_mail_pki_files(
+            tls_dir,
+            mail_hostname=hostname,
+            mail_domain=domain,
+            postfix_host=os.getenv('SMTP_HOST', 'postfix'),
+            dovecot_host=os.getenv('IMAP_HOST', 'dovecot'),
+            force=force_regen,
+        )
+        chain_ok = mail_pki_chain_ok(material)
+        out['actions'].append({'action': 'ensure_pki', 'chain_ok': chain_ok, 'force': force_regen})
+        if not chain_ok and not force_regen:
+            material = ensure_mail_pki_files(
+                tls_dir,
+                mail_hostname=hostname,
+                mail_domain=domain,
+                postfix_host=os.getenv('SMTP_HOST', 'postfix'),
+                dovecot_host=os.getenv('IMAP_HOST', 'dovecot'),
+                force=True,
+            )
+            out['actions'].append({'action': 'force_regen', 'chain_ok': mail_pki_chain_ok(material)})
+
+        invalidate_mail_tls_ca_cache()
+        if VOLUME_CA_PATH.is_file():
+            os.environ['MAIL_TLS_CA_FILE'] = str(VOLUME_CA_PATH)
+        resolve_mail_tls_ca_file()
+        out['actions'].append({'action': 'ca_cache_reset', 'ca': resolve_mail_tls_ca_file()})
+
+        # Postfix/Dovecot bellekteki eski sertifikayı bıraksın
+        try:
+            from management.mail_stack_health import _docker_client, _dovecot_container_name, _postfix_container_name
+
+            client = _docker_client()
+            for name, cmd in (
+                (_postfix_container_name(), ['postfix', 'reload']),
+                (_dovecot_container_name(), ['doveadm', 'reload']),
+            ):
+                try:
+                    c = client.containers.get(name)
+                    code, _logs = c.exec_run(cmd)
+                    out['actions'].append({'action': 'reload', 'container': name, 'exit': code})
+                    if code != 0:
+                        c.restart(timeout=20)
+                        out['actions'].append({'action': 'restart', 'container': name})
+                except Exception as exc:
+                    out['actions'].append({'action': 'reload_failed', 'container': name, 'error': str(exc)})
+            client.close()
+            time.sleep(2)
+        except Exception as exc:
+            out['actions'].append({'action': 'reload_skip', 'error': str(exc)})
+
+        out['ok'] = True
+    except Exception as exc:
+        out['error'] = str(exc)
+        logger.warning('heal_mail_tls_pki: %s', exc)
+    return out
 
 
 def verify_smtp_starttls(host: str, port: int, *, timeout: float = 5.0) -> bool:

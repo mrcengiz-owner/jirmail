@@ -159,6 +159,13 @@ class CloudflareProvider(DNSProvider):
             return f'{record.name}.{mail_domain}'
         return f'{record.name}.{mail_domain}'
 
+    def _semantic_txt_prefix(self, content: str) -> str | None:
+        c = (content or '').strip()
+        for prefix in ('v=spf1', 'v=DMARC1', 'v=DKIM1'):
+            if c.startswith(prefix):
+                return prefix
+        return None
+
     def _pick_existing(self, existing: list[dict], record: DNSRecord) -> dict | None:
         if not existing:
             return None
@@ -169,13 +176,58 @@ class CloudflareProvider(DNSProvider):
             item_content = (item.get('content') or '').strip().strip('"')
             if content and item_content == content:
                 return item
-        prefixes = ('v=spf1', 'v=DMARC1', 'v=DKIM1')
-        for prefix in prefixes:
-            if content.startswith(prefix):
-                for item in existing:
-                    if (item.get('content') or '').strip().startswith(prefix):
-                        return item
+        prefix = self._semantic_txt_prefix(content)
+        if prefix:
+            for item in existing:
+                if (item.get('content') or '').strip().startswith(prefix):
+                    return item
         return existing[0]
+
+    def _delete_record_by_id(self, zone_id: str, cf_zone: str, record_id: str) -> dict:
+        url = f'{API_BASE}/zones/{zone_id}/dns_records/{record_id}'
+        data = _api_request('DELETE', url, self.credentials)
+        if data.get('success'):
+            return {'success': True, 'message': 'Kayıt silindi', 'cf_zone': cf_zone}
+        return {'success': False, 'message': _format_cf_errors(data), 'cf_zone': cf_zone}
+
+    def _dedupe_conflicting_records(
+        self,
+        zone_id: str,
+        cf_zone: str,
+        mail_domain: str,
+        record: DNSRecord,
+        keep_id: str | None,
+    ) -> list[dict]:
+        """Çift SPF/DMARC/DKIM veya fazla MX kayıtlarını temizle."""
+        existing = self._list_matching(zone_id, mail_domain, record)
+        removed: list[dict] = []
+
+        if record.type == 'TXT':
+            prefix = self._semantic_txt_prefix(record.content)
+            if not prefix:
+                return removed
+            candidates = [
+                item for item in existing
+                if (item.get('content') or '').strip().startswith(prefix)
+            ]
+        elif record.type == 'MX':
+            candidates = list(existing)
+        else:
+            return removed
+
+        for item in candidates:
+            rid = item.get('id')
+            if not rid or rid == keep_id:
+                continue
+            outcome = self._delete_record_by_id(zone_id, cf_zone, rid)
+            if outcome.get('success'):
+                removed.append({
+                    'id': rid,
+                    'type': record.type,
+                    'name': item.get('name') or self._fqdn(mail_domain, record),
+                    'action': 'deleted_duplicate',
+                })
+        return removed
 
     def _list_matching(self, zone_id: str, mail_domain: str, record: DNSRecord) -> list[dict]:
         name = self._fqdn(mail_domain, record)
@@ -222,6 +274,7 @@ class CloudflareProvider(DNSProvider):
             cf_zone, zone_id = self._resolve_zone(mail_domain)
             payload = self._payload(mail_domain, record)
             existing = self._list_matching(zone_id, mail_domain, record)
+            removed_duplicates: list[dict] = []
 
             for item in existing:
                 same_content = (item.get('content') or '').strip() == (record.content or '').strip()
@@ -229,12 +282,19 @@ class CloudflareProvider(DNSProvider):
                 if record.type == 'MX':
                     same_prio = int(item.get('priority') or 0) == int(record.priority or 0)
                 if same_content and same_prio:
+                    removed_duplicates = self._dedupe_conflicting_records(
+                        zone_id, cf_zone, mail_domain, record, item.get('id'),
+                    )
+                    msg = 'Kayıt zaten güncel'
+                    if removed_duplicates:
+                        msg += f' ({len(removed_duplicates)} çift kayıt silindi)'
                     return {
                         'success': True,
                         'id': item.get('id'),
-                        'message': 'Kayıt zaten güncel',
+                        'message': msg,
                         'action': 'unchanged',
                         'cf_zone': cf_zone,
+                        'removed_duplicates': removed_duplicates,
                     }
 
             target = self._pick_existing(existing, record)
@@ -243,24 +303,39 @@ class CloudflareProvider(DNSProvider):
                 url = f'{API_BASE}/zones/{zone_id}/dns_records/{rid}'
                 data = _api_request('PUT', url, self.credentials, payload)
                 if data.get('success'):
+                    removed_duplicates = self._dedupe_conflicting_records(
+                        zone_id, cf_zone, mail_domain, record, rid,
+                    )
+                    msg = 'Kayıt güncellendi'
+                    if removed_duplicates:
+                        msg += f' ({len(removed_duplicates)} çift kayıt silindi)'
                     return {
                         'success': True,
                         'id': rid,
-                        'message': 'Kayıt güncellendi',
+                        'message': msg,
                         'action': 'updated',
                         'cf_zone': cf_zone,
+                        'removed_duplicates': removed_duplicates,
                     }
                 return {'success': False, 'message': _format_cf_errors(data), 'cf_zone': cf_zone}
 
             url = f'{API_BASE}/zones/{zone_id}/dns_records'
             data = _api_request('POST', url, self.credentials, payload)
             if data.get('success'):
+                rid = (data.get('result') or {}).get('id')
+                removed_duplicates = self._dedupe_conflicting_records(
+                    zone_id, cf_zone, mail_domain, record, rid,
+                )
+                msg = 'Kayıt eklendi'
+                if removed_duplicates:
+                    msg += f' ({len(removed_duplicates)} çift kayıt silindi)'
                 return {
                     'success': True,
-                    'id': (data.get('result') or {}).get('id'),
-                    'message': 'Kayıt eklendi',
+                    'id': rid,
+                    'message': msg,
                     'action': 'created',
                     'cf_zone': cf_zone,
+                    'removed_duplicates': removed_duplicates,
                 }
             return {'success': False, 'message': _format_cf_errors(data), 'cf_zone': cf_zone}
         except Exception as exc:

@@ -11,7 +11,7 @@ from typing import Any
 
 from cryptography import x509
 from cryptography.hazmat.primitives import hashes, serialization
-from cryptography.hazmat.primitives.asymmetric import rsa
+from cryptography.hazmat.primitives.asymmetric import padding, rsa
 from cryptography.x509.oid import NameOID
 
 logger = logging.getLogger(__name__)
@@ -63,7 +63,7 @@ def generate_mail_pki(
     ca_key = rsa.generate_private_key(public_exponent=65537, key_size=4096)
     ca_name = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, 'Jir-Mail Internal CA')])
     now = datetime.now(timezone.utc)
-    ca_cert = (
+    ca_builder = (
         x509.CertificateBuilder()
         .subject_name(ca_name)
         .issuer_name(ca_name)
@@ -72,8 +72,26 @@ def generate_mail_pki(
         .not_valid_before(now)
         .not_valid_after(now + timedelta(days=valid_days))
         .add_extension(x509.BasicConstraints(ca=True, path_length=0), critical=True)
-        .sign(ca_key, hashes.SHA256())
+        .add_extension(
+            x509.KeyUsage(
+                digital_signature=True,
+                key_encipherment=False,
+                content_commitment=False,
+                data_encipherment=False,
+                key_agreement=False,
+                key_cert_sign=True,
+                crl_sign=True,
+                encipher_only=False,
+                decipher_only=False,
+            ),
+            critical=True,
+        )
     )
+    ca_builder = ca_builder.add_extension(
+        x509.SubjectKeyIdentifier.from_public_key(ca_key.public_key()),
+        critical=False,
+    )
+    ca_cert = ca_builder.sign(ca_key, hashes.SHA256())
 
     server_key = rsa.generate_private_key(public_exponent=65537, key_size=4096)
     server_subject = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, common_name)])
@@ -104,6 +122,14 @@ def generate_mail_pki(
         )
         .add_extension(
             x509.ExtendedKeyUsage([x509.oid.ExtendedKeyUsageOID.SERVER_AUTH]),
+            critical=False,
+        )
+        .add_extension(
+            x509.SubjectKeyIdentifier.from_public_key(server_key.public_key()),
+            critical=False,
+        )
+        .add_extension(
+            x509.AuthorityKeyIdentifier.from_issuer_public_key(ca_key.public_key()),
             critical=False,
         )
         .sign(ca_key, hashes.SHA256())
@@ -215,7 +241,10 @@ def ensure_mail_pki_volume(
             logger.info('PKI volume mevcut; PEM okuma atlandı (mount üzerinden kullanılır).')
             return MailPkiMaterial(ca_cert_pem=b'', server_cert_pem=b'', server_key_pem=b'')
         try:
-            return load_mail_pki_from_volume(client)
+            existing = load_mail_pki_from_volume(client)
+            if mail_pki_chain_ok(existing):
+                return existing
+            logger.warning('PKI volume zinciri bozuk — yeniden oluşturuluyor')
         except Exception as exc:
             logger.warning('PKI volume okunamadı, yeniden oluşturuluyor: %s', exc)
 
@@ -281,6 +310,36 @@ def _tls_dir_complete(tls_dir: Path) -> bool:
     return all((tls_dir / name).is_file() and (tls_dir / name).stat().st_size > 0 for name in _TLS_FILENAMES)
 
 
+def mail_pki_chain_ok(material: MailPkiMaterial) -> bool:
+    """CA, sunucu sertifikasının imzasını doğrular mı? (OpenSSL 3 keyCertSign şart)."""
+    try:
+        if not material.ca_cert_pem or not material.server_cert_pem:
+            return False
+        ca = x509.load_pem_x509_certificate(material.ca_cert_pem)
+        server = x509.load_pem_x509_certificate(material.server_cert_pem)
+        try:
+            ku = ca.extensions.get_extension_for_class(x509.KeyUsage).value
+            if not ku.key_cert_sign:
+                logger.warning('Mail CA KeyUsage keyCertSign yok — OpenSSL 3 reddeder')
+                return False
+        except x509.ExtensionNotFound:
+            logger.warning('Mail CA KeyUsage yok — OpenSSL 3 certificate signature failure')
+            return False
+        algo = server.signature_hash_algorithm
+        if algo is None:
+            return False
+        ca.public_key().verify(
+            server.signature,
+            server.tbs_certificate_bytes,
+            padding.PKCS1v15(),
+            algo,
+        )
+        return True
+    except Exception as exc:
+        logger.warning('Mail PKI zinciri geçersiz: %s', exc)
+        return False
+
+
 def ensure_mail_pki_files(
     tls_dir: Path,
     *,
@@ -294,7 +353,10 @@ def ensure_mail_pki_files(
     tls_dir = Path(tls_dir)
     tls_dir.mkdir(parents=True, exist_ok=True)
     if not force and _tls_dir_complete(tls_dir):
-        return load_mail_pki_from_directory(tls_dir)
+        existing = load_mail_pki_from_directory(tls_dir)
+        if mail_pki_chain_ok(existing):
+            return existing
+        logger.warning('Mevcut mail PKI zinciri bozuk — yeniden üretiliyor (%s)', tls_dir)
 
     dns_names = [
         mail_hostname,

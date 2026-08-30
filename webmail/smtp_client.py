@@ -17,7 +17,12 @@ from email.utils import formataddr, formatdate, make_msgid
 from django.conf import settings
 
 from management.mail_service_endpoint import resolve_mail_endpoint
-from management.mail_tls import smtp_starttls_required, smtp_tls_context
+from management.mail_tls import (
+    heal_mail_tls_pki,
+    invalidate_mail_tls_ca_cache,
+    smtp_starttls_required,
+    smtp_tls_context,
+)
 from webmail.recipients import parse_recipient_list
 
 
@@ -180,6 +185,62 @@ def send_mail(account, password: str, *, to: list[str] | str, subject: str, body
                 logger.warning('Sent klasörüne IMAP append başarısız: %s', err)
                 out['sent_imap_warning'] = err
         return out
+    except ssl.SSLError as exc:
+        # 1) Volume CA'ya geç  2) gerekirse PKI yenile + Postfix reload
+        logger.warning('SMTP TLS başarısız, onarım deneniyor: %s', exc)
+        invalidate_mail_tls_ca_cache()
+        try:
+            with smtplib.SMTP(host, port, timeout=30) as smtp:
+                _smtp_submit(
+                    smtp,
+                    account=account,
+                    password=password,
+                    raw_bytes=raw_bytes,
+                    recipients=recipients,
+                )
+            out = {'success': True, 'message_id': msg['Message-ID'], 'dkim': dkim_status, 'tls_healed': True}
+            if dkim_status.get('required') and dkim_status.get('signed'):
+                out['message'] = 'Gönderildi (DKIM imzalı).'
+            return out
+        except ssl.SSLError:
+            heal = heal_mail_tls_pki(force_regen=True)
+            try:
+                with smtplib.SMTP(host, port, timeout=30) as smtp:
+                    _smtp_submit(
+                        smtp,
+                        account=account,
+                        password=password,
+                        raw_bytes=raw_bytes,
+                        recipients=recipients,
+                    )
+                out = {
+                    'success': True,
+                    'message_id': msg['Message-ID'],
+                    'dkim': dkim_status,
+                    'tls_healed': True,
+                    'heal': heal,
+                }
+                if dkim_status.get('required') and dkim_status.get('signed'):
+                    out['message'] = 'Gönderildi (DKIM imzalı; TLS onarıldı).'
+                return out
+            except Exception as retry_exc:
+                return {
+                    'success': False,
+                    'message': (
+                        f'SMTP TLS doğrulaması başarısız ({host}:{port}): {retry_exc}. '
+                        f'PKI onarım denendi ({heal.get("ok")}). '
+                        'Postfix/Dovecot yeniden başlatın: docker compose restart postfix dovecot django'
+                    ),
+                    'heal': heal,
+                }
+        except Exception as retry_exc:
+            return {
+                'success': False,
+                'message': (
+                    f'SMTP TLS doğrulaması başarısız ({host}:{port}): {retry_exc}. '
+                    'Mail kurulum adımını yeniden çalıştırın (dahili PKI).'
+                ),
+            }
     except socket.gaierror as exc:
         hint = (
             f' SMTP hedefi çözülemedi ({host!r}). '
@@ -204,14 +265,6 @@ def send_mail(account, password: str, *, to: list[str] | str, subject: str, body
                 f'Host publish yoksa .env: SMTP_HOST=<köprü IP> veya kurulumda 587 host portunu '
                 f'açıp jir_postfix\'i yeniden oluşturun. Docker IP: '
                 f'`docker inspect jir_postfix --format "{{{{json .NetworkSettings.Networks}}}}"`'
-            ),
-        }
-    except ssl.SSLError as exc:
-        return {
-            'success': False,
-            'message': (
-                f'SMTP TLS doğrulaması başarısız ({host}:{port}): {exc}. '
-                'Mail kurulum adımını yeniden çalıştırın (dahili PKI).'
             ),
         }
     except smtplib.SMTPException as exc:

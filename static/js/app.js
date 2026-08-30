@@ -753,52 +753,115 @@
 
                 syncDns: function(d) {
                     var self = this;
+                    if (!confirm(
+                        d.name + ' için Cloudflare DNS düzeltilecek:\n'
+                        + '• Çift SPF kayıtları silinir\n'
+                        + '• DKIM, DMARC, MX güncellenir\n\nDevam?'
+                    )) return;
+                    self._runDnsFix(d.name);
+                },
+
+                syncAllDns: function() {
+                    var self = this;
+                    if (!confirm(
+                        'Tüm domainler için Cloudflare DNS düzeltilecek:\n'
+                        + '• Çift SPF kayıtları silinir\n'
+                        + '• DKIM, DMARC, MX güncellenir\n\nDevam?'
+                    )) return;
                     self.loading = true;
-                    var gen = fetch(self.apiUrl('/generate-dns-records/' + encodeURIComponent(d.name)), {
+                    fetch(self.apiUrl('/fix-all-dns'), {
+                        method: 'POST',
+                        credentials: 'same-origin',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-CSRFToken': window.getCsrfToken()
+                        },
+                        body: JSON.stringify({})
+                    })
+                        .then(function(r) { return r.json(); })
+                        .then(function(data) {
+                            self.loading = false;
+                            if (data.status === 'success') {
+                                window.showToast(data.message || 'Tüm domainler güncellendi', 'success');
+                                self.refreshDomains();
+                            } else {
+                                window.showToast(data.message || 'Toplu düzeltme başarısız', 'error');
+                            }
+                        })
+                        .catch(function() {
+                            self.loading = false;
+                            window.showToast('Bağlantı hatası', 'error');
+                        });
+                },
+
+                applyDnsFromModal: function() {
+                    var self = this;
+                    var name = self.dnsView.name;
+                    if (!name) return;
+                    if (!confirm(name + ' kayıtları Cloudflare\'e uygulanacak. Devam?')) return;
+                    self.dnsLoading = true;
+                    self._runDnsFix(name, function() {
+                        self.dnsLoading = false;
+                        self.openDnsModal({ name: name, verification_status: self.dnsView.verification_status });
+                    }, function() {
+                        self.dnsLoading = false;
+                    });
+                },
+
+                _runDnsFix: function(domainName, onSuccess, onFail) {
+                    var self = this;
+                    self.loading = true;
+                    fetch(self.apiUrl('/generate-dns-records/' + encodeURIComponent(domainName)), {
                         method: 'POST',
                         credentials: 'same-origin',
                         headers: { 'X-CSRFToken': window.getCsrfToken() }
-                    }).then(function(r) { return r.json(); });
-
-                    gen.then(function(data) {
-                        if (data.status !== 'success') {
+                    })
+                        .then(function(r) { return r.json(); })
+                        .then(function(data) {
+                            if (data.status !== 'success') {
+                                self.loading = false;
+                                window.showToast(data.message || 'DNS üretilemedi', 'error');
+                                if (onFail) onFail();
+                                return null;
+                            }
+                            return fetch(self.apiUrl('/apply-dns/' + encodeURIComponent(domainName)), {
+                                method: 'POST',
+                                credentials: 'same-origin',
+                                headers: {
+                                    'Content-Type': 'application/json',
+                                    'X-CSRFToken': window.getCsrfToken()
+                                },
+                                body: JSON.stringify({})
+                            }).then(function(r) { return r.json(); });
+                        })
+                        .then(function(applyData) {
+                            if (!applyData) return;
                             self.loading = false;
-                            window.showToast(data.message || 'DNS üretilemedi', 'error');
-                            return null;
-                        }
-                        return fetch(self.apiUrl('/apply-dns/' + encodeURIComponent(d.name)), {
-                            method: 'POST',
-                            credentials: 'same-origin',
-                            headers: {
-                                'Content-Type': 'application/json',
-                                'X-CSRFToken': window.getCsrfToken()
-                            },
-                            body: JSON.stringify({})
-                        }).then(function(r) { return r.json(); });
-                    }).then(function(applyData) {
-                        if (!applyData) return;
-                        self.loading = false;
-                        if (applyData.skipped) {
-                            window.showToast(
-                                applyData.message || 'Manuel DNS — kayıtları panodan kopyalayın',
-                                'success'
-                            );
-                            self.refreshDomains();
-                            return;
-                        }
-                        if (applyData.status === 'success' || applyData.success || applyData.partial) {
-                            var msg = applyData.message || (
-                                'DNS zone güncellendi (' + (applyData.created || 0) + '/' + (applyData.total || 0) + ')'
-                            );
-                            window.showToast(msg, 'success');
-                            self.refreshDomains();
-                        } else {
-                            window.showToast(applyData.message || 'DNS uygulanamadı', 'error');
-                        }
-                    }).catch(function() {
-                        self.loading = false;
-                        window.showToast('Bağlantı hatası', 'error');
-                    });
+                            if (applyData.skipped) {
+                                window.showToast(
+                                    applyData.message || 'Manuel DNS — Ayarlar → Cloudflare token ekleyin',
+                                    'warning'
+                                );
+                                if (onFail) onFail();
+                                return;
+                            }
+                            if (applyData.status === 'success' || applyData.success || applyData.partial) {
+                                var msg = applyData.message || (
+                                    'DNS güncellendi (' + (applyData.created || 0) + '/' + (applyData.total || 0) + ')'
+                                );
+                                window.showToast(msg, 'success');
+                                self.refreshDomains();
+                                if (onSuccess) onSuccess();
+                            } else {
+                                window.showToast(applyData.message || 'DNS uygulanamadı', 'error');
+                                if (onFail) onFail();
+                            }
+                        })
+                        .catch(function() {
+                            self.loading = false;
+                            window.showToast('Bağlantı hatası', 'error');
+                            if (onFail) onFail();
+                        });
                 },
 
                 openDnsModal: function(d) {

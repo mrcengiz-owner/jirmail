@@ -418,11 +418,16 @@ def apply_mail_connectivity_to_system_config(result: dict[str, Any]) -> None:
             from pathlib import Path
             import tempfile
 
-            dest = Path(tempfile.gettempdir()) / 'jir-mail-internal-ca.crt'
-            ca_raw = ep['tls_ca_pem']
-            ca_bytes = ca_raw.encode('utf-8') if isinstance(ca_raw, str) else ca_raw
-            write_ca_to_path(ca_bytes, dest)
-            os.environ.setdefault('MAIL_TLS_CA_FILE', str(dest))
+            # Volume CA varsa /tmp ile override etme — Postfix ile aynı CA kullanılmalı
+            volume_ca = Path('/etc/jir-mail/tls/ca.crt')
+            if volume_ca.is_file() and volume_ca.stat().st_size > 0:
+                os.environ['MAIL_TLS_CA_FILE'] = str(volume_ca)
+            else:
+                dest = Path(tempfile.gettempdir()) / 'jir-mail-internal-ca.crt'
+                ca_raw = ep['tls_ca_pem']
+                ca_bytes = ca_raw.encode('utf-8') if isinstance(ca_raw, str) else ca_raw
+                write_ca_to_path(ca_bytes, dest)
+                os.environ.setdefault('MAIL_TLS_CA_FILE', str(dest))
         except Exception:
             pass
 

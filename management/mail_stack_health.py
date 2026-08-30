@@ -251,6 +251,27 @@ def verify_mail_stack(*, fix: bool = False, healthcheck: bool = False) -> dict[s
 
     if fix and not smtp_ok:
         try:
+            from management.mail_tls import heal_mail_tls_pki, invalidate_mail_tls_ca_cache
+
+            invalidate_mail_tls_ca_cache()
+            healed_tls = heal_mail_tls_pki(force_regen=True)
+            report["healed"].append({"service": "mail_tls", **healed_tls})
+            smtp_ok = verify_smtp_starttls(smtp_host, smtp_port, timeout=4.0)
+            imap_ok = verify_imap_tls(imap_host, imap_port, timeout=6.0, log_failure=False)
+            for chk in report["checks"]:
+                if chk.get("id") == "smtp":
+                    chk["ok"] = smtp_ok
+                    chk["message"] = f"SMTP {smtp_host}:{smtp_port} {'OK' if smtp_ok else 'erişilemiyor'}"
+                if chk.get("id") == "imap":
+                    chk["ok"] = imap_ok
+                    chk["message"] = f"IMAP {imap_host}:{imap_port} {'OK' if imap_ok else 'erişilemiyor'}"
+            if smtp_ok and imap_ok:
+                report["ok"] = all(c.get("ok") for c in report["checks"] if not c.get("optional"))
+        except Exception as exc:
+            report["healed"].append({"service": "mail_tls", "ok": False, "error": str(exc)})
+
+    if fix and not smtp_ok:
+        try:
             healed_pf = ensure_postfix_running()
             report["healed"].append({"service": "postfix_ensure", **healed_pf})
             if healed_pf.get("ok"):

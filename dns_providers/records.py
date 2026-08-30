@@ -277,8 +277,10 @@ def apply_mail_dns(
     )
     results: list[dict] = []
     ensure = getattr(provider, 'ensure_record', None) or provider.create_record
+    removed_total = 0
     for rec in records:
         outcome = ensure(domain, rec)
+        removed_total += len(outcome.get('removed_duplicates') or [])
         results.append({'record': rec.to_dict(), 'result': outcome})
 
     domain_obj.dns_provider = (provider_name or 'manual').lower()
@@ -287,13 +289,21 @@ def apply_mail_dns(
 
     ok = sum(1 for r in results if r['result'].get('success'))
     summary = summarize_dns_results(results)
+    if ok == len(results) and len(results) > 0:
+        base_msg = 'Tüm DNS kayıtları uygulandı'
+        if removed_total:
+            base_msg += f' ({removed_total} çift/fazla kayıt silindi)'
+        message = base_msg
+    else:
+        message = summary
     return {
         'success': ok == len(results) and len(results) > 0,
         'partial': 0 < ok < len(results),
         'total': len(results),
         'created': ok,
+        'removed_duplicates': removed_total,
         'results': results,
         'records': records_as_dicts(records),
         'server_ip': detect_public_ip(preferred=server_ip),
-        'message': summary if ok < len(results) else 'Tüm DNS kayıtları uygulandı',
+        'message': message,
     }
